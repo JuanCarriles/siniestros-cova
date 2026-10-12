@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/*
+ * Tema Estudio Cova — tokens tomados de docs/referencia-ui/ficha-siniestro.html.
+ * Cada token genera utilidades: --color-navy → bg-navy, text-navy, border-navy…
+ * Los radios sm/md/lg (4/6/8 px) coinciden con los de Tailwind, por eso no se redefinen.
+ */
+@theme {
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Marca */
+  --color-navy: #1e3a5f;
+  --color-navy-hover: #2a4a73;
+  --color-navy-active: #2f5079;
+  --color-on-navy: #ffffff;
+  --color-on-navy-muted: #b7c4d6;
+  --color-accent: #e8762c;
+
+  /* Superficies y bordes */
+  --color-page: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f9fafb;
+  --color-line: #e5e7eb;
+  --color-line-strong: #d1d5db;
+
+  /* Texto */
+  --color-ink: #111827;
+  --color-ink-2: #374151;
+  --color-muted: #6b7280;
+
+  /* Estados semánticos (badges, avisos) */
+  --color-info-bg: #e6effd;
+  --color-info-ink: #1e4fa3;
+  --color-ok-bg: #e3f4ea;
+  --color-ok-ink: #166534;
+  --color-warning-bg: #fdecd8;
+  --color-warning-ink: #9a4a0b;
+  --color-danger-bg: #fde4df;
+  --color-danger-ink: #b42318;
+  --color-neutral-bg: #eef0f3;
+  --color-neutral-ink: #4b5563;
+  --color-success: #16a34a;
+  --color-focus: #2f6fd0;
+
+  /* Usos puntuales */
+  --color-tooltip: #14233a;
+  --color-callout-bg: #f2f6fb;
+  --color-callout-line: #d5e0ee;
+  --color-chat-me: #e8eef7;
+
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-pop: 0 16px 40px rgba(16, 24, 40, 0.2);
+}
+
+@layer base {
+  html,
+  body {
+    @apply bg-page text-ink font-sans antialiased;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-focus;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+    }
+  }
+}
