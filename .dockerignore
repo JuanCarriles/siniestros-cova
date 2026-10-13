@@ -1,0 +1,26 @@
+# Único .dockerignore del repo: las imágenes se construyen con la raíz como contexto.
+# A diferencia de .gitignore, acá un patrón sin "**/" solo aplica a la raíz;
+# por eso todo lleva "**/" para alcanzar también backend/, frontend/ y shared/.
+
+# Dependencias y builds locales (se regeneran dentro de la imagen)
+**/node_modules
+**/dist
+
+# Variables de entorno: los secretos nunca entran al build (solo los .env.example)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Git, Docker y documentación
+.git
+**/Dockerfile
+**/.dockerignore
+**/README.md
+docs/
+
+# Claude Code (config local)
+.claude/
+
+# Logs
+**/logs/
+**/*.log
