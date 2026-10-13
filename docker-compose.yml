@@ -1,0 +1,66 @@
+services:
+  # Base de datos PostgreSQL (usada por Prisma desde el backend)
+  db:
+    image: postgres:17-alpine
+    container_name: siniestros-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cova}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cova}
+      POSTGRES_DB: ${POSTGRES_DB:-siniestros}
+    ports:
+      # Expuesto al host para correr Prisma (migrate dev, studio) desde Windows con localhost:5432.
+      # 127.0.0.1 = solo accesible desde la propia máquina. Sin eso, en el VPS quedaría abierto a internet:
+      # Docker publica los puertos por encima de ufw.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # API (Express) — se construye desde la raíz porque es un monorepo con workspaces
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: siniestros-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Dentro de la red de Docker el host de la base es el nombre del servicio: "db"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cova}:${POSTGRES_PASSWORD:-cova}@db:5432/${POSTGRES_DB:-siniestros}?schema=public
+    ports:
+      # Solo para pruebas locales: el tráfico real entra por Nginx (frontend) por la red interna de Docker
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Frontend (build de Vite servido por Nginx, que además hace de proxy de /api y /socket.io)
+  # También desde la raíz: necesita el package-lock.json del monorepo y el paquete shared/
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: siniestros-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      # Nginx resuelve "backend" al arrancar: si el backend no está listo, no levanta
+      backend:
+        condition: service_healthy
+
+volumes:
+  db_data:
