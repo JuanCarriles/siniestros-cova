@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /*
  * Tema Estudio Cova — tokens tomados de docs/referencia-ui/ficha-siniestro.html.
@@ -6,7 +6,7 @@
  * Los radios sm/md/lg (4/6/8 px) coinciden con los de Tailwind, por eso no se redefinen.
  */
 @theme {
-  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* Marca */
   --color-navy: #1e3a5f;
@@ -55,7 +55,7 @@
 @layer base {
   html,
   body {
-    @apply bg-page text-ink font-sans antialiased;
+    @apply bg-page font-sans text-ink antialiased;
     font-size: 13px;
     line-height: 18px;
   }
