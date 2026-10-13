@@ -1,0 +1,423 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TipoUsuario {
+  GESTOR
+  ADMINISTRADOR
+  SUPER_ADMINISTRADOR
+}
+
+enum TipoNotificacion {
+  DOCUMENTO_NUEVO
+  NOVEDAD_CARGADA
+  CAMBIO_ESTADO
+  MENSAJE_NUEVO
+}
+
+enum TipoEventoHistorial {
+  MENSAJE
+  NOVEDAD
+  DOCUMENTO
+}
+
+enum TipoPerito {
+  CESVI
+  MEDICO
+}
+
+enum RolAccidente {
+  TERCERO
+  ASEGURADO
+}
+
+enum UsoVehiculo {
+  COMERCIAL
+  PARTICULAR
+  TRANSPORTE_PASAJEROS
+}
+
+enum TipoLesion {
+  LEVE
+  MODERADA
+  GRAVE
+  MUERTE
+}
+
+// Las bajas y restauraciones actualizan eliminado y fechaBaja juntos.
+// Prisma no filtra bajas automaticamente. Ver README.md de esta carpeta.
+// Restrict preserva las referencias ante borrados fisicos o cambios de PK.
+model Pais {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  eliminado Boolean   @default(false)
+  fechaBaja DateTime? @db.Timestamptz(3)
+
+  provincias Provincia[]
+}
+
+model Provincia {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  idPais    Int
+  eliminado Boolean   @default(false)
+  fechaBaja DateTime? @db.Timestamptz(3)
+
+  pais        Pais        @relation(fields: [idPais], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  direcciones Direccion[]
+
+  @@index([idPais])
+}
+
+model Direccion {
+  id               Int       @id @default(autoincrement())
+  localidad        String?
+  calle            String?
+  pisoDepartamento String?
+  codigoPostal     String?
+  idProvincia      Int?
+  eliminado        Boolean   @default(false)
+  fechaBaja        DateTime? @db.Timestamptz(3)
+
+  provincia          Provincia?          @relation(fields: [idProvincia], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuarios           Usuario[]
+  siniestros         Siniestro[]
+  perito             Perito?
+  personaInvolucrada PersonaInvolucrada?
+
+  @@index([idProvincia])
+}
+
+model Usuario {
+  id             Int         @id @default(autoincrement())
+  nombres        String
+  apellidos      String
+  documento      String
+  telefono       String
+  email          String      @unique
+  /// Solo hash seguro; la autenticacion debe excluir usuarios eliminados.
+  contrasena     String
+  tipoUsuario    TipoUsuario
+  idDireccion    Int
+  ultimaConexion DateTime?   @db.Timestamptz(3)
+  eliminado      Boolean     @default(false)
+  fechaBaja      DateTime?   @db.Timestamptz(3)
+
+  direccion           Direccion            @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  documentosPlantilla DocumentoPlantilla[]
+  notificaciones      Notificacion[]
+  eventosHistorial    HistorialSiniestro[]
+  mensajes            MensajeChat[]
+  lecturasMensajes    LecturaMensajeChat[]
+  documentosSiniestro DocumentoSiniestro[]
+  siniestros          Siniestro[]
+
+  @@index([idDireccion])
+}
+
+model DocumentoPlantilla {
+  id             Int       @id @default(autoincrement())
+  nombreOriginal String
+  urlArchivo     String
+  tipoExtension  String
+  fechaCarga     DateTime  @default(now()) @db.Timestamptz(3)
+  idUsuario      Int
+  eliminado      Boolean   @default(false)
+  fechaBaja      DateTime? @db.Timestamptz(3)
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([idUsuario])
+}
+
+model Notificacion {
+  id               Int              @id @default(autoincrement())
+  mensaje          String
+  leida            Boolean
+  revisada         Boolean
+  fechaCreacion    DateTime         @default(now()) @db.Timestamptz(3)
+  idUsuario        Int
+  idSiniestro      Int
+  tipoNotificacion TipoNotificacion
+  eliminado        Boolean          @default(false)
+  fechaBaja        DateTime?        @db.Timestamptz(3)
+
+  usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([idUsuario, eliminado, leida, fechaCreacion])
+  @@index([idSiniestro])
+}
+
+model HistorialSiniestro {
+  id          Int                 @id @default(autoincrement())
+  tipoEvento  TipoEventoHistorial
+  descripcion String
+  fechaEvento DateTime            @default(now()) @db.Timestamptz(3)
+  idSiniestro Int
+  idUsuario   Int
+  eliminado   Boolean             @default(false)
+  fechaBaja   DateTime?           @db.Timestamptz(3)
+
+  siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([idSiniestro, eliminado, fechaEvento])
+  @@index([idUsuario])
+}
+
+model MensajeChat {
+  id               Int       @id @default(autoincrement())
+  fechaEnvio       DateTime  @default(now()) @db.Timestamptz(3)
+  contenidoMensaje String
+  idUsuario        Int
+  idSiniestro      Int
+  eliminado        Boolean   @default(false)
+  fechaBaja        DateTime? @db.Timestamptz(3)
+
+  usuario   Usuario              @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestro Siniestro            @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lecturas  LecturaMensajeChat[]
+
+  @@index([idUsuario])
+  @@index([idSiniestro, eliminado, fechaEnvio])
+}
+
+// Una lectura por mensaje y usuario, incluso si fue dada de baja logicamente.
+model LecturaMensajeChat {
+  id            Int       @id @default(autoincrement())
+  idMensajeChat Int
+  idUsuario     Int
+  fechaLeido    DateTime  @db.Timestamptz(3)
+  eliminado     Boolean   @default(false)
+  fechaBaja     DateTime? @db.Timestamptz(3)
+
+  mensajeChat MensajeChat @relation(fields: [idMensajeChat], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario     Usuario     @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([idMensajeChat, idUsuario])
+  @@index([idUsuario, eliminado])
+}
+
+model DocumentoSiniestro {
+  id                   Int       @id @default(autoincrement())
+  nombreOriginal       String
+  urlArchivoSinDominio String
+  tipoExtension        String
+  mimeType             String
+  tamanoBytes          BigInt
+  fechaCarga           DateTime  @default(now()) @db.Timestamptz(3)
+  idUsuario            Int
+  idSiniestro          Int
+  eliminado            Boolean   @default(false)
+  fechaBaja            DateTime? @db.Timestamptz(3)
+
+  usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([idUsuario])
+  @@index([idSiniestro, eliminado, fechaCarga])
+}
+
+model NovedadSiniestro {
+  id          Int       @id @default(autoincrement())
+  descripcion String
+  idSiniestro Int
+  eliminado   Boolean   @default(false)
+  fechaBaja   DateTime? @db.Timestamptz(3)
+
+  siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([idSiniestro])
+}
+
+model Perito {
+  id             Int        @id @default(autoincrement())
+  nombre         String
+  fechaSolicitud DateTime   @db.Timestamptz(3)
+  cerrado        Boolean
+  idSiniestro    Int
+  tipoPerito     TipoPerito
+  telefono       String?
+  email          String?
+  fechaCierre    DateTime?  @db.Timestamptz(3)
+  idDireccion    Int?       @unique
+  eliminado      Boolean    @default(false)
+  fechaBaja      DateTime?  @db.Timestamptz(3)
+
+  siniestro Siniestro  @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  direccion Direccion? @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([idSiniestro])
+}
+
+model Aseguradora {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  eliminado Boolean   @default(false)
+  fechaBaja DateTime? @db.Timestamptz(3)
+
+  ajustadores Ajustador[]
+  vehiculos   Vehiculo[]
+  siniestros  Siniestro[]
+}
+
+model Ajustador {
+  id            Int       @id @default(autoincrement())
+  nombres       String
+  apellidos     String
+  email         String
+  telefono      String
+  idAseguradora Int
+  eliminado     Boolean   @default(false)
+  fechaBaja     DateTime? @db.Timestamptz(3)
+
+  aseguradora Aseguradora @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestros  Siniestro[]
+
+  @@index([idAseguradora])
+}
+
+model Abogado {
+  id              Int       @id @default(autoincrement())
+  nombreCompleto  String
+  telefono        String?
+  numeroMatricula Int?
+  email           String?
+  eliminado       Boolean   @default(false)
+  fechaBaja       DateTime? @db.Timestamptz(3)
+
+  personasInvolucradas PersonaInvolucrada[]
+}
+
+model Vehiculo {
+  id                Int           @id @default(autoincrement())
+  dominio           String
+  marca             String?
+  modelo            String?
+  version           String?
+  acreedorPrendario String?
+  numeroChasis      String?
+  anio              Int?          @db.SmallInt
+  numeroMotor       String?
+  tipo              String?
+  descripcionDanos  String?
+  color             String?
+  idAseguradora     Int?
+  rolAccidente      RolAccidente?
+  uso               UsoVehiculo?
+  eliminado         Boolean       @default(false)
+  fechaBaja         DateTime?     @db.Timestamptz(3)
+
+  aseguradora          Aseguradora?         @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  personasInvolucradas PersonaInvolucrada[]
+
+  @@index([idAseguradora])
+}
+
+model TipoDocumento {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  eliminado Boolean   @default(false)
+  fechaBaja DateTime? @db.Timestamptz(3)
+
+  personasInvolucradas PersonaInvolucrada[]
+}
+
+model PersonaInvolucrada {
+  id                        Int         @id @default(autoincrement())
+  idSiniestro               Int
+  nombreCompletoRazonSocial String?
+  estadoCivil               String?
+  documento                 String?
+  sexo                      String?
+  telefono                  String?
+  email                     String?
+  numeroPermisoConducir     String?
+  descripcionLesiones       String?
+  fechaNacimiento           DateTime?   @db.Date
+  esOcupante                Boolean?
+  fechaVencimientoCarnet    DateTime?   @db.Date
+  esPropietario             Boolean?
+  relacionPropietario       String?
+  rolEnVehiculo             String?
+  rolSinVehiculo            String?
+  idDireccion               Int?        @unique
+  idAbogado                 Int?
+  idTipoDocumento           Int?
+  idVehiculo                Int?
+  tipoLesion                TipoLesion?
+  eliminado                 Boolean     @default(false)
+  fechaBaja                 DateTime?   @db.Timestamptz(3)
+
+  siniestro     Siniestro      @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  direccion     Direccion?     @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  abogado       Abogado?       @relation(fields: [idAbogado], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  tipoDocumento TipoDocumento? @relation(fields: [idTipoDocumento], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vehiculo      Vehiculo?      @relation(fields: [idVehiculo], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([idSiniestro])
+  @@index([idAbogado])
+  @@index([idTipoDocumento])
+  @@index([idVehiculo])
+}
+
+model EstadoSiniestro {
+  id          Int       @id @default(autoincrement())
+  nombre      String
+  descripcion String
+  eliminado   Boolean   @default(false)
+  fechaBaja   DateTime? @db.Timestamptz(3)
+
+  siniestros Siniestro[]
+}
+
+model Siniestro {
+  id                    Int       @id @default(autoincrement())
+  numeroSiniestro       String
+  numeroPoliza          String
+  fechaAsignacion       DateTime  @db.Timestamptz(3)
+  demorado              Boolean
+  menorEdadInvolucrado  Boolean
+  idEstadoSiniestro     Int
+  idAseguradora         Int
+  idUsuario             Int
+  fechaOcurrencia       DateTime? @db.Date
+  horaOcurrencia        DateTime? @db.Time
+  inicioVigencia        String?
+  sucursal              String?
+  causa                 String?
+  fechaCierre           DateTime? @db.Timestamptz(3)
+  fechaUltimoMovimiento DateTime? @db.Timestamptz(3)
+  idAjustador           Int?
+  idDireccion           Int?
+  eliminado             Boolean   @default(false)
+  fechaBaja             DateTime? @db.Timestamptz(3)
+
+  estadoSiniestro      EstadoSiniestro      @relation(fields: [idEstadoSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  aseguradora          Aseguradora          @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario              Usuario              @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  ajustador            Ajustador?           @relation(fields: [idAjustador], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  direccion            Direccion?           @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  notificaciones       Notificacion[]
+  eventosHistorial     HistorialSiniestro[]
+  mensajes             MensajeChat[]
+  documentos           DocumentoSiniestro[]
+  novedades            NovedadSiniestro[]
+  peritos              Perito[]
+  personasInvolucradas PersonaInvolucrada[]
+
+  @@index([idEstadoSiniestro, eliminado])
+  @@index([idAseguradora, eliminado])
+  @@index([idUsuario, eliminado])
+  @@index([idAjustador])
+  @@index([idDireccion])
+  @@index([numeroSiniestro])
+}

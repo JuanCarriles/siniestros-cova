@@ -1,0 +1,2 @@
+# Cliente generado: se regenera con prisma:generate y antes de dev/build/typecheck.
+/src/generated/prisma/
