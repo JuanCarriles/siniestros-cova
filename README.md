@@ -70,9 +70,21 @@ Requiere Node 22 (ver `.nvmrc`).
 4. Chequeos (corren en los tres workspaces):
    ```bash
    npm run typecheck
-   npm run lint
+   npm run lint          # ESLint (npm run lint:fix corrige lo automático)
+   npm run format:check  # Prettier (npm run format aplica el formato)
    npm run build
    ```
+
+### Lint y formato
+
+- **ESLint** (`eslint.config.mjs`, uno solo para todo el monorepo): reglas recomendadas de JS y TypeScript
+  con información de tipos (detecta promesas sin `await`, uso de `any`, etc.), reglas de hooks de React en el
+  frontend y globals de Node en el backend. Parámetros que no se usan pero son obligatorios se nombran con `_`.
+- **Prettier** (`.prettierrc.json`): sin punto y coma, comillas simples, 100 columnas. Ordena las clases de
+  Tailwind con `prettier-plugin-tailwindcss`. ESLint no opina de formato (`eslint-config-prettier`).
+- El cliente de Prisma (`backend/src/generated/`) se ignora en ambos. Para que ESLint analice con tipos lo que
+  usa Prisma, el cliente tiene que estar generado (`npm run prisma:generate -w backend`).
+- En VS Code, `.vscode/extensions.json` recomienda las extensiones de ESLint, Prettier, Tailwind y Prisma.
 
 Para agregar una dependencia a un solo workspace: `npm install <paquete> -w backend` (o `-w frontend`, `-w shared`).
 
@@ -90,10 +102,10 @@ docker compose logs -f backend
 docker compose down                   # detiene (los datos de Postgres quedan en el volumen db_data)
 ```
 
-| Servicio | Acceso | Notas |
-|---|---|---|
+| Servicio | Acceso                | Notas                                                                          |
+| -------- | --------------------- | ------------------------------------------------------------------------------ |
 | frontend | http://localhost:8080 | Nginx: sirve el build de Vite y hace proxy de `/api` y `/socket.io` al backend |
-| backend | http://127.0.0.1:3000 | Solo local; el tráfico real entra por Nginx |
-| db | 127.0.0.1:5432 | Solo local, para correr Prisma desde la máquina |
+| backend  | http://127.0.0.1:3000 | Solo local; el tráfico real entra por Nginx                                    |
+| db       | 127.0.0.1:5432        | Solo local, para correr Prisma desde la máquina                                |
 
 La configuración de Nginx está en `frontend/nginx/`. Requiere `backend/.env` (copiar de `backend/.env.example`).

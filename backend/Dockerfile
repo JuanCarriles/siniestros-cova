@@ -1,6 +1,8 @@
 # Stage 1: Build
 FROM node:22-alpine AS builder
 WORKDIR /usr/src/app
+### 22.12.0  VER SI NO CAMBIO NODE POR PRISMA
+
 
 # Manifiestos del monorepo (para que npm entienda los workspaces y use el lock)
 COPY package.json package-lock.json ./

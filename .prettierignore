@@ -1,0 +1,9 @@
+# Prettier ya ignora lo del .gitignore de la raíz; esto es lo adicional.
+
+# Generado
+package-lock.json
+backend/src/generated/
+backend/prisma/migrations/
+
+# Referencias de diseño (no son código del proyecto)
+docs/
