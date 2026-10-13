@@ -27,4 +27,5 @@ backend/uploads/
 Thumbs.db
 
 # Claude Code (config local)
-.claude/settings.local.json
+.claude/settings.local.json 
+.claude/*.local.*

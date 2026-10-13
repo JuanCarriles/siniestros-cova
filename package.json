@@ -1,0 +1,20 @@
+{
+  "name": "siniestros-cova",
+  "private": true,
+  "description": "Sistema de gestión de siniestros — Estudio Cova SRT",
+  "workspaces": [
+    "shared",
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:back": "npm run dev -w backend",
+    "dev:front": "npm run dev -w frontend",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}
