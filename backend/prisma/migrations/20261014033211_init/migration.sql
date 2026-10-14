@@ -1,16 +1,11 @@
-BEGIN;
-
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
 -- CreateEnum
 CREATE TYPE "TipoUsuario" AS ENUM ('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR');
 
 -- CreateEnum
-CREATE TYPE "TipoNotificacion" AS ENUM ('DOCUMENTO_NUEVO', 'NOVEDAD_CARGADA', 'CAMBIO_ESTADO', 'MENSAJE_NUEVO');
+CREATE TYPE "TipoNotificacion" AS ENUM ('DOCUMENTO_NUEVO', 'NOVEDAD_CARGADA', 'CAMBIO_ESTADO', 'MENSAJE_NUEVO', 'ASIGNACION_SINIESTRO', 'REASIGNACION_SINIESTRO');
 
 -- CreateEnum
-CREATE TYPE "TipoEventoHistorial" AS ENUM ('MENSAJE', 'NOVEDAD', 'DOCUMENTO');
+CREATE TYPE "TipoEventoHistorial" AS ENUM ('MENSAJE', 'NOVEDAD', 'DOCUMENTO', 'ASIGNACION', 'REASIGNACION', 'CAMBIO_ESTADO');
 
 -- CreateEnum
 CREATE TYPE "TipoPerito" AS ENUM ('CESVI', 'MEDICO');
@@ -167,6 +162,8 @@ CREATE TABLE "DocumentoSiniestro" (
 CREATE TABLE "NovedadSiniestro" (
     "id" SERIAL NOT NULL,
     "descripcion" TEXT NOT NULL,
+    "autor" TEXT NOT NULL,
+    "fechaCarga" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "idSiniestro" INTEGER NOT NULL,
     "eliminado" BOOLEAN NOT NULL DEFAULT false,
     "fechaBaja" TIMESTAMPTZ(3),
@@ -297,6 +294,7 @@ CREATE TABLE "EstadoSiniestro" (
     "id" SERIAL NOT NULL,
     "nombre" TEXT NOT NULL,
     "descripcion" TEXT NOT NULL,
+    "esCierre" BOOLEAN NOT NULL DEFAULT false,
     "eliminado" BOOLEAN NOT NULL DEFAULT false,
     "fechaBaja" TIMESTAMPTZ(3),
 
@@ -330,7 +328,10 @@ CREATE TABLE "Siniestro" (
 );
 
 -- CreateIndex
-CREATE INDEX "Provincia_idPais_idx" ON "Provincia"("idPais");
+CREATE UNIQUE INDEX "Pais_nombre_key" ON "Pais"("nombre");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Provincia_idPais_nombre_key" ON "Provincia"("idPais", "nombre");
 
 -- CreateIndex
 CREATE INDEX "Direccion_idProvincia_idx" ON "Direccion"("idProvincia");
@@ -375,7 +376,7 @@ CREATE INDEX "DocumentoSiniestro_idUsuario_idx" ON "DocumentoSiniestro"("idUsuar
 CREATE INDEX "DocumentoSiniestro_idSiniestro_eliminado_fechaCarga_idx" ON "DocumentoSiniestro"("idSiniestro", "eliminado", "fechaCarga");
 
 -- CreateIndex
-CREATE INDEX "NovedadSiniestro_idSiniestro_idx" ON "NovedadSiniestro"("idSiniestro");
+CREATE INDEX "NovedadSiniestro_idSiniestro_eliminado_fechaCarga_idx" ON "NovedadSiniestro"("idSiniestro", "eliminado", "fechaCarga");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Perito_idDireccion_key" ON "Perito"("idDireccion");
@@ -388,6 +389,9 @@ CREATE INDEX "Ajustador_idAseguradora_idx" ON "Ajustador"("idAseguradora");
 
 -- CreateIndex
 CREATE INDEX "Vehiculo_idAseguradora_idx" ON "Vehiculo"("idAseguradora");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "TipoDocumento_nombre_key" ON "TipoDocumento"("nombre");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "PersonaInvolucrada_idDireccion_key" ON "PersonaInvolucrada"("idDireccion");
@@ -403,6 +407,9 @@ CREATE INDEX "PersonaInvolucrada_idTipoDocumento_idx" ON "PersonaInvolucrada"("i
 
 -- CreateIndex
 CREATE INDEX "PersonaInvolucrada_idVehiculo_idx" ON "PersonaInvolucrada"("idVehiculo");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "EstadoSiniestro_nombre_key" ON "EstadoSiniestro"("nombre");
 
 -- CreateIndex
 CREATE INDEX "Siniestro_idEstadoSiniestro_eliminado_idx" ON "Siniestro"("idEstadoSiniestro", "eliminado");
@@ -509,8 +516,10 @@ ALTER TABLE "Siniestro" ADD CONSTRAINT "Siniestro_idAjustador_fkey" FOREIGN KEY 
 -- AddForeignKey
 ALTER TABLE "Siniestro" ADD CONSTRAINT "Siniestro_idDireccion_fkey" FOREIGN KEY ("idDireccion") REFERENCES "Direccion"("id") ON DELETE RESTRICT ON UPDATE RESTRICT;
 
--- Incorporar a la migracion inicial DESPUES de CREATE TABLE.
--- Preparado sin ejecutar; no borra ni modifica registros.
+-- ---------------------------------------------------------------------------
+-- Baja lógica: "eliminado" y "fechaBaja" siempre sincronizados.
+-- Agregado a mano desde prisma/soft-delete-checks.sql: Prisma Schema no representa CHECK.
+-- ---------------------------------------------------------------------------
 
 ALTER TABLE "Pais" ADD CONSTRAINT "Pais_baja_logica_check"
   CHECK (("eliminado" = false AND "fechaBaja" IS NULL)
@@ -592,5 +601,3 @@ ALTER TABLE "Siniestro" ADD CONSTRAINT "Siniestro_baja_logica_check"
   CHECK (("eliminado" = false AND "fechaBaja" IS NULL)
       OR ("eliminado" = true AND "fechaBaja" IS NOT NULL));
 
-
-COMMIT;

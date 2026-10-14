@@ -41,34 +41,57 @@ automáticamente. El servicio interno de documentos recibe el cliente por inyecc
 Los procesos que lo utilicen deberán llamar a disconnectPrisma durante su cierre
 ordenado. El cliente no aplica filtros automáticos ni constituye una autorización.
 
-## Conexión y migración pendientes
+## Migraciones
 
-La migración inicial está preparada en `migrations/20261014000000_init` e incluye
-las 20 tablas, los enums, las relaciones, los índices y los CHECK de baja lógica.
-Verificar su aplicación en cada entorno con `prisma migrate status`.
+La migración inicial es `migrations/20261014033211_init`: crea las 20 tablas, los 7 enums,
+índices y FK, y al final incluye a mano los 20 CHECK de `soft-delete-checks.sql` (Prisma Schema
+no representa CHECK). Las migraciones se versionan en Git y **nunca se editan una vez aplicadas**
+(Prisma guarda un checksum en la tabla `_prisma_migrations`).
 
-Para continuar sobre una base de desarrollo preparada y revisada:
+- **Desarrollo** (desde Windows, contra `localhost:5432` según `backend/.env`):
+  - cambiar `schema.prisma` y crear la migración: `npm run prisma:migrate:dev -w backend -- --name <cambio>`.
+    Si el cambio necesita SQL que Prisma no genera (CHECK, etc.), usar `--create-only`, editar el
+    `migration.sql` y volver a correr el comando para aplicarla.
+  - ver el estado: `npx prisma migrate status --config prisma.config.ts` (desde `backend/`).
+- **Producción:** solo `prisma:migrate:deploy`, que aplica las pendientes y nunca crea ni borra.
+  La imagen final del backend no incluye el CLI de Prisma: correrlo desde una etapa o entorno que
+  lo tenga. No usar `db push` en ningún entorno: omitiría los CHECK y el historial.
+- `soft-delete-checks.sql` queda como referencia: si se agrega una tabla nueva con baja lógica,
+  su CHECK va en la migración de esa tabla.
 
-1. Configurar DATABASE_URL en `backend/.env` sin versionar credenciales. Usar
-   `localhost:5432` desde Windows; el Compose existente usa `db:5432` dentro de
-   Docker. Un `.env` vacío no configura una conexión para los comandos locales.
-2. Verificar que el destino sea la base de desarrollo correcta. Si contiene datos
-   o tablas anteriores, revisar su estado y la necesidad de una línea base antes
-   de continuar. No aceptar un reset de una base con datos.
-3. Revisar la migración inicial existente. Ya incorpora `soft-delete-checks.sql`.
-   Prisma Schema no representa estos CHECK; deben conservarse en el historial
-   de migraciones. No sustituir este flujo por `db push`, que omitiría los CHECK.
-4. Aplicar la migración revisada con
-   `npm run prisma:migrate:deploy -w backend`, y volver a generar el cliente con
-   `npm run prisma:generate -w backend`.
-5. Para cambios posteriores crear una nueva migración con `prisma:migrate:dev`;
-   no editar una migración que ya se aplicó.
-6. En un despliegue posterior usar `prisma:migrate:deploy` con las migraciones
-   revisadas y versionadas. La imagen de producción actual no instala el CLI de
-   desarrollo; ejecutar las migraciones en una etapa o entorno que lo incluya.
+### Bases creadas durante la prueba inicial de R2
 
-La presencia del archivo SQL no demuestra que esté aplicado: comprobar siempre
-el estado de las migraciones en la base destino.
+El historial compartido conserva la migración `20261014033211_init` de `desarrollo`.
+Se retira la inicialización alternativa `20261014000000_init` de la rama de R2:
+mantener ambas intentaría crear las mismas tablas y enumeraciones dos veces.
+El SQL anterior sigue disponible en el historial de Git.
+
+Si una base local registra `20261014000000_init` en `_prisma_migrations`, no está
+alineada todavía con este historial. Antes de ejecutar `migrate dev` o `migrate deploy`,
+se debe respaldar y comparar esa base con el esquema actual, incorporar las diferencias
+y reconciliar el historial. No borrar datos ni aceptar un reset como parte del merge.
+La resolución de conflictos del repositorio no realiza esa operación en la base.
+
+## Seeds
+
+Requieren las tablas creadas (migración aplicada). Están en `prisma/seeds/`.
+
+| Seed       | Contenido                                                                                                            | Dónde                   | Comando                                                                      |
+| ---------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
+| Base       | País Argentina y sus 24 jurisdicciones, 7 estados de siniestro, 4 tipos de documento                                 | Desarrollo y producción | `npm run seed:base -w backend` / en el contenedor: `node dist/seed-base.mjs` |
+| Desarrollo | Base + 3 usuarios de prueba (uno por tipo), aseguradoras, ajustadores, abogados, plantillas y 6 siniestros completos | Solo desarrollo         | `npm run seed:dev -w backend`                                                |
+
+- **Base:** idempotente gracias a los `UNIQUE` por nombre de los catálogos: inserta con
+  `skipDuplicates` (`ON CONFLICT DO NOTHING`), así que crea solo lo que falta y no modifica ni
+  reactiva lo existente (los dados de baja también cuentan). Se puede correr en cada deploy. Los datos
+  están en `catalogos.ts`; solo "Cierre enviado" tiene `esCierre = true`.
+- **Desarrollo:** se niega a correr con `NODE_ENV=production`. Si los usuarios de prueba ya existen no
+  agrega nada; para recargar desde cero: `npm run db:reset:dev -w backend` (borra la base, aplica las
+  migraciones y corre la seed; pide confirmación). Usuarios y contraseñas: `USUARIOS_DEV` en
+  `desarrollo.ts`, mails con dominio `.test`. Las fechas son relativas al momento de correrla, así el
+  caso demorado (sin movimiento hace 5 días) cumple RF-19. Los documentos apuntan a rutas de R2 que no
+  existen: descargarlos falla.
+- Las contraseñas se guardan con Argon2id mediante `src/lib/password.ts` (el mismo que usará el login).
 
 ## Integridad y fechas
 
@@ -76,9 +99,11 @@ el estado de las migraciones en la base destino.
   inversa. Todas usan onDelete: Restrict y onUpdate: Restrict: borrar físicamente
   un padre referenciado o cambiar su identidad no propaga cambios a sus hijos.
 - Únicos adicionales a las PK: Usuario.email, Perito.idDireccion,
-  PersonaInvolucrada.idDireccion y la combinación
-  LecturaMensajeChat(idMensajeChat, idUsuario). No hay unicidad en los números de siniestro,
-  dominios, documentos de personas, nombres ni FK de relaciones 1:N.
+  PersonaInvolucrada.idDireccion, la combinación
+  LecturaMensajeChat(idMensajeChat, idUsuario) y los nombres de los catálogos: Pais.nombre,
+  Provincia(idPais, nombre), EstadoSiniestro.nombre y TipoDocumento.nombre (incluyen los dados de
+  baja). No hay unicidad en los números de siniestro, dominios, documentos de personas ni FK de
+  relaciones 1:N.
 - La unicidad del email abarca también usuarios eliminados. Una dirección
   opcional admite NULL; cada FK 1:1 impide reutilizar una dirección entre dos
   registros de su misma entidad, incluso si uno está eliminado. No se introduce
@@ -197,17 +222,25 @@ El CHECK de esta nueva entidad también está preparado en soft-delete-checks.sq
 No se implementaron endpoints ni eventos Socket.IO para registrar estas lecturas.
 Si una base ya tuviera los campos globales anteriores, su valor no permite saber
 qué usuarios leyeron: revisar y preservar esos datos antes de migrar, sin inventar
-lecturas por usuario. En este proyecto la migración inicial continúa pendiente.
+lecturas por usuario. Verificar la migración aplicada en cada entorno.
 
 ## Límites funcionales conservados
 
 - Vehiculo no tiene relación directa con Siniestro. Se vincula a través de
   PersonaInvolucrada; un vehículo sin personas no puede ubicarse en un expediente
   usando este esquema. Se requiere decisión funcional para cambiarlo.
-- NovedadSiniestro no tiene autor ni fecha de creación, como exige el adjunto.
-- TipoEventoHistorial contiene sólo MENSAJE, NOVEDAD y DOCUMENTO; no se agregaron
-  valores para asignaciones, cambios de estado u otros eventos del PDF anterior.
+- NovedadSiniestro guarda `autor` como texto (nombre y apellido del usuario asignado al siniestro
+  al momento de cargarla, tomado de la relación Siniestro.usuario; no es una FK) y `fechaCarga`.
+- TipoEventoHistorial incluye ASIGNACION, REASIGNACION y CAMBIO_ESTADO además de MENSAJE, NOVEDAD
+  y DOCUMENTO. La descripción la arma `src/modules/historial/historial.textos.ts`
+  (`eventoHistorial.*`): un texto que describe la situación en ese momento (p. ej. "Se asignó el
+  caso al usuario Pedro González el 20/10/2026", fecha en hora argentina), sin guardar ids ni datos
+  estructurados del cambio. Quién hizo la acción queda en `idUsuario` y la hora en `fechaEvento`.
+- TipoNotificacion incluye ASIGNACION_SINIESTRO y REASIGNACION_SINIESTRO (RF-29).
+- EstadoSiniestro.esCierre marca el estado final (solo "Cierre enviado"). Las reglas de RF-14,
+  RF-18, RF-19 y RF-30 deben usar esta bandera, no el nombre del estado.
 - Los flags cerrado, demorado, leida y revisada y las fechas de cierre
   siguen siendo independientes de eliminado/fechaBaja.
-- No se implementaron aún los permisos, hash, autenticación ni servicios de baja,
+- El hash de contraseñas (Argon2id) está en `src/lib/password.ts`. No se implementaron aún los
+  permisos, la autenticación ni los servicios de baja,
   restauración o consulta. Este documento define su contrato, no su ejecución.
