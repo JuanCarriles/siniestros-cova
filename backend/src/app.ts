@@ -2,6 +2,7 @@ import cookieParser from 'cookie-parser'
 import express, { Router } from 'express'
 import helmet from 'helmet'
 import { errorHandler, notFound } from './middlewares/errorHandler.ts'
+import { healthRouter } from './modules/health/health.routes.ts'
 
 export const app = express()
 
@@ -15,9 +16,7 @@ app.use(cookieParser())
 
 const api = Router()
 
-api.get('/health', (_req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() })
-})
+api.use('/health', healthRouter)
 
 // Los routers de cada módulo se montan acá, por ejemplo:
 // api.use('/aseguradoras', aseguradorasRouter)

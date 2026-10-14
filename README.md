@@ -96,16 +96,44 @@ Las dos imágenes se construyen con la **raíz del repo como contexto** (necesit
 monorepo y `shared/`), por eso hay un único `.dockerignore` en la raíz.
 
 ```bash
-docker compose up -d --build --wait   # db + backend + frontend
+docker compose up -d --build --wait   # db → migrate → backend → frontend
 docker compose ps
 docker compose logs -f backend
+docker compose logs migrate           # resultado de las migraciones y de la seed de catálogos
 docker compose down                   # detiene (los datos de Postgres quedan en el volumen db_data)
 ```
 
-| Servicio | Acceso                | Notas                                                                          |
-| -------- | --------------------- | ------------------------------------------------------------------------------ |
-| frontend | http://localhost:8080 | Nginx: sirve el build de Vite y hace proxy de `/api` y `/socket.io` al backend |
-| backend  | http://127.0.0.1:3000 | Solo local; el tráfico real entra por Nginx                                    |
-| db       | 127.0.0.1:5432        | Solo local, para correr Prisma desde la máquina                                |
+| Servicio | Acceso                | Notas                                                                                     |
+| -------- | --------------------- | ----------------------------------------------------------------------------------------- |
+| frontend | http://localhost:8080 | Nginx: sirve el build de Vite y hace proxy de `/api` y `/socket.io` al backend            |
+| backend  | http://127.0.0.1:3000 | Solo local; el tráfico real entra por Nginx                                               |
+| db       | 127.0.0.1:5432        | Solo local, para correr Prisma desde la máquina                                           |
+| migrate  | —                     | Tarea de un solo uso en cada `up`: `prisma migrate deploy` + seed de catálogos, y termina |
 
-La configuración de Nginx está en `frontend/nginx/`. Requiere `backend/.env` (copiar de `backend/.env.example`).
+- El backend arranca recién cuando `migrate` terminó bien: nunca corre contra una base sin migrar.
+- `GET /api/health` responde 200 si la API llega a la base y 503 si no; lo usa el healthcheck de Docker.
+- La configuración de Nginx está en `frontend/nginx/`.
+- Variables: `.env` en la raíz (credenciales de Postgres, ver `.env.example`; opcional en desarrollo) y
+  `backend/.env` (obligatorio, copiar de `backend/.env.example`).
+
+## Deploy en un VPS (sin dominio todavía)
+
+Requisitos: Ubuntu 24.04, 2 GB de RAM o más (con 1 GB, agregar swap: el build de las imágenes usa mucha memoria).
+
+1. Instalar Docker (con el plugin compose) y clonar el repo.
+2. Crear `.env` en la raíz a partir de `.env.example`, con una contraseña de Postgres **solo de letras y
+   números** (`openssl rand -hex 32`). Tiene que existir **antes** del primer `up`: Postgres la usa únicamente
+   al crear la base.
+3. Crear `backend/.env` a partir de `backend/.env.example`:
+   - `APP_URL=http://IP-DEL-VPS:8080`
+   - `COOKIE_SECURE=false` mientras no haya HTTPS (sin esto el login no va a funcionar por http)
+   - `SESSION_SECRET` largo y aleatorio. `DATABASE_URL` y `NODE_ENV` los pone el compose.
+4. `docker compose up -d --build --wait`, y verificar `docker compose ps` y `docker compose logs migrate`.
+5. Abrir `http://IP-DEL-VPS:8080` y `http://IP-DEL-VPS:8080/api/health` (`"db":"ok"`).
+6. Firewall: permitir solo 22, 80, 443 y 8080 (`ufw`). La base y el backend escuchan solo en `127.0.0.1`.
+
+**No correr la seed de desarrollo en el VPS** (se niega con `NODE_ENV=production`). Sin HTTPS no cargar datos
+reales: el tráfico viaja sin cifrar. Para consultar la base desde tu máquina, usar un túnel SSH
+(`ssh -L 5432:127.0.0.1:5432 usuario@IP`) y conectarse a `localhost:5432`.
+
+Pendiente para producción real: dominio + HTTPS (RNF-07) y backups diarios fuera del VPS (RNF-04).
