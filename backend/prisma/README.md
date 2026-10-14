@@ -76,9 +76,11 @@ el estado de las migraciones en la base destino.
   inversa. Todas usan onDelete: Restrict y onUpdate: Restrict: borrar físicamente
   un padre referenciado o cambiar su identidad no propaga cambios a sus hijos.
 - Únicos adicionales a las PK: Usuario.email, Perito.idDireccion,
-  PersonaInvolucrada.idDireccion y la combinación
-  LecturaMensajeChat(idMensajeChat, idUsuario). No hay unicidad en los números de siniestro,
-  dominios, documentos de personas, nombres ni FK de relaciones 1:N.
+  PersonaInvolucrada.idDireccion, la combinación
+  LecturaMensajeChat(idMensajeChat, idUsuario) y los nombres de los catálogos: Pais.nombre,
+  Provincia(idPais, nombre), EstadoSiniestro.nombre y TipoDocumento.nombre (incluyen los dados de
+  baja). No hay unicidad en los números de siniestro, dominios, documentos de personas ni FK de
+  relaciones 1:N.
 - La unicidad del email abarca también usuarios eliminados. Una dirección
   opcional admite NULL; cada FK 1:1 impide reutilizar una dirección entre dos
   registros de su misma entidad, incluso si uno está eliminado. No se introduce
@@ -204,10 +206,18 @@ lecturas por usuario. En este proyecto la migración inicial continúa pendiente
 - Vehiculo no tiene relación directa con Siniestro. Se vincula a través de
   PersonaInvolucrada; un vehículo sin personas no puede ubicarse en un expediente
   usando este esquema. Se requiere decisión funcional para cambiarlo.
-- NovedadSiniestro no tiene autor ni fecha de creación, como exige el adjunto.
-- TipoEventoHistorial contiene sólo MENSAJE, NOVEDAD y DOCUMENTO; no se agregaron
-  valores para asignaciones, cambios de estado u otros eventos del PDF anterior.
+- NovedadSiniestro guarda `autor` como texto (nombre y apellido del usuario asignado al siniestro
+  al momento de cargarla, tomado de la relación Siniestro.usuario; no es una FK) y `fechaCarga`.
+- TipoEventoHistorial incluye ASIGNACION, REASIGNACION y CAMBIO_ESTADO además de MENSAJE, NOVEDAD
+  y DOCUMENTO. La descripción la arma `src/modules/historial/historial.textos.ts`
+  (`eventoHistorial.*`): un texto que describe la situación en ese momento (p. ej. "Se asignó el
+  caso al usuario Pedro González el 20/10/2026", fecha en hora argentina), sin guardar ids ni datos
+  estructurados del cambio. Quién hizo la acción queda en `idUsuario` y la hora en `fechaEvento`.
+- TipoNotificacion incluye ASIGNACION_SINIESTRO y REASIGNACION_SINIESTRO (RF-29).
+- EstadoSiniestro.esCierre marca el estado final (solo "Cierre enviado"). Las reglas de RF-14,
+  RF-18, RF-19 y RF-30 deben usar esta bandera, no el nombre del estado.
 - Los flags cerrado, demorado, leida y revisada y las fechas de cierre
   siguen siendo independientes de eliminado/fechaBaja.
-- No se implementaron aún los permisos, hash, autenticación ni servicios de baja,
+- El hash de contraseñas (Argon2id) está en `src/lib/password.ts`. No se implementaron aún los
+  permisos, la autenticación ni los servicios de baja,
   restauración o consulta. Este documento define su contrato, no su ejecución.

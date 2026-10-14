@@ -20,12 +20,19 @@ enum TipoNotificacion {
   NOVEDAD_CARGADA
   CAMBIO_ESTADO
   MENSAJE_NUEVO
+  ASIGNACION_SINIESTRO
+  REASIGNACION_SINIESTRO
 }
 
+// La descripción de cada evento la arma src/modules/historial/historial.textos.ts
+// (texto legible, sin guardar ids ni datos estructurados del cambio).
 enum TipoEventoHistorial {
   MENSAJE
   NOVEDAD
   DOCUMENTO
+  ASIGNACION
+  REASIGNACION
+  CAMBIO_ESTADO
 }
 
 enum TipoPerito {
@@ -56,7 +63,7 @@ enum TipoLesion {
 // Restrict preserva las referencias ante borrados fisicos o cambios de PK.
 model Pais {
   id        Int       @id @default(autoincrement())
-  nombre    String
+  nombre    String    @unique
   eliminado Boolean   @default(false)
   fechaBaja DateTime? @db.Timestamptz(3)
 
@@ -73,7 +80,8 @@ model Provincia {
   pais        Pais        @relation(fields: [idPais], references: [id], onDelete: Restrict, onUpdate: Restrict)
   direcciones Direccion[]
 
-  @@index([idPais])
+  // El índice único (idPais primero) también sirve para buscar por país.
+  @@unique([idPais, nombre])
 }
 
 model Direccion {
@@ -231,13 +239,16 @@ model DocumentoSiniestro {
 model NovedadSiniestro {
   id          Int       @id @default(autoincrement())
   descripcion String
+  /// Nombre y apellido del usuario asignado al siniestro al momento de cargarla (texto, no FK).
+  autor       String
+  fechaCarga  DateTime  @default(now()) @db.Timestamptz(3)
   idSiniestro Int
   eliminado   Boolean   @default(false)
   fechaBaja   DateTime? @db.Timestamptz(3)
 
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
-  @@index([idSiniestro])
+  @@index([idSiniestro, eliminado, fechaCarga])
 }
 
 model Perito {
@@ -326,7 +337,7 @@ model Vehiculo {
 
 model TipoDocumento {
   id        Int       @id @default(autoincrement())
-  nombre    String
+  nombre    String    @unique
   eliminado Boolean   @default(false)
   fechaBaja DateTime? @db.Timestamptz(3)
 
@@ -373,8 +384,10 @@ model PersonaInvolucrada {
 
 model EstadoSiniestro {
   id          Int       @id @default(autoincrement())
-  nombre      String
+  nombre      String    @unique
   descripcion String
+  /// Estado final del caso (solo "Cierre enviado"). Las reglas de negocio usan esta bandera, no el nombre.
+  esCierre    Boolean   @default(false)
   eliminado   Boolean   @default(false)
   fechaBaja   DateTime? @db.Timestamptz(3)
 
