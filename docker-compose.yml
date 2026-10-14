@@ -1,3 +1,11 @@
+# Nombre fijo del proyecto: los contenedores, la red y el volumen (siniestros-cova_db_data) se llaman
+# igual sin importar en qué carpeta se clone el repo. Sin esto, otra carpeta = volumen nuevo y vacío.
+name: siniestros-cova
+
+# Conexión a Postgres dentro de la red de Docker (el host es el nombre del servicio: "db").
+# Los valores salen del .env de la raíz (ver .env.example); si no existe, se usan los de desarrollo.
+x-database-url: &database-url postgresql://${POSTGRES_USER:-cova}:${POSTGRES_PASSWORD:-cova}@db:5432/${POSTGRES_DB:-siniestros}?schema=public
+
 services:
   # Base de datos PostgreSQL (usada por Prisma desde el backend)
   db:
@@ -21,6 +29,25 @@ services:
       timeout: 5s
       retries: 10
 
+  # Tarea de un solo uso en cada "up": aplica las migraciones pendientes (prisma migrate deploy) y la
+  # seed de catálogos (idempotente), y termina. El backend arranca recién si esto terminó bien.
+  # Usa la etapa "builder" del Dockerfile del backend porque la imagen final no tiene el CLI de Prisma.
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: builder
+    container_name: siniestros-migrate
+    command:
+      ['sh', '-c', 'npm run prisma:migrate:deploy -w backend && node backend/dist/seed-base.mjs']
+    environment:
+      DATABASE_URL: *database-url
+      # Sin el aviso de "nueva versión de Prisma" en los logs de cada deploy
+      PRISMA_HIDE_UPDATE_MESSAGE: 'true'
+    depends_on:
+      db:
+        condition: service_healthy
+
   # API (Express) — se construye desde la raíz porque es un monorepo con workspaces
   backend:
     build:
@@ -33,8 +60,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      # Dentro de la red de Docker el host de la base es el nombre del servicio: "db"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-cova}:${POSTGRES_PASSWORD:-cova}@db:5432/${POSTGRES_DB:-siniestros}?schema=public
+      DATABASE_URL: *database-url
     ports:
       # Solo para pruebas locales: el tráfico real entra por Nginx (frontend) por la red interna de Docker
       - '127.0.0.1:3000:3000'
@@ -46,6 +72,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   # Frontend (build de Vite servido por Nginx, que además hace de proxy de /api y /socket.io)
   # También desde la raíz: necesita el package-lock.json del monorepo y el paquete shared/
