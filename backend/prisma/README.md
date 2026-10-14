@@ -17,7 +17,7 @@ Prisma CLI, Client y el adaptador PostgreSQL están fijados en 7.10.0. Se requie
 Node >=22.12.0 (usar una versión LTS compatible con Prisma). La configuración
 `backend/prisma.config.ts` carga únicamente `backend/.env` si existe, usando
 Node, sin sobrescribir variables que ya están en el entorno. No incluye credenciales.
-El `.env.example` existente ya contiene DATABASE_URL y no fue modificado.
+El `.env.example` contiene un ejemplo de DATABASE_URL para desarrollo local.
 
 ## Comandos desde la raíz del monorepo
 
@@ -37,15 +37,15 @@ porque los Dockerfiles instalan dependencias antes de copiar el esquema.
 
 `src/lib/prisma.ts` expone `getPrisma()` y `disconnectPrisma()`. Reutiliza una
 instancia del cliente y exige DATABASE_URL al acceder a ella. No conecta la API
-ni implementa servicios automáticamente; los módulos todavía están vacíos.
+automáticamente. El servicio interno de documentos recibe el cliente por inyección.
 Los procesos que lo utilicen deberán llamar a disconnectPrisma durante su cierre
 ordenado. El cliente no aplica filtros automáticos ni constituye una autorización.
 
 ## Conexión y migración pendientes
 
-No se aplicaron migraciones ni se conectó esta implementación a una base real.
-No se creó una migración inicial: no había una base de desarrollo en ejecución.
-La carpeta `migrations` existente se conserva.
+La migración inicial está preparada en `migrations/20261014000000_init` e incluye
+las 20 tablas, los enums, las relaciones, los índices y los CHECK de baja lógica.
+Verificar su aplicación en cada entorno con `prisma migrate status`.
 
 Para continuar sobre una base de desarrollo preparada y revisada:
 
@@ -55,20 +55,20 @@ Para continuar sobre una base de desarrollo preparada y revisada:
 2. Verificar que el destino sea la base de desarrollo correcta. Si contiene datos
    o tablas anteriores, revisar su estado y la necesidad de una línea base antes
    de continuar. No aceptar un reset de una base con datos.
-3. Preparar, sin aplicar, la migración:
-   `npm run prisma:migrate:dev -w backend -- --name init --create-only`.
-4. Incorporar el contenido de `soft-delete-checks.sql` al final del SQL de esa
-   migración, después de las sentencias CREATE TABLE, y revisar el SQL completo.
+3. Revisar la migración inicial existente. Ya incorpora `soft-delete-checks.sql`.
    Prisma Schema no representa estos CHECK; deben conservarse en el historial
    de migraciones. No sustituir este flujo por `db push`, que omitiría los CHECK.
-5. Aplicar la migración revisada en desarrollo con
-   `npm run prisma:migrate:dev -w backend`, y volver a generar el cliente.
+4. Aplicar la migración revisada con
+   `npm run prisma:migrate:deploy -w backend`, y volver a generar el cliente con
+   `npm run prisma:generate -w backend`.
+5. Para cambios posteriores crear una nueva migración con `prisma:migrate:dev`;
+   no editar una migración que ya se aplicó.
 6. En un despliegue posterior usar `prisma:migrate:deploy` con las migraciones
    revisadas y versionadas. La imagen de producción actual no instala el CLI de
    desarrollo; ejecutar las migraciones en una etapa o entorno que lo incluya.
 
-Hasta completar esos pasos no existen tablas ni CHECK creados por este trabajo
-en PostgreSQL. El archivo SQL es preparación de integridad, no una migración aplicada.
+La presencia del archivo SQL no demuestra que esté aplicado: comprobar siempre
+el estado de las migraciones en la base destino.
 
 ## Integridad y fechas
 

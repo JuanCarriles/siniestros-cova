@@ -12,7 +12,7 @@ const examples = [
     nombres: 'Ana', apellidos: 'Pérez', documento: '00123456', telefono: '+54 11 1234-5678',
     email: 'ana@example.com', contrasena: 'Una clave de prueba 123', tipoUsuario: 'GESTOR', idDireccion: 1,
   }],
-  ['DocumentoPlantilla', { nombreOriginal: 'modelo.pdf', urlArchivo: 'https://archivos.example.com/modelo.pdf', tipoExtension: 'pdf', idUsuario: 1 }],
+  ['DocumentoPlantilla', { nombreOriginal: 'modelo.pdf', urlArchivo: 'plantillas/modelo.pdf', tipoExtension: 'pdf', idUsuario: 1 }],
   ['Notificacion', { mensaje: 'Nuevo mensaje', leida: false, revisada: false, idUsuario: 1, idSiniestro: 1, tipoNotificacion: 'MENSAJE_NUEVO' }],
   ['HistorialSiniestro', { tipoEvento: 'DOCUMENTO', descripcion: 'Documento incorporado', idSiniestro: 1, idUsuario: 1 }],
   ['MensajeChat', { contenidoMensaje: 'Hola', idUsuario: 1, idSiniestro: 1 }],
@@ -151,12 +151,17 @@ test('lecturas: exige lector y fecha; no acepta los campos globales anteriores',
   assert.equal(schemas.mensajeChatSchema.safeParse({ contenidoMensaje: 'Hola', idUsuario: 1, idSiniestro: 1, leido: true }).success, false)
 })
 
-test('URL de plantilla: valida HTTP/HTTPS y admite claves relativas para documentos', () => {
+test('URL genérica: valida HTTP/HTTPS; los documentos guardan claves relativas', () => {
   assert.equal(schemas.urlArchivoSchema.safeParse('https://archivos.example.com/modelo.pdf').success, true)
   for (const value of ['javascript:alert(1)', 'archivo.pdf', 'mailto:ana@example.com']) {
     assert.equal(schemas.urlArchivoSchema.safeParse(value).success, false)
   }
   assert.equal(schemas.claveArchivoSchema.parse('siniestros/1/foto.jpg'), 'siniestros/1/foto.jpg')
+  for (const value of ['https://example.com/modelo.pdf', '/modelo.pdf', '../modelo.pdf', 'x/../y', 'x//y', 'C:\\modelo.pdf', 'modelo.pdf?firma=secreto', 'modelo.pdf#x']) {
+    assert.equal(schemas.claveArchivoSchema.safeParse(value).success, false)
+    assert.equal(schemas.documentoPlantillaUpdateSchema.safeParse({ urlArchivo: value }).success, false)
+    assert.equal(schemas.documentoSiniestroUpdateSchema.safeParse({ urlArchivoSinDominio: value }).success, false)
+  }
 })
 
 test('baja y restauración: sólo admite pares consistentes', () => {
