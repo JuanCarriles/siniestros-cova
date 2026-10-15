@@ -77,18 +77,49 @@ services:
 
   # Frontend (build de Vite servido por Nginx, que además hace de proxy de /api y /socket.io)
   # También desde la raíz: necesita el package-lock.json del monorepo y el paquete shared/
+  # Sin DOMAIN o sin certificado sirve solo HTTP; con certificado, HTTPS (ver frontend/nginx/40-elegir-config.sh).
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: siniestros-frontend
     restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-}
     ports:
-      - '8080:80'
+      # En tu PC: 8080 y 8443. En el VPS, el .env de la raíz los pone en 80 y 443.
+      - '${HTTP_PORT:-8080}:80'
+      - '${HTTPS_PORT:-8443}:443'
+    volumes:
+      - certbot_certs:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
     depends_on:
       # Nginx resuelve "backend" al arrancar: si el backend no está listo, no levanta
       backend:
         condition: service_healthy
 
+  # Certificados SSL de Let's Encrypt (solo en el VPS): intenta renovar cada 12 h; Certbot solo renueva
+  # cuando faltan menos de 30 días para el vencimiento. Nginx toma el certificado nuevo al recargar.
+  # Está en el perfil "ssl": no arranca salvo que el .env tenga COMPOSE_PROFILES=ssl.
+  # El primer certificado se obtiene con scripts/obtener-certificado.sh.
+  certbot:
+    image: certbot/certbot:v5.8.0
+    container_name: siniestros-certbot
+    restart: unless-stopped
+    profiles: ['ssl']
+    entrypoint:
+      [
+        '/bin/sh',
+        '-c',
+        'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done',
+      ]
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+
 volumes:
   db_data:
+  # Certificados y cuenta de Let's Encrypt (sobreviven a los deploys, igual que la base)
+  certbot_certs:
+  # Archivos temporales de la validación HTTP-01 (los escribe Certbot, los sirve Nginx)
+  certbot_www:
