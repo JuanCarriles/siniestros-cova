@@ -1,72 +1,53 @@
 @import 'tailwindcss';
-
-/*
- * Tema Estudio Cova — tokens tomados de docs/referencia-ui/ficha-siniestro.html.
- * Cada token genera utilidades: --color-navy → bg-navy, text-navy, border-navy…
- * Los radios sm/md/lg (4/6/8 px) coinciden con los de Tailwind, por eso no se redefinen.
- */
-@theme {
-  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-
-  /* Marca */
-  --color-navy: #1e3a5f;
-  --color-navy-hover: #2a4a73;
-  --color-navy-active: #2f5079;
-  --color-on-navy: #ffffff;
-  --color-on-navy-muted: #b7c4d6;
-  --color-accent: #e8762c;
-
-  /* Superficies y bordes */
-  --color-page: #f3f4f6;
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f9fafb;
-  --color-line: #e5e7eb;
-  --color-line-strong: #d1d5db;
-
-  /* Texto */
-  --color-ink: #111827;
-  --color-ink-2: #374151;
-  --color-muted: #6b7280;
-
-  /* Estados semánticos (badges, avisos) */
-  --color-info-bg: #e6effd;
-  --color-info-ink: #1e4fa3;
-  --color-ok-bg: #e3f4ea;
-  --color-ok-ink: #166534;
-  --color-warning-bg: #fdecd8;
-  --color-warning-ink: #9a4a0b;
-  --color-danger-bg: #fde4df;
-  --color-danger-ink: #b42318;
-  --color-neutral-bg: #eef0f3;
-  --color-neutral-ink: #4b5563;
-  --color-success: #16a34a;
-  --color-focus: #2f6fd0;
-
-  /* Usos puntuales */
-  --color-tooltip: #14233a;
-  --color-callout-bg: #f2f6fb;
-  --color-callout-line: #d5e0ee;
-  --color-chat-me: #e8eef7;
-
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-pop: 0 16px 40px rgba(16, 24, 40, 0.2);
-}
+@import 'tw-animate-css';
+@import './tokens.css';
 
 @layer base {
-  html,
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-padding-top: 5rem;
+    /* Que los celulares no achiquen ni agranden el texto por su cuenta al girar la pantalla */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
-    @apply bg-page font-sans text-ink antialiased;
-    font-size: 13px;
-    line-height: 18px;
+    @apply bg-background font-sans text-foreground antialiased;
+    margin: 0;
+    font-size: var(--text-base);
+    line-height: 1.6;
+    /* Palabras largas (correos, nombres de archivo) cortan línea en vez de desbordar en pantallas angostas */
+    overflow-wrap: break-word;
   }
-
+  .font-mono {
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-focus;
+    @apply outline-3 outline-offset-3 outline-ring;
   }
-
+  ::selection {
+    @apply bg-info-bg text-info-ink;
+  }
   @media (prefers-reduced-motion: reduce) {
-    * {
-      transition: none !important;
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
+}
+
+/*
+ * Identificadores: número de siniestro, póliza, DNI, patente, CUIT, fechas. Fuente mono hiperlegible, cifras del
+ * mismo ancho y en una sola línea: "2026-04871" nunca se corta en el guion.
+ * Uso: <span className="dato">2026-04871</span>
+ */
+@utility dato {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+  white-space: nowrap;
 }

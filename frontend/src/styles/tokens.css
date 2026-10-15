@@ -1,0 +1,137 @@
+/*
+ * Fuente única de valores visuales de Estudio Cova.
+ * Referencias: docs/referencia-ui/cova-interfaces-finales.html.
+ * La escala y el contraste se amplían para facilitar la lectura.
+ * Tailwind 4 configura el tema en CSS; components.json deja tailwind.config vacío.
+ * Los colores literales sólo se declaran en este archivo.
+ */
+@theme {
+  /*
+   * Atkinson Hyperlegible (Braille Institute) está diseñada para lectores con baja visión: diferencia
+   * formas que en otras fuentes se confunden (I l 1, O 0, rn m). La versión mono se usa para números de
+   * siniestro, pólizas, DNI, patentes y fechas: cifras del mismo ancho y sin ambigüedades.
+   */
+  --font-sans:
+    'Atkinson Hyperlegible Next Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:
+    'Atkinson Hyperlegible Mono Variable', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  /*
+   * Escala de texto: ningún texto baja de 16 px (xs y sm valen lo mismo a propósito) y el texto general y
+   * los controles son de 18 px. En rem, así respeta el tamaño de letra que la persona elija en el navegador.
+   */
+  --text-xs: 1rem;
+  --text-xs--line-height: 1.5rem;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5rem;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.75rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.875rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.25rem;
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 2.5rem;
+  --color-navy: #1e3a5f;
+  --color-navy-hover: #2a4a73;
+  --color-navy-active: #2f5079;
+  --color-on-navy: #ffffff;
+  --color-on-navy-muted: #b7c4d6;
+  --color-brand-accent: #e8762c;
+  --color-page: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f9fafb;
+  --color-line: #e5e7eb;
+  --color-line-strong: #d1d5db;
+  --color-ink: #111827;
+  --color-ink-2: #374151;
+  --color-ink-muted: #4b5563;
+  --color-control-border: #64748b;
+  --color-info-bg: #e6effd;
+  --color-info-ink: #1e4fa3;
+  --color-ok-bg: #e3f4ea;
+  --color-ok-ink: #166534;
+  --color-warning-bg: #fdecd8;
+  --color-warning-ink: #9a4a0b;
+  --color-danger-bg: #fde4df;
+  --color-danger-ink: #b42318;
+  --color-neutral-bg: #eef0f3;
+  --color-neutral-ink: #4b5563;
+  /* Solo para íconos y puntos (3:1). No usar para texto: no llega a 4,5:1 */
+  --color-success: #16a34a;
+  --color-focus: #2f6fd0;
+  /* Deshabilitado con colores sólidos: con opacidad el texto quedaba en 2,8:1 */
+  --color-disabled-bg: #e5e7eb;
+  --color-disabled-ink: #4b5563;
+  --color-disabled-border: #d1d5db;
+  /* Tablas: filas alternas, fila bajo el puntero y fila seleccionada (fondo + barra lateral) */
+  --color-row-alt: #f5f7fa;
+  --color-row-hover: #e8eef7;
+  --color-row-selected: #dde8f8;
+  --color-tooltip: #14233a;
+  --color-callout-bg: #f2f6fb;
+  --color-callout-line: #d5e0ee;
+  --color-chat-me: #e8eef7;
+  --color-overlay: rgb(17 24 39 / 42%);
+  --color-selection: #eef3fa;
+  --color-tooltip-muted: #d6deea;
+  --color-danger-hover: #912018;
+  --color-danger-soft: #fdecec;
+  --color-danger-border: #e7b4b4;
+  --color-owner-bg: #fff8f1;
+  --color-owner-border: #f0c9a0;
+  --color-owner-ink: #7a3606;
+  --color-injury-bg: #fbf6f6;
+  --color-injury-border: #ecdcdc;
+  --color-injury-ink: #5b2121;
+  --color-damage-bg: #f7f8fa;
+  --color-damage-header: #e4e8ee;
+  --color-damage-border: #c9d2de;
+  --color-document-image-bg: #e3f4f1;
+  --color-document-image-ink: #0f766e;
+  --color-document-pdf-bg: #fdeceb;
+  --color-chat-border: #d0dbea;
+  --color-assignment-bg: #f8fafd;
+  --color-assignment-border: #c7d4e6;
+  --text-reading: 1.125rem;
+  --text-reading--line-height: 1.6;
+  --radius-pill: 999px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 5%);
+  --shadow-pop: 0 16px 40px rgb(16 24 40 / 20%);
+}
+
+/* Contrato semántico de shadcn/ui. Reutiliza la paleta, sin duplicar valores. */
+@theme inline {
+  --color-background: var(--color-page);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-navy);
+  --color-primary-foreground: var(--color-on-navy);
+  --color-secondary: var(--color-surface-subtle);
+  --color-secondary-foreground: var(--color-ink-2);
+  --color-muted: var(--color-surface-subtle);
+  --color-muted-foreground: var(--color-ink-muted);
+  --color-accent: var(--color-callout-bg);
+  --color-accent-foreground: var(--color-navy);
+  --color-destructive: var(--color-danger-ink);
+  --color-destructive-foreground: var(--color-on-navy);
+  --color-border: var(--color-line);
+  --color-input: var(--color-control-border);
+  --color-ring: var(--color-focus);
+  --color-sidebar: var(--color-navy);
+  --color-sidebar-foreground: var(--color-on-navy);
+  --color-sidebar-accent: var(--color-navy-active);
+  --color-sidebar-accent-foreground: var(--color-on-navy);
+  --color-sidebar-border: var(--color-navy-active);
+  --color-sidebar-ring: var(--color-focus);
+}

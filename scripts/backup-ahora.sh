@@ -9,5 +9,6 @@
 set -eu
 . "$(dirname "$0")/backup-comun.sh"
 
+case "${1:-}" in -h | --help) uso && exit 0 ;; esac
 en_backup backup
 en_backup estado
