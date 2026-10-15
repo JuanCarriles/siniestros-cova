@@ -1,9 +1,12 @@
 import { z } from 'zod'
-import { esquemaEdicion, idSchema, textoSchema } from './comunes.ts'
+import { esquemaEdicion, fechaHoraSchema, idSchema, textoSchema } from './comunes.ts'
 
 // Datos de alta de NovedadSiniestro; id y baja lógica se gestionan por separado.
 export const novedadSiniestroSchema = z.strictObject({
   descripcion: textoSchema,
+  // Nombre y apellido del usuario asignado al siniestro al cargarla (texto, no FK). Lo completa el backend.
+  autor: textoSchema,
+  fechaCarga: fechaHoraSchema.optional(),
   idSiniestro: idSchema,
 })
 

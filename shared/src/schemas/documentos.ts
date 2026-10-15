@@ -1,5 +1,14 @@
 import { z } from 'zod'
-import { claveArchivoSchema, esquemaEdicion, extensionArchivoSchema, fechaHoraSchema, idSchema, mimeTypeSchema, tamanoBytesSchema, textoSchema } from './comunes.ts'
+import {
+  claveArchivoSchema,
+  esquemaEdicion,
+  extensionArchivoSchema,
+  fechaHoraSchema,
+  idSchema,
+  mimeTypeSchema,
+  tamanoBytesSchema,
+  textoSchema,
+} from './comunes.ts'
 
 // Datos de alta de DocumentoSiniestro; id y baja lógica se gestionan por separado.
 export const documentoSiniestroSchema = z.strictObject({

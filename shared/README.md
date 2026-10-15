@@ -38,17 +38,17 @@ objetos ahora son estrictos: un campo desconocido produce error en vez de descar
 
 ## Esquemas disponibles
 
-| Módulo | Entidades |
-| --- | --- |
-| paises, provincias, direcciones | Pais, Provincia, Direccion |
-| usuarios | Usuario |
-| plantillas, documentos | DocumentoPlantilla, DocumentoSiniestro |
-| notificaciones, historial, novedades | Notificacion, HistorialSiniestro, NovedadSiniestro |
-| chat | MensajeChat, LecturaMensajeChat |
-| aseguradoras, ajustadores | Aseguradora, Ajustador |
-| peritos, abogados | Perito, Abogado |
-| vehiculos, personas | Vehiculo, PersonaInvolucrada |
-| tipos-documento, estados-siniestro, siniestros | TipoDocumento, EstadoSiniestro, Siniestro |
+| Módulo                                         | Entidades                                          |
+| ---------------------------------------------- | -------------------------------------------------- |
+| paises, provincias, direcciones                | Pais, Provincia, Direccion                         |
+| usuarios                                       | Usuario                                            |
+| plantillas, documentos                         | DocumentoPlantilla, DocumentoSiniestro             |
+| notificaciones, historial, novedades           | Notificacion, HistorialSiniestro, NovedadSiniestro |
+| chat                                           | MensajeChat, LecturaMensajeChat                    |
+| aseguradoras, ajustadores                      | Aseguradora, Ajustador                             |
+| peritos, abogados                              | Perito, Abogado                                    |
+| vehiculos, personas                            | Vehiculo, PersonaInvolucrada                       |
+| tipos-documento, estados-siniestro, siniestros | TipoDocumento, EstadoSiniestro, Siniestro          |
 
 `enums.ts` contiene las siete enumeraciones de Prisma como esquemas y tipos
 TypeScript: TipoUsuario, TipoNotificacion, TipoEventoHistorial, TipoPerito,
@@ -84,8 +84,7 @@ RolAccidente, UsoVehiculo y TipoLesion. Los valores son exactos y distinguen may
 - Fechas con `@default(now())`: se pueden omitir para dejar actuar al default
   de PostgreSQL. No se inventan defaults para fechas de asignación, solicitud o lectura.
 - `inicioVigencia` sigue siendo texto opcional, igual que en Prisma.
-- `tamanoBytes`: admite bigint, texto decimal o number entero seguro, entre 0 y
-  9223372036854775807. Devuelve string decimal exacto, serializable como JSON;
+- `tamanoBytes`: admite bigint, texto decimal o number entero seguro, entre 0 y 9223372036854775807. Devuelve string decimal exacto, serializable como JSON;
   rechaza numbers inseguros para evitar pérdida de precisión.
 - `urlArchivo` de plantilla y `urlArchivoSinDominio` guardan claves relativas de R2,
   generadas por el backend. Rechazan URLs, rutas absolutas, parámetros y segmentos
