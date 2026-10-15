@@ -133,6 +133,7 @@ model Usuario {
 model DocumentoPlantilla {
   id             Int       @id @default(autoincrement())
   nombreOriginal String
+  /// Clave relativa de R2 (plantillas/uuid.ext), nunca una URL completa.
   urlArchivo     String
   tipoExtension  String
   fechaCarga     DateTime  @default(now()) @db.Timestamptz(3)
@@ -217,6 +218,7 @@ model LecturaMensajeChat {
 model DocumentoSiniestro {
   id                   Int       @id @default(autoincrement())
   nombreOriginal       String
+  /// Clave relativa de R2 (siniestros/id/uuid.ext), nunca una URL firmada.
   urlArchivoSinDominio String
   tipoExtension        String
   mimeType             String

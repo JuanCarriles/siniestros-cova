@@ -17,7 +17,7 @@ Prisma CLI, Client y el adaptador PostgreSQL están fijados en 7.10.0. Se requie
 Node >=22.12.0 (usar una versión LTS compatible con Prisma). La configuración
 `backend/prisma.config.ts` carga únicamente `backend/.env` si existe, usando
 Node, sin sobrescribir variables que ya están en el entorno. No incluye credenciales.
-El `.env.example` existente ya contiene DATABASE_URL y no fue modificado.
+El `.env.example` contiene un ejemplo de DATABASE_URL para desarrollo local.
 
 ## Comandos desde la raíz del monorepo
 
@@ -37,7 +37,7 @@ porque los Dockerfiles instalan dependencias antes de copiar el esquema.
 
 `src/lib/prisma.ts` expone `getPrisma()` y `disconnectPrisma()`. Reutiliza una
 instancia del cliente y exige DATABASE_URL al acceder a ella. No conecta la API
-ni implementa servicios automáticamente; los módulos todavía están vacíos.
+automáticamente. El servicio interno de documentos recibe el cliente por inyección.
 Los procesos que lo utilicen deberán llamar a disconnectPrisma durante su cierre
 ordenado. El cliente no aplica filtros automáticos ni constituye una autorización.
 
@@ -58,6 +58,19 @@ no representa CHECK). Las migraciones se versionan en Git y **nunca se editan un
   lo tenga. No usar `db push` en ningún entorno: omitiría los CHECK y el historial.
 - `soft-delete-checks.sql` queda como referencia: si se agrega una tabla nueva con baja lógica,
   su CHECK va en la migración de esa tabla.
+
+### Bases creadas durante la prueba inicial de R2
+
+El historial compartido conserva la migración `20261014033211_init` de `desarrollo`.
+Se retira la inicialización alternativa `20261014000000_init` de la rama de R2:
+mantener ambas intentaría crear las mismas tablas y enumeraciones dos veces.
+El SQL anterior sigue disponible en el historial de Git.
+
+Si una base local registra `20261014000000_init` en `_prisma_migrations`, no está
+alineada todavía con este historial. Antes de ejecutar `migrate dev` o `migrate deploy`,
+se debe respaldar y comparar esa base con el esquema actual, incorporar las diferencias
+y reconciliar el historial. No borrar datos ni aceptar un reset como parte del merge.
+La resolución de conflictos del repositorio no realiza esa operación en la base.
 
 ## Seeds
 
@@ -209,7 +222,7 @@ El CHECK de esta nueva entidad también está preparado en soft-delete-checks.sq
 No se implementaron endpoints ni eventos Socket.IO para registrar estas lecturas.
 Si una base ya tuviera los campos globales anteriores, su valor no permite saber
 qué usuarios leyeron: revisar y preservar esos datos antes de migrar, sin inventar
-lecturas por usuario. En este proyecto la migración inicial continúa pendiente.
+lecturas por usuario. Verificar la migración aplicada en cada entorno.
 
 ## Límites funcionales conservados
 

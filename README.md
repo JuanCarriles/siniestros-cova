@@ -5,6 +5,9 @@ Aplicación web responsiva para gestionar siniestros: aseguradoras, ajustadores,
 
 El diseño completo (requerimientos, casos de uso, pila y despliegue) está en [`docs/`](docs/).
 
+**Cómo trabajamos** (programar un módulo, migraciones y deploy a producción):
+[`docs/flujo-de-trabajo.md`](docs/flujo-de-trabajo.md).
+
 ## Estructura
 
 Monorepo con [npm workspaces](https://docs.npmjs.com/cli/using-npm/workspaces): una sola instalación desde la raíz
@@ -109,31 +112,66 @@ docker compose down                   # detiene (los datos de Postgres quedan en
 | backend  | http://127.0.0.1:3000 | Solo local; el tráfico real entra por Nginx                                               |
 | db       | 127.0.0.1:5432        | Solo local, para correr Prisma desde la máquina                                           |
 | migrate  | —                     | Tarea de un solo uso en cada `up`: `prisma migrate deploy` + seed de catálogos, y termina |
+| certbot  | —                     | Solo en el VPS (perfil `ssl`): renueva el certificado SSL automáticamente                 |
+| backup   | —                     | Solo en el VPS (perfil `backup`): backup diario de la base y los documentos a R2          |
 
 - El backend arranca recién cuando `migrate` terminó bien: nunca corre contra una base sin migrar.
 - `GET /api/health` responde 200 si la API llega a la base y 503 si no; lo usa el healthcheck de Docker.
-- La configuración de Nginx está en `frontend/nginx/`.
+- La configuración de Nginx está en `frontend/nginx/`. Al arrancar elige el modo: **solo HTTP** si no hay `DOMAIN` o
+  todavía no existe el certificado (desarrollo), **HTTPS** si lo hay (VPS). En el VPS publica los puertos 80 y 443.
 - Variables: `.env` en la raíz (credenciales de Postgres, ver `.env.example`; opcional en desarrollo) y
   `backend/.env` (obligatorio, copiar de `backend/.env.example`).
 
-## Deploy en un VPS (sin dominio todavía)
+## Deploy en un VPS
+
+Guía paso a paso del día a día y de cada actualización: [`docs/flujo-de-trabajo.md`](docs/flujo-de-trabajo.md).
 
 Requisitos: Ubuntu 24.04, 2 GB de RAM o más (con 1 GB, agregar swap: el build de las imágenes usa mucha memoria).
 
-1. Instalar Docker (con el plugin compose) y clonar el repo.
-2. Crear `.env` en la raíz a partir de `.env.example`, con una contraseña de Postgres **solo de letras y
-   números** (`openssl rand -hex 32`). Tiene que existir **antes** del primer `up`: Postgres la usa únicamente
-   al crear la base.
-3. Crear `backend/.env` a partir de `backend/.env.example`:
-   - `APP_URL=http://IP-DEL-VPS:8080`
-   - `COOKIE_SECURE=false` mientras no haya HTTPS (sin esto el login no va a funcionar por http)
-   - `SESSION_SECRET` largo y aleatorio. `DATABASE_URL` y `NODE_ENV` los pone el compose.
-4. `docker compose up -d --build --wait`, y verificar `docker compose ps` y `docker compose logs migrate`.
-5. Abrir `http://IP-DEL-VPS:8080` y `http://IP-DEL-VPS:8080/api/health` (`"db":"ok"`).
-6. Firewall: permitir solo 22, 80, 443 y 8080 (`ufw`). La base y el backend escuchan solo en `127.0.0.1`.
+1. Instalar Docker (con el plugin compose) y clonar el repo. Usar la rama `main`.
+2. Crear `.env` en la raíz a partir de `.env.example`:
+   - contraseña de Postgres **solo de letras y números** (`openssl rand -hex 32`). Tiene que existir **antes** del
+     primer `up`: Postgres la usa únicamente al crear la base;
+   - `DOMAIN`: el dominio, o sin dominio propio `IP-CON-GUIONES.sslip.io` (p. ej. `203-0-113-10.sslip.io`);
+   - `HTTP_PORT=80`, `HTTPS_PORT=443` y `COMPOSE_PROFILES=ssl,backup`;
+   - `BACKUP_CLAVE` (`openssl rand -hex 32`), la contraseña que cifra los backups. Guardarla también fuera del VPS.
+3. Crear `backend/.env` a partir de `backend/.env.example`: `SESSION_SECRET` largo y aleatorio,
+   `APP_URL=http://DOMINIO` y `COOKIE_SECURE=false` (se cambian en el paso 6). `DATABASE_URL` y `NODE_ENV` los pone
+   el compose.
+4. Firewall (`ufw` y el del panel del proveedor): permitir solo 22, 80 y 443. La base y el backend escuchan solo en
+   `127.0.0.1`.
+5. `docker compose up -d --build --wait`, verificar `docker compose ps` y `docker compose logs migrate`, y abrir
+   `http://DOMINIO/api/health` (`"db":"ok"`). Nginx arranca en modo solo HTTP porque todavía no hay certificado.
+6. Obtener el certificado SSL de Let's Encrypt y pasar a HTTPS: `sh scripts/obtener-certificado.sh` (al correrlo se
+   acepta el acuerdo de suscriptor de Let's Encrypt). Después, en `backend/.env`: `APP_URL=https://DOMINIO` y
+   `COOKIE_SECURE=true`, y aplicarlo con `docker compose up -d --wait backend`.
 
-**No correr la seed de desarrollo en el VPS** (se niega con `NODE_ENV=production`). Sin HTTPS no cargar datos
-reales: el tráfico viaja sin cifrar. Para consultar la base desde tu máquina, usar un túnel SSH
-(`ssh -L 5432:127.0.0.1:5432 usuario@IP`) y conectarse a `localhost:5432`.
+La renovación es automática: el servicio `certbot` intenta renovar cada 12 h (los certificados duran 90 días y se
+renuevan cuando faltan menos de 30) y Nginx recarga cada 6 h para tomar el nuevo. Para comprobar que la renovación va a
+funcionar: `docker compose exec certbot certbot renew --dry-run`.
 
-Pendiente para producción real: dominio + HTTPS (RNF-07) y backups diarios fuera del VPS (RNF-04).
+**Cambiar a un dominio propio:** apuntar el DNS (registro `A`) a la IP del VPS, cambiar `DOMAIN` en el `.env`,
+`docker compose up -d` (Nginx vuelve a solo HTTP porque no hay certificado para el dominio nuevo) y correr de nuevo
+`sh scripts/obtener-certificado.sh`. Actualizar `APP_URL` en `backend/.env`. Paso a paso, con qué se gana y cómo volver
+atrás: [`docs/dominio-propio.md`](docs/dominio-propio.md).
+
+**No correr la seed de desarrollo en el VPS** (se niega con `NODE_ENV=production`). Para consultar la base desde tu
+máquina, usar un túnel SSH (`ssh -L 5432:127.0.0.1:5432 usuario@IP`) y conectarse a `localhost:5432`.
+
+**Backups:** el servicio `backup` hace todos los días a las 3:00 un dump cifrado de la base y una copia de los
+documentos en Cloudflare R2 (bucket `BACKUP_BUCKET`, carpeta `backups/`), y guarda 30 días. Lee los documentos con el
+token del backend (`R2_*`) y escribe los backups con el suyo (`BACKUP_R2_*`). Para ver si anda:
+`docker compose exec backup estado` (o `docker compose ps`: queda `unhealthy` si el último backup falló o tiene más de
+26 h). Todos los scripts se corren desde la raíz del repo, en el VPS o en tu PC:
+
+| Script                                             | Qué hace                                                                               |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `sh scripts/backup-ahora.sh`                       | Backup en el momento. Usarlo antes de cada deploy                                      |
+| `sh scripts/probar-backups.sh`                     | Verificación completa sin modificar datos: backup, restauración de prueba y documentos |
+| `sh scripts/probar-restauracion.sh`                | Restaura el último backup en una base temporal, la compara y la borra                  |
+| `sh scripts/restaurar-backup.sh --listar`          | Backups disponibles, historial de documentos y bases guardadas                         |
+| `sh scripts/restaurar-backup.sh ultimo`            | Reemplaza la base por el último backup. La actual queda guardada                       |
+| `sh scripts/restaurar-backup.sh --volver-a BASE`   | Vuelve a una base guardada (deshace una restauración)                                  |
+| `sh scripts/restaurar-documentos.sh actual [RUTA]` | Devuelve documentos que falten en la app, sin sobrescribir ni borrar                   |
+
+Pendiente para producción real: dominio propio y correr `sh scripts/probar-backups.sh` en el VPS (RNF-05).

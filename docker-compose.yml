@@ -77,18 +77,87 @@ services:
 
   # Frontend (build de Vite servido por Nginx, que además hace de proxy de /api y /socket.io)
   # También desde la raíz: necesita el package-lock.json del monorepo y el paquete shared/
+  # Sin DOMAIN o sin certificado sirve solo HTTP; con certificado, HTTPS (ver frontend/nginx/40-elegir-config.sh).
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: siniestros-frontend
     restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-}
     ports:
-      - '8080:80'
+      # En tu PC: 8080 y 8443. En el VPS, el .env de la raíz los pone en 80 y 443.
+      - '${HTTP_PORT:-8080}:80'
+      - '${HTTPS_PORT:-8443}:443'
+    volumes:
+      - certbot_certs:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
     depends_on:
       # Nginx resuelve "backend" al arrancar: si el backend no está listo, no levanta
       backend:
         condition: service_healthy
 
+  # Certificados SSL de Let's Encrypt (solo en el VPS): intenta renovar cada 12 h; Certbot solo renueva
+  # cuando faltan menos de 30 días para el vencimiento. Nginx toma el certificado nuevo al recargar.
+  # Está en el perfil "ssl": no arranca salvo que el .env tenga COMPOSE_PROFILES=ssl.
+  # El primer certificado se obtiene con scripts/obtener-certificado.sh.
+  certbot:
+    image: certbot/certbot:v5.8.0
+    container_name: siniestros-certbot
+    restart: unless-stopped
+    profiles: ['ssl']
+    entrypoint:
+      [
+        '/bin/sh',
+        '-c',
+        'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done',
+      ]
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+
+  # Backups diarios de la base y de los documentos a Cloudflare R2 (RNF-04). Solo en el VPS: perfil "backup"
+  # (COMPOSE_PROFILES=ssl,backup en el .env). Ver backup/backup.sh.
+  # Backup en el momento: sh scripts/backup-ahora.sh. Estado: docker compose exec backup estado
+  backup:
+    build:
+      context: ./backup
+    container_name: siniestros-backup
+    restart: unless-stopped
+    profiles: ['backup']
+    # Credenciales de R2 (R2_*): las mismas del backend. Las BACKUP_* pueden estar en cualquiera de los dos
+    # archivos; si una variable está en ambos, gana la del .env de la raíz.
+    env_file:
+      - ./backend/.env
+      - path: ./.env
+        required: false
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-cova}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-cova}
+      PGDATABASE: ${POSTGRES_DB:-siniestros}
+    volumes:
+      # Los dumps de los últimos días también quedan en el VPS (restauración rápida sin descargar)
+      - backups_locales:/backups
+    # "unhealthy" si el último backup falló o tiene más de 26 h (backup/estado.sh)
+    healthcheck:
+      test: ['CMD', 'estado']
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      # Tiempo para el backup que hace al arrancar si el último tiene más de 24 h
+      start_period: 3m
+      start_interval: 5s
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   db_data:
+  # Certificados y cuenta de Let's Encrypt (sobreviven a los deploys, igual que la base)
+  certbot_certs:
+  # Archivos temporales de la validación HTTP-01 (los escribe Certbot, los sirve Nginx)
+  certbot_www:
+  # Dumps de la base de los últimos días (servicio backup)
+  backups_locales:

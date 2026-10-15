@@ -1,5 +1,14 @@
 import { z } from 'zod'
-import { booleanoSchema, esquemaEdicion, fechaHoraSchema, fechaSchema, horaSchema, idSchema, opcional, textoSchema } from './comunes.ts'
+import {
+  booleanoSchema,
+  esquemaEdicion,
+  fechaHoraSchema,
+  fechaSchema,
+  horaSchema,
+  idSchema,
+  opcional,
+  textoSchema,
+} from './comunes.ts'
 
 // Datos de alta de Siniestro; id y baja lógica se gestionan por separado.
 export const siniestroSchema = z.strictObject({

@@ -16,6 +16,10 @@
     "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc",
     "lint": "eslint .",
+    "test:r2": "node --experimental-strip-types --test tests/r2.test.mjs",
+    "r2:smoke": "tsx --env-file=.env src/scripts/probar-r2.ts",
+    "r2:demo": "tsx --env-file=.env src/dev/r2-demo/server.ts",
+    "test:r2-demo": "node --experimental-strip-types --test tests/r2-demo.test.mjs",
     "prisma:format": "prisma format --config prisma.config.ts",
     "prisma:validate": "prisma validate --config prisma.config.ts",
     "prisma:generate": "prisma generate --config prisma.config.ts",
@@ -26,6 +30,8 @@
     "db:reset:dev": "prisma migrate reset --config prisma.config.ts && npm run seed:dev"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1151.0",
+    "@aws-sdk/s3-request-presigner": "^3.1151.0",
     "@cova/shared": "*",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
