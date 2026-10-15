@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import { booleanoSchema, esquemaEdicion, fechaHoraSchema, idSchema, textoSchema } from './comunes.ts'
+import {
+  booleanoSchema,
+  esquemaEdicion,
+  fechaHoraSchema,
+  idSchema,
+  textoSchema,
+} from './comunes.ts'
 import { tipoNotificacionSchema } from './enums.ts'
 
 // Datos de alta de Notificacion; id y baja lógica se gestionan por separado.

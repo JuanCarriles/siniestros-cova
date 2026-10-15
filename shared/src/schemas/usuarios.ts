@@ -1,5 +1,15 @@
 import { z } from 'zod'
-import { contrasenaSchema, documentoSchema, emailSchema, esquemaEdicion, fechaHoraSchema, idSchema, opcional, telefonoSchema, textoSchema } from './comunes.ts'
+import {
+  contrasenaSchema,
+  documentoSchema,
+  emailSchema,
+  esquemaEdicion,
+  fechaHoraSchema,
+  idSchema,
+  opcional,
+  telefonoSchema,
+  textoSchema,
+} from './comunes.ts'
 import { tipoUsuarioSchema } from './enums.ts'
 
 // Datos de alta de Usuario; id y baja lógica se gestionan por separado.
