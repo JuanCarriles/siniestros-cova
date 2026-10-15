@@ -115,7 +115,8 @@ Reglas:
 1. Sumala a la validación en `backend/src/config/env.ts`.
 2. Sumala a `backend/.env.example` con un comentario.
 3. **Cargala en el `backend/.env` del VPS antes de desplegar.** Si falta, el backend no arranca en producción (la
-   validación lo frena).
+   validación lo frena). Actualizá también la copia del `.env` en el gestor de contraseñas
+   ([DEPLOY.md, sección 1](../DEPLOY.md#1-qué-hay-que-tener-y-guardar-fuera-del-vps)).
 
 ### 2.6 Antes de abrir el Pull Request
 
@@ -139,13 +140,18 @@ docker compose up -d --build --wait
 
 ## 3. Deploy en producción
 
-Por SSH en el VPS (`ssh deploy@IP-DEL-VPS`).
+Por SSH en el VPS (`ssh deploy@IP-DEL-VPS`). Cómo se preparó el servidor, los backups y cómo restaurar:
+[`DEPLOY.md`](../DEPLOY.md).
 
 ### 3.1 Backup (siempre antes de desplegar, obligatorio si hay migraciones nuevas)
 
 ```bash
-cd ~/siniestros-cova && docker compose exec -T db pg_dump -U cova -Fc siniestros > ~/backup-$(date +%F-%H%M).dump
+cd ~/siniestros-cova && sh scripts/backup-ahora.sh
 ```
+
+Hace un backup de la base y de los documentos y lo sube cifrado a R2 (además del automático de las 3:00). **Anotá el
+nombre que muestra al final** (`siniestros-AAAA-MM-DD-HHMM.dump`): es el que se restaura si el deploy sale mal
+(sección 6).
 
 ### 3.2 Actualizar
 
@@ -163,7 +169,7 @@ cd ~/siniestros-cova && git switch main && git pull --ff-only && docker compose 
 docker compose ps
 ```
 
-`db`, `backend` y `frontend` tienen que estar `healthy`, y `migrate` en `Exited (0)`.
+`db`, `backend`, `frontend` y `backup` tienen que estar `healthy`, y `migrate` en `Exited (0)`.
 
 ```bash
 docker compose logs migrate
@@ -198,6 +204,7 @@ docker compose up -d --build     →  1. construye las imágenes nuevas (el siti
 - Lo único que cambia la base son las **migraciones nuevas**. Prisma registra cuáles ya se aplicaron en la tabla
   `_prisma_migrations` y no las repite.
 - El backend arranca **solo si `migrate` terminó bien**: nunca corre contra una base sin migrar.
+- El servicio `backup` no se reinicia en cada deploy (su imagen casi nunca cambia) y sigue con su horario de las 3:00.
 
 ---
 
@@ -237,19 +244,23 @@ Cuando esté corregido en `main`, volver a desplegar normalmente (sección 3.2):
 anterior.
 
 **Ojo:** volver el código **no deshace las migraciones** ya aplicadas. Si una migración dañó datos, hay que restaurar el
-backup:
+backup que hiciste antes del deploy (sección 3.1). Si no anotaste el nombre, buscalo con `--listar`:
 
 ```bash
-docker compose stop backend frontend
+sh scripts/restaurar-backup.sh --listar
 ```
 
 ```bash
-docker compose exec -T db pg_restore -U cova -d siniestros --clean --if-exists < ~/backup-AAAA-MM-DD-HHMM.dump
+sh scripts/restaurar-backup.sh siniestros-AAAA-MM-DD-HHMM.dump
 ```
 
-```bash
-docker compose up -d --wait
-```
+Restaura el backup en una base aparte, pide escribir `RESTAURAR`, detiene backend y frontend, cambia la base y los
+vuelve a levantar. La base dañada no se borra: queda como `siniestros_antes_...` y se puede volver a ella con
+`--volver-a`. Restaurar la base **no** toca los documentos. Detalle y otros casos (documentos borrados, VPS perdido):
+[`DEPLOY.md`, sección 8](../DEPLOY.md#8-restaurar).
+
+Si restaurás el backup de antes del deploy, restaurá también el código anterior (arriba). Si no, `migrate` vuelve a
+aplicar la migración que causó el problema.
 
 ---
 
@@ -263,6 +274,8 @@ docker compose up -d --wait
 | `docker compose down -v` jamás en el VPS (ni en tu PC si no querés perder tu base) | `-v` borra el volumen: la base completa                                       |
 | Un solo clon del repo por máquina                                                  | Por el nombre de proyecto fijo, dos clones comparten contenedores y base      |
 | No cargar datos reales sin HTTPS activo                                            | El tráfico viaja sin cifrar                                                   |
+| Los `.env` del VPS y la `BACKUP_CLAVE`, guardados también en el gestor de contraseñas | Sin la clave los backups no se pueden descifrar; sin los `.env` no se rearma el VPS |
+| En tu PC, `BACKUP_PREFIX` distinto de `backups` (por ejemplo `prueba-pc`)          | `backups/` es la carpeta de producción: no mezclar backups de desarrollo con los reales |
 
 ---
 
@@ -279,8 +292,12 @@ docker compose up -d --wait
 
 **Desplegando**
 
-- [ ] Variables nuevas cargadas en el `backend/.env` del VPS
-- [ ] Backup de la base (sección 3.1)
+- [ ] Variables nuevas cargadas en el `.env` del VPS (y en el gestor de contraseñas)
+- [ ] `sh scripts/backup-ahora.sh` y nombre del backup anotado (sección 3.1)
 - [ ] `git switch main && git pull --ff-only && docker compose up -d --build --wait`
 - [ ] `docker compose ps` todo `healthy`, `migrate` en `Exited (0)`
 - [ ] `/api/health` responde `"db":"ok"`
+
+**Cada semana**
+
+- [ ] `sh scripts/probar-backups.sh` en el VPS: todo `OK`

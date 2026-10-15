@@ -21,13 +21,15 @@ en_backup() {
   fi
 }
 
-# Pide escribir una palabra para confirmar. Sale sin hacer nada si no se escribe exactamente esa palabra.
+# Pide escribir una palabra para confirmar (sin importar mayúsculas ni espacios). Si se escribe otra cosa, sale sin
+# hacer nada.
 confirmar() {
   printf '%s' "Escribí $1 para continuar (cualquier otra cosa cancela): "
   respuesta=""
   { read -r respuesta < /dev/tty; } 2> /dev/null || true
-  if [ "$respuesta" != "$1" ]; then
-    echo "Cancelado."
+  respuesta=$(echo "$respuesta" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+  if [ "$respuesta" != "$(echo "$1" | tr '[:lower:]' '[:upper:]')" ]; then
+    echo "Cancelado: no se escribió $1. No se cambió nada."
     exit 1
   fi
 }
