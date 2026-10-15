@@ -1,75 +1,164 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prueba de archivos · Cova</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script src="/demo.js" defer></script>
-</head>
-<body>
-  <header class="topbar">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">C</span><span>Estudio Cova <small>Prueba de archivos</small></span></div>
-    <span class="local-badge"><span aria-hidden="true">●</span> Sólo en esta computadora</span>
-  </header>
-  <main>
-    <div class="intro">
-      <p class="eyebrow">CLOUDFLARE R2</p>
-      <h1>Subí un archivo.<br>Probá su descarga.</h1>
-      <p class="lead">Usá una foto o un documento real. El backend lo guarda en R2 y prepara un enlace temporal para descargarlo.</p>
-    </div>
-    <div class="connection" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Conectando con la interfaz local…</span></div>
-    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
-    <div class="workspace">
-      <section class="upload-panel" aria-labelledby="upload-heading">
-        <div class="section-heading"><span class="step">01</span><h2 id="upload-heading">Elegí un archivo</h2></div>
-        <form id="upload-form">
-          <div id="dropzone" class="dropzone">
-            <div class="upload-icon" aria-hidden="true">↑</div>
-            <strong>Arrastralo hasta acá</strong>
-            <span>o elegilo desde tu computadora</span>
-            <label class="button secondary file-picker">Elegir archivo<input id="file-input" type="file" aria-label="Elegir archivo" disabled></label>
-            <small id="limits">Cargando tipos y tamaño permitido…</small>
-          </div>
-          <div id="selection" class="selection" hidden>
-            <img id="preview" alt="Vista previa del archivo seleccionado" hidden>
-            <div class="selection-info"><strong id="selected-name"></strong><span id="selected-size"></span></div>
-            <button class="text-button" id="clear-file" type="button">Quitar</button>
-          </div>
-          <div id="progress-box" class="progress-box" hidden>
-            <div><span id="progress-label">Enviando al backend…</span><span id="progress-value"></span></div>
-            <progress id="upload-progress" max="100" value="0" aria-label="Progreso de envío al backend"></progress>
-          </div>
-          <button id="upload-button" class="button primary wide" type="submit" disabled>Subir a R2</button>
-        </form>
-        <p class="help">Los archivos permanecen en el bucket hasta que los elimines desde esta pantalla. Vencer un enlace no borra el archivo.</p>
-      </section>
-      <section class="files-panel" aria-labelledby="files-heading">
-        <div class="section-heading files-heading"><span class="step">02</span><h2 id="files-heading">Probá la descarga</h2><span id="file-count" class="count">0 archivos</span></div>
-        <div id="empty" class="empty-state"><div aria-hidden="true">↧</div><strong>Tu primera prueba empieza acá</strong><p>Subí un archivo y aparecerán las opciones para descargarlo y comprobar su enlace.</p></div>
-        <div id="file-list" class="file-list"></div>
-        <div id="cleanup-bar" class="cleanup-bar" hidden><span>Al terminar, podés dejar el bucket limpio.</span><button id="cleanup" class="button danger" type="button">Eliminar archivos de esta prueba</button></div>
-      </section>
-    </div>
-    <aside class="explanation">
-      <div><span class="explanation-number">1</span><p><strong>Subir</strong><br>El archivo viaja al backend y de ahí a tu bucket privado.</p></div>
-      <div><span class="explanation-number">2</span><p><strong>Descargar</strong><br>Generá el enlace y abrilo antes de que venza.</p></div>
-      <div><span class="explanation-number">3</span><p><strong>Comprobar</strong><br>Verificá los bytes o esperá el vencimiento para ver el rechazo.</p></div>
-    </aside>
-    <footer>Interfaz desechable de desarrollo · Prueba R2 directamente. No crea registros de siniestros en PostgreSQL.</footer>
-  </main>
-  <template id="file-template">
-    <article class="file-card">
-      <div class="file-header"><span class="file-type"></span><div><h3 class="file-name"></h3><p class="file-size"></p></div><button class="text-button delete" type="button">Eliminar de R2</button></div>
-      <details class="key-details"><summary>Ver clave en el bucket</summary><code class="file-key"></code></details>
-      <div class="actions"><button class="button secondary generate" type="button">Generar enlace</button></div>
-      <div class="download-area" hidden>
-        <div class="expiry"><span class="expiry-dot" aria-hidden="true"></span><span class="countdown"></span></div>
-        <div class="actions"><a class="button primary download" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Descargar archivo</a><button class="button secondary verify" type="button">Comprobar en R2</button><button class="text-button copy" type="button">Copiar enlace</button></div>
-        <p class="link-help">“Descargar” abre el archivo desde R2. “Comprobar” verifica que el contenido recibido sea idéntico al que subiste.</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prueba de archivos · Cova</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/demo.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">C</span
+        ><span>Estudio Cova <small>Prueba de archivos</small></span>
       </div>
-      <p class="file-result" role="status" aria-live="polite" hidden></p>
-    </article>
-  </template>
-</body>
+      <span class="local-badge"><span aria-hidden="true">●</span> Sólo en esta computadora</span>
+    </header>
+    <main>
+      <div class="intro">
+        <p class="eyebrow">CLOUDFLARE R2</p>
+        <h1>Subí un archivo.<br />Probá su descarga.</h1>
+        <p class="lead">
+          Usá una foto o un documento real. El backend lo guarda en R2 y prepara un enlace temporal
+          para descargarlo.
+        </p>
+      </div>
+      <div class="connection" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span
+        ><span id="connection-text">Conectando con la interfaz local…</span>
+      </div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <div class="workspace">
+        <section class="upload-panel" aria-labelledby="upload-heading">
+          <div class="section-heading">
+            <span class="step">01</span>
+            <h2 id="upload-heading">Elegí un archivo</h2>
+          </div>
+          <form id="upload-form">
+            <div id="dropzone" class="dropzone">
+              <div class="upload-icon" aria-hidden="true">↑</div>
+              <strong>Arrastralo hasta acá</strong>
+              <span>o elegilo desde tu computadora</span>
+              <label class="button secondary file-picker"
+                >Elegir archivo<input
+                  id="file-input"
+                  type="file"
+                  aria-label="Elegir archivo"
+                  disabled
+              /></label>
+              <small id="limits">Cargando tipos y tamaño permitido…</small>
+            </div>
+            <div id="selection" class="selection" hidden>
+              <img id="preview" alt="Vista previa del archivo seleccionado" hidden />
+              <div class="selection-info">
+                <strong id="selected-name"></strong><span id="selected-size"></span>
+              </div>
+              <button class="text-button" id="clear-file" type="button">Quitar</button>
+            </div>
+            <div id="progress-box" class="progress-box" hidden>
+              <div>
+                <span id="progress-label">Enviando al backend…</span
+                ><span id="progress-value"></span>
+              </div>
+              <progress
+                id="upload-progress"
+                max="100"
+                value="0"
+                aria-label="Progreso de envío al backend"
+              ></progress>
+            </div>
+            <button id="upload-button" class="button primary wide" type="submit" disabled>
+              Subir a R2
+            </button>
+          </form>
+          <p class="help">
+            Los archivos permanecen en el bucket hasta que los elimines desde esta pantalla. Vencer
+            un enlace no borra el archivo.
+          </p>
+        </section>
+        <section class="files-panel" aria-labelledby="files-heading">
+          <div class="section-heading files-heading">
+            <span class="step">02</span>
+            <h2 id="files-heading">Probá la descarga</h2>
+            <span id="file-count" class="count">0 archivos</span>
+          </div>
+          <div id="empty" class="empty-state">
+            <div aria-hidden="true">↧</div>
+            <strong>Tu primera prueba empieza acá</strong>
+            <p>Subí un archivo y aparecerán las opciones para descargarlo y comprobar su enlace.</p>
+          </div>
+          <div id="file-list" class="file-list"></div>
+          <div id="cleanup-bar" class="cleanup-bar" hidden>
+            <span>Al terminar, podés dejar el bucket limpio.</span
+            ><button id="cleanup" class="button danger" type="button">
+              Eliminar archivos de esta prueba
+            </button>
+          </div>
+        </section>
+      </div>
+      <aside class="explanation">
+        <div>
+          <span class="explanation-number">1</span>
+          <p>
+            <strong>Subir</strong><br />El archivo viaja al backend y de ahí a tu bucket privado.
+          </p>
+        </div>
+        <div>
+          <span class="explanation-number">2</span>
+          <p><strong>Descargar</strong><br />Generá el enlace y abrilo antes de que venza.</p>
+        </div>
+        <div>
+          <span class="explanation-number">3</span>
+          <p>
+            <strong>Comprobar</strong><br />Verificá los bytes o esperá el vencimiento para ver el
+            rechazo.
+          </p>
+        </div>
+      </aside>
+      <footer>
+        Interfaz desechable de desarrollo · Prueba R2 directamente. No crea registros de siniestros
+        en PostgreSQL.
+      </footer>
+    </main>
+    <template id="file-template">
+      <article class="file-card">
+        <div class="file-header">
+          <span class="file-type"></span>
+          <div>
+            <h3 class="file-name"></h3>
+            <p class="file-size"></p>
+          </div>
+          <button class="text-button delete" type="button">Eliminar de R2</button>
+        </div>
+        <details class="key-details">
+          <summary>Ver clave en el bucket</summary>
+          <code class="file-key"></code>
+        </details>
+        <div class="actions">
+          <button class="button secondary generate" type="button">Generar enlace</button>
+        </div>
+        <div class="download-area" hidden>
+          <div class="expiry">
+            <span class="expiry-dot" aria-hidden="true"></span><span class="countdown"></span>
+          </div>
+          <div class="actions">
+            <a
+              class="button primary download"
+              target="_blank"
+              rel="noopener noreferrer"
+              referrerpolicy="no-referrer"
+              >Descargar archivo</a
+            ><button class="button secondary verify" type="button">Comprobar en R2</button
+            ><button class="text-button copy" type="button">Copiar enlace</button>
+          </div>
+          <p class="link-help">
+            “Descargar” abre el archivo desde R2. “Comprobar” verifica que el contenido recibido sea
+            idéntico al que subiste.
+          </p>
+        </div>
+        <p class="file-result" role="status" aria-live="polite" hidden></p>
+      </article>
+    </template>
+  </body>
 </html>
