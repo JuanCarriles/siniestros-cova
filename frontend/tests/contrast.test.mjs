@@ -55,3 +55,22 @@ test('bordes de controles y foco superan 3:1 sobre superficies claras', () => {
     for (const fg of ['input', 'ring']) assert.ok(contrast(fg, bg) >= 3, `${fg}/${bg}`)
   }
 })
+test('lo deshabilitado sigue legible: 4.5:1, sin opacidad', () => {
+  assert.ok(contrast('disabled-ink', 'disabled-bg') >= 4.5)
+})
+test('el texto se lee sobre filas alternas, resaltadas y seleccionadas de las tablas', () => {
+  for (const bg of ['row-alt', 'row-hover', 'row-selected']) {
+    for (const fg of ['foreground', 'muted-foreground', 'primary'])
+      assert.ok(contrast(fg, bg) >= 4.5, `${fg}/${bg}: ${contrast(fg, bg).toFixed(2)}:1`)
+  }
+  // La barra de la fila seleccionada se distingue del fondo de la fila
+  assert.ok(contrast('navy', 'row-selected') >= 3)
+})
+test('el verde de éxito alcanza 3:1 para íconos (no se usa para texto)', () => {
+  assert.ok(contrast('success', 'surface') >= 3)
+})
+test('ningún tamaño de texto de la escala baja de 16 px', async () => {
+  const sizes = [...css.matchAll(/--text-(\w+):\s*([\d.]+)rem;/g)]
+  assert.ok(sizes.length >= 5)
+  for (const [, name, rem] of sizes) assert.ok(Number(rem) >= 1, `text-${name}: ${rem}rem`)
+})

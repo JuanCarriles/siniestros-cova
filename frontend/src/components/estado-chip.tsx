@@ -10,7 +10,7 @@ export function EstadoChip({ estado, ...props }: EstadoChipProps) {
   const nombre = estado?.trim() || 'Sin estado'
   return (
     <Badge variant={tonoDeEstado(nombre)} {...props}>
-      <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
+      <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full bg-current" />
       {nombre}
     </Badge>
   )

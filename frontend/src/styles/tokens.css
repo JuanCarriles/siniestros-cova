@@ -6,7 +6,34 @@
  * Los colores literales sólo se declaran en este archivo.
  */
 @theme {
-  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /*
+   * Atkinson Hyperlegible (Braille Institute) está diseñada para lectores con baja visión: diferencia
+   * formas que en otras fuentes se confunden (I l 1, O 0, rn m). La versión mono se usa para números de
+   * siniestro, pólizas, DNI, patentes y fechas: cifras del mismo ancho y sin ambigüedades.
+   */
+  --font-sans:
+    'Atkinson Hyperlegible Next Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:
+    'Atkinson Hyperlegible Mono Variable', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  /*
+   * Escala de texto: ningún texto baja de 16 px (xs y sm valen lo mismo a propósito) y el texto general y
+   * los controles son de 18 px. En rem, así respeta el tamaño de letra que la persona elija en el navegador.
+   */
+  --text-xs: 1rem;
+  --text-xs--line-height: 1.5rem;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5rem;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.75rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.875rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.25rem;
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 2.5rem;
   --color-navy: #1e3a5f;
   --color-navy-hover: #2a4a73;
   --color-navy-active: #2f5079;
@@ -32,8 +59,17 @@
   --color-danger-ink: #b42318;
   --color-neutral-bg: #eef0f3;
   --color-neutral-ink: #4b5563;
+  /* Solo para íconos y puntos (3:1). No usar para texto: no llega a 4,5:1 */
   --color-success: #16a34a;
   --color-focus: #2f6fd0;
+  /* Deshabilitado con colores sólidos: con opacidad el texto quedaba en 2,8:1 */
+  --color-disabled-bg: #e5e7eb;
+  --color-disabled-ink: #4b5563;
+  --color-disabled-border: #d1d5db;
+  /* Tablas: filas alternas, fila bajo el puntero y fila seleccionada (fondo + barra lateral) */
+  --color-row-alt: #f5f7fa;
+  --color-row-hover: #e8eef7;
+  --color-row-selected: #dde8f8;
   --color-tooltip: #14233a;
   --color-callout-bg: #f2f6fb;
   --color-callout-line: #d5e0ee;

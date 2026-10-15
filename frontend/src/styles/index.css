@@ -8,12 +8,20 @@
   }
   html {
     scroll-padding-top: 5rem;
+    /* Que los celulares no achiquen ni agranden el texto por su cuenta al girar la pantalla */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   body {
     @apply bg-background font-sans text-foreground antialiased;
     margin: 0;
-    font-size: 1.125rem;
+    font-size: var(--text-base);
     line-height: 1.6;
+    /* Palabras largas (correos, nombres de archivo) cortan línea en vez de desbordar en pantallas angostas */
+    overflow-wrap: break-word;
+  }
+  .font-mono {
+    font-variant-numeric: tabular-nums slashed-zero;
   }
   :focus-visible {
     @apply outline-3 outline-offset-3 outline-ring;
@@ -31,4 +39,15 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/*
+ * Identificadores: número de siniestro, póliza, DNI, patente, CUIT, fechas. Fuente mono hiperlegible, cifras del
+ * mismo ancho y en una sola línea: "2026-04871" nunca se corta en el guion.
+ * Uso: <span className="dato">2026-04871</span>
+ */
+@utility dato {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+  white-space: nowrap;
 }

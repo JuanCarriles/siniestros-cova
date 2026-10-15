@@ -116,10 +116,10 @@ function Section({
       <div className="flex items-start gap-3 border-b px-5 py-4">
         <span className="pt-0.5 text-base font-semibold text-muted-foreground">{number}</span>
         <div>
-          <h2 id={`${id}-title`} className="text-base font-semibold">
+          <h2 id={`${id}-title`} className="text-lg font-semibold">
             {title}
           </h2>
-          <p className="mt-1 text-base leading-6 text-muted-foreground">{description}</p>
+          <p className="mt-1 text-base text-muted-foreground">{description}</p>
         </div>
       </div>
       <div className="p-5">{children}</div>
@@ -127,9 +127,9 @@ function Section({
   )
 }
 
-function CasePreview({ item }: { item: (typeof cases)[number] }) {
+function CasePreview({ item, onOpen }: { item: (typeof cases)[number]; onOpen: () => void }) {
   return (
-    <Dialog>
+    <Dialog onOpenChange={(open) => open && onOpen()}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" aria-label={`Ver siniestro ${item.numero}`}>
           <ArrowUpRight aria-hidden="true" />
@@ -137,7 +137,9 @@ function CasePreview({ item }: { item: (typeof cases)[number] }) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Siniestro {item.numero}</DialogTitle>
+          <DialogTitle>
+            Siniestro <span className="dato">{item.numero}</span>
+          </DialogTitle>
           <DialogDescription>Vista de muestra del sistema de diseño.</DialogDescription>
         </DialogHeader>
         <dl className="grid gap-4 py-2">
@@ -172,6 +174,7 @@ export function SistemaDiseno() {
   const [companyName, setCompanyName] = useState('')
   const [query, setQuery] = useState('')
   const [stateFilter, setStateFilter] = useState('todos')
+  const [selectedCase, setSelectedCase] = useState<string | null>(null)
   const filteredCases = cases.filter(
     (item) =>
       (stateFilter === 'todos' || item.estado === stateFilter) &&
@@ -257,9 +260,7 @@ export function SistemaDiseno() {
               <p className="mb-2 text-base font-semibold tracking-widest text-muted-foreground">
                 FUNDACIONES · ESTUDIO COVA
               </p>
-              <h1 className="text-3xl leading-8 font-bold tracking-tight">
-                Componentes de Estudio Cova
-              </h1>
+              <h1 className="text-3xl font-bold tracking-tight">Componentes de Estudio Cova</h1>
               <p className="mt-2 max-w-2xl text-reading text-muted-foreground">
                 Una referencia común para construir las pantallas. Probá los componentes, sus
                 estados y sus interacciones.
@@ -303,9 +304,18 @@ export function SistemaDiseno() {
                   <p className="mb-2 text-base tracking-wider text-muted-foreground uppercase">
                     Tipografía
                   </p>
-                  <p className="text-lg font-semibold">Inter · Aa 0123</p>
+                  <p className="text-lg font-semibold">Atkinson Hyperlegible</p>
                   <p className="mt-1 text-base text-muted-foreground">
-                    Texto principal de 18 px y controles de 16 px.
+                    Hecha para baja visión: <span className="text-foreground">Il1 O0 rn m</span>.
+                    Texto y controles de 18 px; nada baja de 16 px.
+                  </p>
+                  <p className="mt-2 text-lg text-foreground">
+                    <span className="dato">2026-04871</span> ·{' '}
+                    <span className="dato">AB 123 CD</span>
+                  </p>
+                  <p className="mt-1 text-base text-muted-foreground">
+                    Clase dato: mono y sin cortes para números de siniestro, pólizas, DNI, patentes
+                    y fechas.
                   </p>
                 </div>
                 <div>
@@ -514,7 +524,7 @@ export function SistemaDiseno() {
               id="tablas"
               number="05"
               title="Tablas"
-              description="Filas espaciadas, texto legible y acciones con nombres accesibles."
+              description="Filas alternas, la fila seleccionada marcada con una barra y acciones con nombres accesibles. Abrí un siniestro para ver la selección."
             >
               <div className="mb-4 flex flex-col gap-3 sm:flex-row">
                 <div className="grid flex-1 gap-2">
@@ -570,15 +580,20 @@ export function SistemaDiseno() {
                   </TableHeader>
                   <TableBody>
                     {filteredCases.map((item) => (
-                      <TableRow key={item.numero}>
-                        <TableCell className="font-semibold text-primary">{item.numero}</TableCell>
+                      <TableRow
+                        key={item.numero}
+                        data-state={selectedCase === item.numero ? 'selected' : undefined}
+                      >
+                        <TableCell className="font-semibold text-primary">
+                          <span className="dato">{item.numero}</span>
+                        </TableCell>
                         <TableCell>{item.asegurado}</TableCell>
                         <TableCell>{item.aseguradora}</TableCell>
                         <TableCell>
                           <EstadoChip estado={item.estado} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <CasePreview item={item} />
+                          <CasePreview item={item} onOpen={() => setSelectedCase(item.numero)} />
                         </TableCell>
                       </TableRow>
                     ))}

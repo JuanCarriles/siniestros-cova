@@ -1,17 +1,37 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
+// El contenedor se desplaza en horizontal cuando la tabla no entra (celulares, zoom alto). Solo en ese caso es
+// enfocable, para poder desplazarlo con las flechas del teclado; si entra completa, no suma una parada de Tab.
+function useDesborda<T extends HTMLElement>() {
+  const ref = React.useRef<T>(null)
+  const [desborda, setDesborda] = React.useState(false)
+  React.useEffect(() => {
+    const elemento = ref.current
+    if (!elemento) return
+    const medir = () => setDesborda(elemento.scrollWidth > elemento.clientWidth + 1)
+    medir()
+    const observador = new ResizeObserver(medir)
+    observador.observe(elemento)
+    if (elemento.firstElementChild) observador.observe(elemento.firstElementChild)
+    return () => observador.disconnect()
+  }, [])
+  return [ref, desborda] as const
+}
+
 function Table({
   className,
   containerLabel = 'Tabla de datos',
   ...props
 }: React.ComponentProps<'table'> & { containerLabel?: string }) {
+  const [ref, desborda] = useDesborda<HTMLDivElement>()
   return (
     <div
+      ref={ref}
       data-slot="table-container"
-      role="region"
-      aria-label={containerLabel}
-      tabIndex={0}
+      role={desborda ? 'region' : undefined}
+      aria-label={desborda ? containerLabel : undefined}
+      tabIndex={desborda ? 0 : undefined}
       className="relative w-full overflow-x-auto"
     >
       <table
@@ -24,7 +44,13 @@ function Table({
 }
 
 function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
-  return <thead data-slot="table-header" className={cn('[&_tr]:border-b', className)} {...props} />
+  return (
+    <thead
+      data-slot="table-header"
+      className={cn('[&_tr]:border-b-2 [&_tr]:border-line-strong', className)}
+      {...props}
+    />
+  )
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<'tbody'>) {
@@ -41,18 +67,24 @@ function TableFooter({ className, ...props }: React.ComponentProps<'tfoot'>) {
   return (
     <tfoot
       data-slot="table-footer"
-      className={cn('border-t bg-muted/50 font-medium [&>tr]:last:border-b-0', className)}
+      className={cn(
+        'border-t-2 border-line-strong bg-muted font-semibold [&>tr]:last:border-b-0',
+        className,
+      )}
       {...props}
     />
   )
 }
 
+// Filas alternas para seguir una fila con la vista, resaltado bajo el puntero y fila seleccionada con fondo
+// azul y una barra a la izquierda (se distingue aunque no se perciba bien el color).
+// Para marcarla: <TableRow data-state="selected">.
 function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
   return (
     <tr
       data-slot="table-row"
       className={cn(
-        'border-b transition-colors odd:bg-surface even:bg-surface-subtle hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted',
+        'border-b border-line-strong transition-colors odd:bg-surface even:bg-row-alt hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected data-[state=selected]:shadow-[inset_4px_0_0_var(--color-navy)]',
         className,
       )}
       {...props}
@@ -65,7 +97,7 @@ function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
     <th
       data-slot="table-head"
       className={cn(
-        'bg-muted px-4 py-4 text-left align-middle text-base leading-6 font-semibold whitespace-normal text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
+        'bg-muted px-4 py-4 text-left align-middle text-base font-semibold whitespace-normal text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
         className,
       )}
       {...props}
