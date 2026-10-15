@@ -59,7 +59,18 @@ export const urlArchivoSchema = textoSchema.pipe(
 )
 
 // Es una clave de almacenamiento, no una URL pública. Las rutas se generan y autorizan en el backend.
-export const claveArchivoSchema = textoSchema
+export const claveArchivoSchema = z
+  .string()
+  .min(1)
+  .max(1024)
+  .regex(/^[a-zA-Z0-9._/-]+$/, 'Ingresá una clave de archivo, sin dominio ni parámetros')
+  .refine(
+    (value) =>
+      value
+        .split('/')
+        .every((segmento) => segmento !== '' && segmento !== '.' && segmento !== '..'),
+    'La clave debe ser una ruta relativa sin segmentos vacíos, . ni ..',
+  )
 export const extensionArchivoSchema = textoSchema
 export const mimeTypeSchema = textoSchema
 

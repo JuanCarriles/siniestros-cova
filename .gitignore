@@ -18,6 +18,7 @@ npm-debug.log*
 
 # Archivos subidos en desarrollo local
 backend/uploads/
+backend/.r2-demo/
 
 # Editor / SO
 .vscode/*

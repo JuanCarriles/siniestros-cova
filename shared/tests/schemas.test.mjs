@@ -25,7 +25,7 @@ const examples = [
     'DocumentoPlantilla',
     {
       nombreOriginal: 'modelo.pdf',
-      urlArchivo: 'https://archivos.example.com/modelo.pdf',
+      urlArchivo: 'plantillas/modelo.pdf',
       tipoExtension: 'pdf',
       idUsuario: 1,
     },
@@ -307,7 +307,7 @@ test('lecturas: exige lector y fecha; no acepta los campos globales anteriores',
   )
 })
 
-test('URL de plantilla: valida HTTP/HTTPS y admite claves relativas para documentos', () => {
+test('URL genérica: valida HTTP/HTTPS; los documentos guardan claves relativas', () => {
   assert.equal(
     schemas.urlArchivoSchema.safeParse('https://archivos.example.com/modelo.pdf').success,
     true,
@@ -316,6 +316,26 @@ test('URL de plantilla: valida HTTP/HTTPS y admite claves relativas para documen
     assert.equal(schemas.urlArchivoSchema.safeParse(value).success, false)
   }
   assert.equal(schemas.claveArchivoSchema.parse('siniestros/1/foto.jpg'), 'siniestros/1/foto.jpg')
+  for (const value of [
+    'https://example.com/modelo.pdf',
+    '/modelo.pdf',
+    '../modelo.pdf',
+    'x/../y',
+    'x//y',
+    'C:\\modelo.pdf',
+    'modelo.pdf?firma=secreto',
+    'modelo.pdf#x',
+  ]) {
+    assert.equal(schemas.claveArchivoSchema.safeParse(value).success, false)
+    assert.equal(
+      schemas.documentoPlantillaUpdateSchema.safeParse({ urlArchivo: value }).success,
+      false,
+    )
+    assert.equal(
+      schemas.documentoSiniestroUpdateSchema.safeParse({ urlArchivoSinDominio: value }).success,
+      false,
+    )
+  }
 })
 
 test('baja y restauración: sólo admite pares consistentes', () => {

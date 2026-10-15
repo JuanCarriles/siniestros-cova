@@ -1,17 +1,17 @@
 import { z } from 'zod'
 import {
+  claveArchivoSchema,
   esquemaEdicion,
   extensionArchivoSchema,
   fechaHoraSchema,
   idSchema,
   textoSchema,
-  urlArchivoSchema,
 } from './comunes.ts'
 
 // Datos de alta de DocumentoPlantilla; id y baja lógica se gestionan por separado.
 export const documentoPlantillaSchema = z.strictObject({
   nombreOriginal: textoSchema,
-  urlArchivo: urlArchivoSchema,
+  urlArchivo: claveArchivoSchema,
   tipoExtension: extensionArchivoSchema,
   fechaCarga: fechaHoraSchema.optional(),
   idUsuario: idSchema,

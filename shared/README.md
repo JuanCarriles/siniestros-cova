@@ -86,8 +86,10 @@ RolAccidente, UsoVehiculo y TipoLesion. Los valores son exactos y distinguen may
 - `inicioVigencia` sigue siendo texto opcional, igual que en Prisma.
 - `tamanoBytes`: admite bigint, texto decimal o number entero seguro, entre 0 y 9223372036854775807. Devuelve string decimal exacto, serializable como JSON;
   rechaza numbers inseguros para evitar pérdida de precisión.
-- `urlArchivo` de plantilla valida HTTP/HTTPS. `urlArchivoSinDominio` es una clave
-  de almacenamiento, no se obliga a que sea URL. Los metadatos del archivo no
+- `urlArchivo` de plantilla y `urlArchivoSinDominio` guardan claves relativas de R2,
+  generadas por el backend. Rechazan URLs, rutas absolutas, parámetros y segmentos
+  `..`. Se permiten letras ASCII, números, puntos, guiones, guiones bajos y `/`.
+  El nombre original se guarda por separado. Los metadatos del archivo no
   prueban su tamaño, contenido, MIME real ni permisos: verificarlos al subirlo.
 
 La salida es un DTO para formularios/API; no es un `Prisma.CreateInput` directo.

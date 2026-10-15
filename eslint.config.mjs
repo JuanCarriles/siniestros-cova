@@ -56,6 +56,12 @@ export default defineConfig([
     },
   },
 
+  // Demo de R2: el JavaScript de public/ corre en el navegador, no en Node
+  {
+    files: ['backend/src/dev/**/public/**/*.js'],
+    languageOptions: { globals: globals.browser },
+  },
+
   // Frontend: navegador + React
   {
     files: ['frontend/src/**/*.{ts,tsx}'],
