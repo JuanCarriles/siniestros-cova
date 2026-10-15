@@ -117,9 +117,47 @@ services:
       - certbot_certs:/etc/letsencrypt
       - certbot_www:/var/www/certbot
 
+  # Backups diarios de la base y de los documentos a Cloudflare R2 (RNF-04). Solo en el VPS: perfil "backup"
+  # (COMPOSE_PROFILES=ssl,backup en el .env). Ver backup/backup.sh.
+  # Backup en el momento: sh scripts/backup-ahora.sh. Estado: docker compose exec backup estado
+  backup:
+    build:
+      context: ./backup
+    container_name: siniestros-backup
+    restart: unless-stopped
+    profiles: ['backup']
+    # Credenciales de R2 (R2_*): las mismas del backend. Las BACKUP_* pueden estar en cualquiera de los dos
+    # archivos; si una variable está en ambos, gana la del .env de la raíz.
+    env_file:
+      - ./backend/.env
+      - path: ./.env
+        required: false
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-cova}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-cova}
+      PGDATABASE: ${POSTGRES_DB:-siniestros}
+    volumes:
+      # Los dumps de los últimos días también quedan en el VPS (restauración rápida sin descargar)
+      - backups_locales:/backups
+    # "unhealthy" si el último backup falló o tiene más de 26 h (backup/estado.sh)
+    healthcheck:
+      test: ['CMD', 'estado']
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      # Tiempo para el backup que hace al arrancar si el último tiene más de 24 h
+      start_period: 3m
+      start_interval: 5s
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   db_data:
   # Certificados y cuenta de Let's Encrypt (sobreviven a los deploys, igual que la base)
   certbot_certs:
   # Archivos temporales de la validación HTTP-01 (los escribe Certbot, los sirve Nginx)
   certbot_www:
+  # Dumps de la base de los últimos días (servicio backup)
+  backups_locales:

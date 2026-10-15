@@ -113,6 +113,7 @@ docker compose down                   # detiene (los datos de Postgres quedan en
 | db       | 127.0.0.1:5432        | Solo local, para correr Prisma desde la máquina                                           |
 | migrate  | —                     | Tarea de un solo uso en cada `up`: `prisma migrate deploy` + seed de catálogos, y termina |
 | certbot  | —                     | Solo en el VPS (perfil `ssl`): renueva el certificado SSL automáticamente                 |
+| backup   | —                     | Solo en el VPS (perfil `backup`): backup diario de la base y los documentos a R2          |
 
 - El backend arranca recién cuando `migrate` terminó bien: nunca corre contra una base sin migrar.
 - `GET /api/health` responde 200 si la API llega a la base y 503 si no; lo usa el healthcheck de Docker.
@@ -132,7 +133,8 @@ Requisitos: Ubuntu 24.04, 2 GB de RAM o más (con 1 GB, agregar swap: el build d
    - contraseña de Postgres **solo de letras y números** (`openssl rand -hex 32`). Tiene que existir **antes** del
      primer `up`: Postgres la usa únicamente al crear la base;
    - `DOMAIN`: el dominio, o sin dominio propio `IP-CON-GUIONES.sslip.io` (p. ej. `203-0-113-10.sslip.io`);
-   - `HTTP_PORT=80`, `HTTPS_PORT=443` y `COMPOSE_PROFILES=ssl`.
+   - `HTTP_PORT=80`, `HTTPS_PORT=443` y `COMPOSE_PROFILES=ssl,backup`;
+   - `BACKUP_CLAVE` (`openssl rand -hex 32`), la contraseña que cifra los backups. Guardarla también fuera del VPS.
 3. Crear `backend/.env` a partir de `backend/.env.example`: `SESSION_SECRET` largo y aleatorio,
    `APP_URL=http://DOMINIO` y `COOKIE_SECURE=false` (se cambian en el paso 6). `DATABASE_URL` y `NODE_ENV` los pone
    el compose.
@@ -156,4 +158,20 @@ atrás: [`docs/dominio-propio.md`](docs/dominio-propio.md).
 **No correr la seed de desarrollo en el VPS** (se niega con `NODE_ENV=production`). Para consultar la base desde tu
 máquina, usar un túnel SSH (`ssh -L 5432:127.0.0.1:5432 usuario@IP`) y conectarse a `localhost:5432`.
 
-Pendiente para producción real: dominio propio y backups diarios fuera del VPS (RNF-04).
+**Backups:** el servicio `backup` hace todos los días a las 3:00 un dump cifrado de la base y una copia de los
+documentos en Cloudflare R2 (bucket `BACKUP_BUCKET`, carpeta `backups/`), y guarda 30 días. Lee los documentos con el
+token del backend (`R2_*`) y escribe los backups con el suyo (`BACKUP_R2_*`). Para ver si anda:
+`docker compose exec backup estado` (o `docker compose ps`: queda `unhealthy` si el último backup falló o tiene más de
+26 h). Todos los scripts se corren desde la raíz del repo, en el VPS o en tu PC:
+
+| Script                                             | Qué hace                                                                               |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `sh scripts/backup-ahora.sh`                       | Backup en el momento. Usarlo antes de cada deploy                                      |
+| `sh scripts/probar-backups.sh`                     | Verificación completa sin modificar datos: backup, restauración de prueba y documentos |
+| `sh scripts/probar-restauracion.sh`                | Restaura el último backup en una base temporal, la compara y la borra                  |
+| `sh scripts/restaurar-backup.sh --listar`          | Backups disponibles, historial de documentos y bases guardadas                         |
+| `sh scripts/restaurar-backup.sh ultimo`            | Reemplaza la base por el último backup. La actual queda guardada                       |
+| `sh scripts/restaurar-backup.sh --volver-a BASE`   | Vuelve a una base guardada (deshace una restauración)                                  |
+| `sh scripts/restaurar-documentos.sh actual [RUTA]` | Devuelve documentos que falten en la app, sin sobrescribir ni borrar                   |
+
+Pendiente para producción real: dominio propio y correr `sh scripts/probar-backups.sh` en el VPS (RNF-05).
