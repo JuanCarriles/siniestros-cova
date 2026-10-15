@@ -1,5 +1,14 @@
 import { z } from 'zod'
-import { booleanoSchema, emailSchema, esquemaEdicion, fechaHoraSchema, idSchema, opcional, telefonoSchema, textoSchema } from './comunes.ts'
+import {
+  booleanoSchema,
+  emailSchema,
+  esquemaEdicion,
+  fechaHoraSchema,
+  idSchema,
+  opcional,
+  telefonoSchema,
+  textoSchema,
+} from './comunes.ts'
 import { tipoPeritoSchema } from './enums.ts'
 
 // Datos de alta de Perito; id y baja lógica se gestionan por separado.

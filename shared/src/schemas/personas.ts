@@ -1,5 +1,15 @@
 import { z } from 'zod'
-import { booleanoSchema, documentoSchema, emailSchema, esquemaEdicion, fechaSchema, idSchema, opcional, telefonoSchema, textoSchema } from './comunes.ts'
+import {
+  booleanoSchema,
+  documentoSchema,
+  emailSchema,
+  esquemaEdicion,
+  fechaSchema,
+  idSchema,
+  opcional,
+  telefonoSchema,
+  textoSchema,
+} from './comunes.ts'
 import { tipoLesionSchema } from './enums.ts'
 
 // Datos de alta de PersonaInvolucrada; id y baja lógica se gestionan por separado.

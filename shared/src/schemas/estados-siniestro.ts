@@ -1,11 +1,12 @@
-import { boolean, z } from 'zod'
+import { z } from 'zod'
 import { booleanoSchema, esquemaEdicion, textoSchema } from './comunes.ts'
 
 // Datos de alta de EstadoSiniestro; id y baja lógica se gestionan por separado.
 export const estadoSiniestroSchema = z.strictObject({
   nombre: textoSchema,
   descripcion: textoSchema,
-  esCierre: booleanoSchema,
+  // Opcional: Prisma usa false por defecto. Solo el estado final del caso ("Cierre enviado") es true.
+  esCierre: booleanoSchema.optional(),
 })
 
 export const estadoSiniestroUpdateSchema = esquemaEdicion(estadoSiniestroSchema)
