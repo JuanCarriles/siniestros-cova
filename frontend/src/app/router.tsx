@@ -1,6 +1,10 @@
 import { createBrowserRouter, Link, type RouteObject } from 'react-router'
 import { Button } from '@/components/ui/button'
 
+const panelRoutes: RouteObject[] = import.meta.env.DEV
+  ? (await import('./panel-preview-routes')).panelPreviewRoutes
+  : []
+
 const developmentRoutes: RouteObject[] = import.meta.env.DEV
   ? [
       {
@@ -32,9 +36,14 @@ export const router = createBrowserRouter([
             <p className="text-base font-bold text-navy">Estudio Cova</p>
             <p className="text-muted-foreground">Sistema de gestión de siniestros</p>
             {import.meta.env.DEV && (
-              <Button asChild variant="link" size="sm" className="mt-2 px-0">
-                <Link to="/sistema-diseno">Ver sistema de diseño</Link>
-              </Button>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button asChild>
+                  <Link to="/vista-previa">Ver interfaces por rol</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link to="/sistema-diseno">Sistema de diseño</Link>
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -42,4 +51,5 @@ export const router = createBrowserRouter([
     ),
   },
   ...developmentRoutes,
+  ...panelRoutes,
 ])
