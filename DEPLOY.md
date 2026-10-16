@@ -34,7 +34,7 @@ contraseñas (por ejemplo Bitwarden), **compartido con al menos otra persona del
 | Qué                                         | Para qué                                                                         |
 | ------------------------------------------- | -------------------------------------------------------------------------------- |
 | Contenido completo del `.env` de la raíz    | Contraseña de Postgres, dominio, perfiles y configuración de backups             |
-| Contenido completo de `backend/.env`        | `SESSION_SECRET`, claves de R2 del backend y el resto de la configuración        |
+| Contenido completo de `backend/.env`        | Claves de R2 del backend, de Resend y el resto de la configuración               |
 | **`BACKUP_CLAVE`** (va dentro de un `.env`) | **Sin ella los backups de la base no se pueden descifrar.** Es la más importante |
 | Acceso al panel de Hostinger                | Crear o reinstalar el VPS, firewall del proveedor                                |
 | Acceso a la cuenta de Cloudflare            | Buckets y tokens de R2                                                           |
@@ -191,10 +191,6 @@ No pongas `BACKUP_PREFIX`: vacía, los backups van a la carpeta `backups/` (las 
 
 ```
 cp backend/.env.example backend/.env && chmod 600 backend/.env
-```
-
-```
-sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$(openssl rand -hex 32)|" backend/.env
 ```
 
 Con `nano backend/.env`, completá (sin espacios después del `=`):

@@ -1,45 +1,47 @@
-# Paneles de navegación por rol
+# Panel y navegación por rol
 
-## Probar
+Al iniciar sesión cada rol entra a su página: el **gestor** a Siniestros y el **administrador** y el
+**superadministrador** al Dashboard (`initialSection` en `panel-navigation.ts`).
 
-Desde la raíz, ejecutar `npm run dev:front` y abrir `http://localhost:5173/vista-previa` (o el puerto que indique Vite).
+| Rol                                | Menú principal                                                                   | Abajo                    |
+| ---------------------------------- | -------------------------------------------------------------------------------- | ------------------------ |
+| Gestor                             | Siniestros, Plantillas (solo descarga, CU-06)                                    | Mi perfil, Cerrar sesión |
+| Administrador y superadministrador | Dashboard, Siniestros, Aseguradoras, Ajustadores, Usuarios, Plantillas, Informes | Mi perfil, Cerrar sesión |
 
-- `/vista-previa/administrador/dashboard`
-- `/vista-previa/super-administrador/dashboard`
-- `/vista-previa/gestor/siniestros`
-- `/vista-previa/gestor/plantillas`
+Para probarlo, entrar con los usuarios de prueba del seed de desarrollo (`backend/prisma/seeds/desarrollo.ts`),
+uno por rol.
 
-Administrador y superadministrador comparten estructura. El perfil distingue el rol. No se inventan diferencias de permisos operativos: deberán definirse con cada módulo.
+## Piezas
 
-| Rol                                | Menú principal                                                       | Acceso inferior |
-| ---------------------------------- | -------------------------------------------------------------------- | --------------- |
-| Gestor                             | Siniestros, Plantillas                                               | Mi perfil       |
-| Administrador y superadministrador | Dashboard, Siniestros, Aseguradoras, Ajustadores, Usuarios, Informes | Mi perfil       |
+- `src/components/layout/panel-layout.tsx`: estructura común. Menú lateral en escritorio (desde 64rem), menú
+  desplegable en celular (Dialog con foco contenido, Escape y cierre al navegar), "Saltar al contenido", foco al
+  contenido al cambiar de sección y botón "Cerrar sesión" (action `/salir`).
+- `src/components/layout/panel-navigation.ts`: secciones y lista explícita por rol. No se deducen permisos por
+  jerarquía.
+- `src/components/layout/panel-context.ts`: `usePanel()` da el usuario y la ruta base a las páginas.
+- `src/components/layout/section-heading.tsx`: título y descripción de cada sección.
+- `src/components/layout/seccion-pendiente.tsx`: contenido provisorio de las secciones que todavía no tienen
+  página. Cada historia lo reemplaza en `src/app/router.tsx` por la página de su feature
+  (`src/features/<modulo>/pages`).
+- `src/components/layout/seccion-no-disponible.tsx`: dirección inexistente o sección que el rol no puede abrir.
+- `src/app/panel.tsx`: monta el panel con el usuario de la sesión (loader `cargarPanel`).
 
-El HTML recibido se usó solamente como referencia estructural. Se reutilizan la tipografía Atkinson, los colores semánticos y Button, Badge y Dialog del sistema actual. El panel lateral tiene una opción activa con texto destacado, fondo y borde de acento; el significado no depende únicamente del color. Los controles conservan el tamaño accesible del proyecto.
+## Protección
 
-## Integración de los módulos
+Cada sección declara su ruta en `src/app/router.tsx` y su loader (`requerirSeccion` en
+`src/features/auth/sesion.ts`) controla sesión y rol **antes** de mostrarla. Sin sesión, lleva al login y, al
+ingresar, vuelve a la página pedida.
 
-- `src/components/layout/panel-layout.tsx`: estructura común, navegación de escritorio, menú móvil y `Outlet` para el contenido. Recibe `usuario: { nombre, tipo }` y `basePath` desde el contexto de sesión de la aplicación.
-- `src/components/layout/panel-navigation.ts`: catálogo de secciones y lista explícita por rol. Reutiliza `TipoUsuario` derivado de Zod en `@cova/shared`.
-- `src/components/layout/panel-context.ts`: `usePanel()` permite leer el usuario y la ruta base desde un módulo hijo.
-- `src/pages/panel-section.tsx`: control de sección y contenido de presentación. Sustituir cada espacio por su módulo manteniendo el control `canOpenSection` antes de renderizarlo. Las rutas de detalle deberán declararse y autorizarse explícitamente; actualmente se rechazan rutas anidadas desconocidas.
-- `src/pages/panel-preview.tsx`, `panel-preview-data.ts` y `src/app/panel-preview-routes.tsx`: selector, usuarios y rutas de ejemplo. Se importa exclusivamente en desarrollo; no incluye sesiones reales, persistencia de rol ni llamadas a la base.
-
-Los enlaces no cambian el rol. Una dirección administrativa ingresada dentro de la vista de gestor muestra «Esta sección no está disponible». Cambiar entre perfiles desde `/vista-previa` es una herramienta de desarrollo, no un mecanismo de autorización.
-
-Cuando exista autenticación, montar `PanelLayout` detrás de la sesión real y obtener el rol del servidor. **Ocultar enlaces o bloquear rutas de React no protege una API**: el backend debe validar sesión, rol y acceso al registro. El gestor debe ver sólo sus siniestros asignados y consultar/descargar plantillas; las operaciones de subida, edición y eliminación requieren reglas de servidor. Esta entrega crea las bases de interfaz, no implementa esos endpoints ni reemplaza sus controles.
-
-## Responsive y accesibilidad
-
-En escritorio (desde 64rem) el menú queda visible y el perfil se mantiene abajo. Si falta altura, la lista de navegación tiene su propio scroll. En anchos menores aparece un botón «Abrir menú de navegación», que usa el Dialog existente con foco contenido, Escape y cierre al navegar. Al cambiar a escritorio se cierra el menú móvil. El contenido utiliza anchos flexibles y puede envolver textos; no se bloquea el zoom.
+**Ocultar enlaces o bloquear rutas de React no protege los datos**: cada endpoint del backend valida sesión y rol
+con `requerirSesion` y `requerirRol` (`backend/src/modules/auth/auth.module.ts`), y el acceso a cada registro (el
+gestor ve solo sus siniestros).
 
 ## Comprobación
 
 ```powershell
 npm run build -w frontend
-npm run lint -w frontend
+npm run lint
 npm run test:design -w frontend
 ```
 
-Las pruebas de navegación validan las listas de secciones, el rechazo de roles/rutas desconocidos y las restricciones del gestor. Las pruebas de diseño existentes siguen comprobando tokens y contraste.
+Las pruebas de navegación validan las listas de secciones por rol y el rechazo de roles y rutas desconocidos.

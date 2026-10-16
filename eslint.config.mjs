@@ -67,6 +67,18 @@ export default defineConfig([
     files: ['frontend/src/**/*.{ts,tsx}'],
     extends: [reactHooks.configs.flat['recommended-latest'], reactRefresh.configs.vite],
     languageOptions: { globals: globals.browser },
+    rules: {
+      // Los loaders de React Router cortan la navegación con "throw redirect(...)" o "throw data(...)"
+      '@typescript-eslint/only-throw-error': [
+        'error',
+        {
+          allow: [
+            { from: 'lib', name: 'Response' },
+            { from: 'package', package: 'react-router', name: 'DataWithResponseInit' },
+          ],
+        },
+      ],
+    },
   },
   {
     files: ['frontend/vite.config.ts'],
