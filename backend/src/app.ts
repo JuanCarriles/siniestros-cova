@@ -3,6 +3,11 @@ import express, { Router } from 'express'
 import helmet from 'helmet'
 import { errorHandler, notFound } from './middlewares/errorHandler.ts'
 import { healthRouter } from './modules/health/health.routes.ts'
+import {
+  aseguradorasRouter,
+  autorizarVistaPrevia,
+} from './modules/aseguradoras/aseguradoras.routes.ts'
+import { env } from './config/env.ts'
 
 export const app = express()
 
@@ -17,9 +22,12 @@ app.use(cookieParser())
 const api = Router()
 
 api.use('/health', healthRouter)
+api.use('/aseguradoras', aseguradorasRouter)
+if (env.NODE_ENV === 'development') {
+  api.use('/vista-previa/aseguradoras', autorizarVistaPrevia, aseguradorasRouter)
+}
 
 // Los routers de cada módulo se montan acá, por ejemplo:
-// api.use('/aseguradoras', aseguradorasRouter)
 
 app.use('/api', api)
 

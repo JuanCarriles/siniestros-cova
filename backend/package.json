@@ -27,6 +27,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy --config prisma.config.ts",
     "seed:base": "tsx --env-file-if-exists=.env prisma/seeds/seed-base.ts",
     "seed:dev": "tsx --env-file-if-exists=.env prisma/seeds/seed-dev.ts",
+    "seed:aseguradoras": "tsx --env-file-if-exists=.env prisma/seeds/seed-aseguradoras.ts",
     "db:reset:dev": "prisma migrate reset --config prisma.config.ts && npm run seed:dev"
   },
   "dependencies": {

@@ -1,6 +1,8 @@
 // Nombres del catálogo vigente (backend/prisma/seeds/catalogos.ts).
 // Este mapa sólo decide la apariencia: no define reglas del negocio ni depende de IDs.
 export const estadosVisuales = {
+  Activa: 'success',
+  'Dada de baja': 'neutral',
   'En tratamiento': 'info',
   'Esperando documentación': 'warning',
   'En pericia': 'warning',

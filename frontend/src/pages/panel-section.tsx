@@ -20,6 +20,7 @@ import {
   type PanelSection,
 } from '@/components/layout/panel-navigation'
 import { sectionIcons } from '@/components/layout/panel-icons'
+import { AseguradorasPage } from './aseguradoras'
 
 function SectionHeading({ section }: { section: PanelSection }) {
   const { usuario } = usePanel()
@@ -109,10 +110,6 @@ const emptyContent = {
   plantillas: {
     title: 'Los documentos que necesitás, a mano',
     text: 'Aquí podrás consultar las plantillas disponibles y descargarlas para trabajar en tus siniestros.',
-  },
-  aseguradoras: {
-    title: 'Un lugar para cada compañía',
-    text: 'Aquí encontrarás las aseguradoras y su información de contacto.',
   },
   ajustadores: {
     title: 'El equipo que acompaña los casos',
@@ -246,5 +243,6 @@ export function PanelSectionPage() {
   }
   if (path === 'dashboard') return <Dashboard />
   if (path === 'perfil') return <Profile />
+  if (path === 'aseguradoras') return <AseguradorasPage />
   return <ModuleSpace section={path} />
 }
