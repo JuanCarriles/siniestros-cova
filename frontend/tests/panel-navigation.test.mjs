@@ -15,19 +15,19 @@ test('gestor: sólo siniestros, plantillas y perfil; bloquea direcciones adminis
   assert.equal(initialSection('GESTOR'), 'siniestros')
 })
 
-test('administrador y superadministrador tienen las seis secciones solicitadas y perfil', () => {
+test('administrador y superadministrador tienen las siete secciones y perfil', () => {
   const expected = [
     'dashboard',
     'siniestros',
     'aseguradoras',
     'ajustadores',
     'usuarios',
+    'plantillas',
     'informes',
   ]
   for (const role of ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']) {
     assert.deepEqual(navigationFor(role), expected)
     for (const path of [...expected, 'perfil']) assert.equal(canOpenSection(role, path), true)
-    assert.equal(canOpenSection(role, 'plantillas'), false)
     assert.equal(initialSection(role), 'dashboard')
   }
 })

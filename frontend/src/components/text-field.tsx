@@ -1,4 +1,4 @@
-import { useId, type ComponentProps } from 'react'
+import { useId, type ComponentProps, type ReactNode } from 'react'
 import { CircleAlert } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,6 +9,8 @@ type TextFieldProps = ComponentProps<typeof Input> & {
   hint?: string
   error?: string
   containerClassName?: string
+  /** Control dentro del campo, a la derecha (p. ej. "Mostrar" en una contraseña). El input debe dejarle lugar con pr-*. */
+  accesorio?: ReactNode
 }
 
 export function TextField({
@@ -18,6 +20,7 @@ export function TextField({
   id,
   required,
   containerClassName,
+  accesorio,
   ...props
 }: TextFieldProps) {
   const generatedId = useId()
@@ -43,13 +46,18 @@ export function TextField({
           </span>
         )}
       </Label>
-      <Input
-        {...props}
-        id={fieldId}
-        required={required}
-        aria-describedby={description}
-        aria-invalid={error ? true : props['aria-invalid']}
-      />
+      <div className="relative">
+        <Input
+          {...props}
+          id={fieldId}
+          required={required}
+          aria-describedby={description}
+          aria-invalid={error ? true : props['aria-invalid']}
+        />
+        {accesorio && (
+          <div className="absolute inset-y-0 right-0 flex items-center">{accesorio}</div>
+        )}
+      </div>
       {hint && (
         <p id={`${fieldId}-hint`} className="text-sm text-muted-foreground">
           {hint}

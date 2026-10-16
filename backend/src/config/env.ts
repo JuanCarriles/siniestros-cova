@@ -11,6 +11,8 @@ const schema = z.object({
   // el navegador no envía cookies "secure" por http y el login no funcionaría.
   // "COOKIE_SECURE=" vacío en el .env cuenta como no definida
   COOKIE_SECURE: z.preprocess((v) => (v === '' ? undefined : v), z.stringbool().optional()),
+  // RNF-08: la sesión vence tras estas horas sin actividad (cada pedido la renueva)
+  SESSION_TTL_HOURS: z.coerce.number().positive().max(24).default(7),
 })
 
 const parsed = schema.safeParse(process.env)

@@ -109,8 +109,14 @@ const models = new Map(
   [...prisma.matchAll(/^model (\w+) \{([\s\S]*?)^\}/gm)].map((match) => [match[1], match[2]]),
 )
 
+// Tablas que solo usa el backend: no tienen alta ni edición desde la interfaz
+const internos = new Set(['Sesion'])
+
 test('cubre todas las entidades de Prisma sin modelos adicionales', () => {
-  assert.deepEqual(examples.map(([name]) => name).sort(), [...models.keys()].sort())
+  assert.deepEqual(
+    examples.map(([name]) => name).sort(),
+    [...models.keys()].filter((name) => !internos.has(name)).sort(),
+  )
 })
 
 for (const [name, example] of examples) {
@@ -353,5 +359,23 @@ test('baja y restauración: sólo admite pares consistentes', () => {
     { eliminado: true },
   ]) {
     assert.equal(schemas.bajaLogicaSchema.safeParse(input).success, false)
+  }
+})
+
+test('login: email válido y contraseña sin recortar; nada más', () => {
+  const login = { email: '  ana@example.com ', contrasena: ' clave con espacios ' }
+  assert.deepEqual(schemas.loginSchema.parse(login), {
+    email: 'ana@example.com',
+    contrasena: ' clave con espacios ',
+  })
+  for (const input of [
+    {},
+    { email: 'ana@example.com' },
+    { email: 'no-es-un-email', contrasena: 'x' },
+    { email: 'ana@example.com', contrasena: '' },
+    { email: 'ana@example.com', contrasena: '   ' },
+    { ...login, recordarme: true },
+  ]) {
+    assert.equal(schemas.loginSchema.safeParse(input).success, false)
   }
 })

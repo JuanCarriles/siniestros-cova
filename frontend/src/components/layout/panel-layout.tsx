@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router'
-import { ArrowRight, ChevronRight, Menu, UserRound } from 'lucide-react'
+import { Form, Link, NavLink, Outlet, useLocation, useNavigation } from 'react-router'
+import { ArrowRight, ChevronRight, LogOut, Menu, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { sectionIcons } from './panel-icons'
-import { navigationFor, roleLabels, sections } from './panel-navigation'
+import { canOpenSection, navigationFor, roleLabels, sections } from './panel-navigation'
 import type { PanelContext } from './panel-context'
 
 function Brand() {
@@ -88,15 +90,64 @@ function Sidebar({
             <UserRound className="size-6" aria-hidden="true" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block font-semibold">Mi perfil</span>
+            <span className="block font-semibold break-words">{usuario.nombre}</span>
             <span className="block text-sm break-words text-on-navy-muted">
-              {roleLabels[usuario.tipo]}
+              Mi perfil <span aria-hidden="true">·</span> {roleLabels[usuario.tipo]}
             </span>
           </span>
           <ChevronRight className="size-5 shrink-0" aria-hidden="true" />
         </NavLink>
+        <CerrarSesion />
       </div>
     </div>
+  )
+}
+
+// Pide confirmación antes de salir: un toque de más (frecuente con la pantalla ampliada) no debe cerrar la sesión.
+// Al confirmar, la action /salir (features/auth/sesion.ts) borra la sesión en el servidor y vuelve al login.
+function CerrarSesion() {
+  const navigation = useNavigation()
+  const saliendo = navigation.state !== 'idle' && navigation.formAction === '/salir'
+  const cancelar = useRef<HTMLButtonElement>(null)
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="mt-2 flex min-h-12 w-full items-center gap-3 rounded-lg px-3 py-2 font-medium text-on-navy-muted transition-colors hover:bg-sidebar-accent hover:text-on-navy focus-visible:outline-offset-0 focus-visible:outline-on-navy"
+        >
+          <LogOut className="size-6 shrink-0" aria-hidden="true" />
+          Cerrar sesión
+        </button>
+      </DialogTrigger>
+      <DialogContent
+        // El foco arranca en "Cancelar", la opción que no cambia nada
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          cancelar.current?.focus()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>¿Cerrar la sesión?</DialogTitle>
+          <DialogDescription>
+            Vas a salir del sistema. Para volver a entrar vas a necesitar tu email y tu contraseña.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button ref={cancelar} variant="outline" disabled={saliendo}>
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Form method="post" action="/salir">
+            <Button type="submit" loading={saliendo} className="w-full">
+              <LogOut aria-hidden="true" />
+              {saliendo ? 'Cerrando sesión…' : 'Cerrar sesión'}
+            </Button>
+          </Form>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -136,15 +187,14 @@ function MobileNavigation(props: PanelContext) {
   )
 }
 
-/** Recibe el usuario desde una sesión confiable. El selector de roles existe sólo en la vista previa DEV. */
+/** Recibe el usuario de la sesión (loader del panel en app/router.tsx). */
 export function PanelLayout({ usuario, basePath }: PanelContext) {
   const { pathname } = useLocation()
   const main = useRef<HTMLElement>(null)
   const previousPath = useRef(pathname)
   const section = pathname.slice(basePath.length + 1).split('/')[0]
-  const current = Object.hasOwn(sections, section)
-    ? sections[section as keyof typeof sections]
-    : null
+  // Una sección que el rol no puede abrir tampoco se nombra en el encabezado ni en el título de la pestaña
+  const current = canOpenSection(usuario.tipo, section) ? sections[section] : null
   useEffect(() => {
     document.title = `${current?.label ?? 'Sección no disponible'} · Estudio Cova`
     if (previousPath.current !== pathname) main.current?.focus()

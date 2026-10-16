@@ -126,8 +126,28 @@ model Usuario {
   lecturasMensajes    LecturaMensajeChat[]
   documentosSiniestro DocumentoSiniestro[]
   siniestros          Siniestro[]
+  sesiones            Sesion[]
 
   @@index([idDireccion])
+}
+
+/// Sesión iniciada (RNF-08). La cookie lleva un token al azar; acá solo se guarda su hash SHA-256, así que
+/// con una copia de la base no se puede entrar. Vence tras SESSION_TTL_HOURS sin actividad: cada pedido
+/// corre fechaVencimiento. Cerrar sesión o dar de baja al usuario borra las filas.
+model Sesion {
+  id               Int      @id @default(autoincrement())
+  tokenHash        String   @unique
+  idUsuario        Int
+  fechaCreacion    DateTime @default(now()) @db.Timestamptz(3)
+  ultimaActividad  DateTime @default(now()) @db.Timestamptz(3)
+  fechaVencimiento DateTime @db.Timestamptz(3)
+  ip               String?
+  navegador        String?
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@index([idUsuario])
+  @@index([fechaVencimiento])
 }
 
 model DocumentoPlantilla {
