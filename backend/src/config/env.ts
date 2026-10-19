@@ -4,6 +4,10 @@ import { z } from 'zod'
 // R2 se valida de forma diferida en config/r2.ts cuando se usa el almacenamiento.
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  RESEND_FROM: z.string().min(1).optional(),
+  MAIL_FROM: z.string().min(1).optional(),
+  RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().min(1).max(15).default(5),
   PORT: z.coerce.number().int().positive().default(3000),
   APP_URL: z.url().default('http://localhost:5173'),
   // Cookie de sesión solo por HTTPS. Sin definir: true en producción, false en desarrollo.

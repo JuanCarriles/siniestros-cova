@@ -6,6 +6,7 @@ import { rutaInicio, rutaVolverSegura } from '../sesion'
 
 // Por qué se llegó al login, cuando no fue por elección propia
 const motivos: Record<string, string> = {
+  'contrasena-actualizada': 'Tu contraseña se actualizó. Ingresá con la nueva contraseña.',
   'sesion-vencida':
     'Tu sesión se cerró después de 7 horas sin actividad. Volvé a ingresar para seguir.',
   salida: 'Cerraste la sesión.',
