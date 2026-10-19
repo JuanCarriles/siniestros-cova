@@ -2,6 +2,7 @@ import cookieParser from 'cookie-parser'
 import express, { Router } from 'express'
 import helmet from 'helmet'
 import { errorHandler, notFound } from './middlewares/errorHandler.ts'
+import { aseguradorasRouter } from './modules/aseguradoras/aseguradoras.module.ts'
 import { authRouter } from './modules/auth/auth.module.ts'
 import { healthRouter } from './modules/health/health.routes.ts'
 
@@ -19,10 +20,11 @@ const api = Router()
 
 api.use('/health', healthRouter)
 api.use('/auth', authRouter)
+api.use('/aseguradoras', aseguradorasRouter)
 
 // Los routers de cada módulo se montan acá. Las rutas protegidas usan requerirSesion y requerirRol
 // (ver modules/auth/auth.module.ts), por ejemplo:
-// api.use('/aseguradoras', aseguradorasRouter)
+// api.use('/ajustadores', ajustadoresRouter)
 
 app.use('/api', api)
 
