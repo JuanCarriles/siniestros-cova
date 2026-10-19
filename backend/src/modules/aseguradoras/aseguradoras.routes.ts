@@ -29,6 +29,10 @@ export function crearAseguradorasRouter(deps: {
     res.json(await servicio.listar(filtro === 'true'))
   })
 
+  router.get('/:id/ajustadores', async (req, res) => {
+    res.json(await servicio.listarAjustadores(idDe(req.params)))
+  })
+
   router.post('/', async (req, res) => {
     res.status(201).json(await servicio.crear(aseguradoraSchema.parse(req.body)))
   })

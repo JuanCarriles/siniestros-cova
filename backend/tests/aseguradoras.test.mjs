@@ -20,6 +20,15 @@ function datosPrueba() {
     { idAseguradora: 2, eliminado: false },
     { idAseguradora: 3, eliminado: true },
   ]
+  ajustadores.forEach((a, i) =>
+    Object.assign(a, {
+      id: i + 1,
+      nombres: 'Prueba',
+      apellidos: `Ajustador ${i + 1}`,
+      email: `ajustador${i + 1}@cova.invalid`,
+      telefono: '0',
+    }),
+  )
   let siguienteId = 4
   let escrituras = 0
   const conConteo = (fila) => ({
@@ -31,6 +40,19 @@ function datosPrueba() {
   const coincideNombre = (fila, where) =>
     !where.nombre || fila.nombre.toLowerCase() === where.nombre.equals.toLowerCase()
   const prisma = {
+    ajustador: {
+      async findMany({ where }) {
+        return ajustadores
+          .filter((a) => a.idAseguradora === where.idAseguradora && a.eliminado === where.eliminado)
+          .map(({ id, nombres, apellidos, email, telefono }) => ({
+            id,
+            nombres,
+            apellidos,
+            email,
+            telefono,
+          }))
+      },
+    },
     aseguradora: {
       async findMany({ where }) {
         return aseguradoras
@@ -53,6 +75,19 @@ function datosPrueba() {
         const fila = { id: siguienteId++, eliminado: false, fechaBaja: null, ...data }
         aseguradoras.push(fila)
         return conConteo(fila)
+      },
+      async updateMany({ where, data }) {
+        assert.deepEqual(where.ajustadores, { none: { eliminado: false } })
+        const fila = aseguradoras.find(
+          (f) =>
+            f.id === where.id &&
+            f.eliminado === where.eliminado &&
+            conConteo(f)._count.ajustadores === 0,
+        )
+        if (!fila) return { count: 0 }
+        escrituras++
+        Object.assign(fila, data)
+        return { count: 1 }
       },
       async update({ where, data }) {
         escrituras++
@@ -224,4 +259,61 @@ test('baja: solo sin ajustadores activos; conserva todo y se puede reactivar', a
   assert.equal(datos.aseguradoras[2].fechaBaja, null)
   assert.equal((await accion(3, 'reactivacion')).status, 409)
   assert.equal((await accion(99, 'reactivacion')).status, 404)
+})
+
+test('bloqueo: respuesta estructurada con cantidad actual y listado de los ajustadores que lo causan', async (t) => {
+  const datos = datosPrueba()
+  const api = await servidor(datos)
+  t.after(api.cerrar)
+  // Simula que se agrega otro ajustador después de haber cargado el listado en el cliente.
+  datos.ajustadores.push({
+    id: 5,
+    idAseguradora: 1,
+    eliminado: false,
+    nombres: 'Nuevo',
+    apellidos: 'Ajustador',
+    email: 'nuevo@cova.invalid',
+    telefono: '0',
+  })
+  const res = await api.pedir('admin', '/1/baja', { method: 'PATCH' })
+  assert.equal(res.status, 409)
+  const { details } = await res.json()
+  assert.deepEqual(details, {
+    codigo: 'ASEGURADORA_CON_AJUSTADORES',
+    idAseguradora: 1,
+    nombreAseguradora: 'Andina Seguros',
+    cantidadAjustadores: 2,
+  })
+  assert.equal(datos.escrituras, 0)
+  const listado = await (await api.pedir('admin', '/1/ajustadores')).json()
+  assert.deepEqual(listado.aseguradora, { id: 1, nombre: 'Andina Seguros' })
+  assert.deepEqual(
+    listado.ajustadores.map((a) => a.id),
+    [1, 5],
+  )
+  assert.equal(listado.ajustadores.length, details.cantidadAjustadores)
+})
+
+test('consulta de ajustadores: exige rol, valida id, no mezcla aseguradoras y permite lista vacía', async (t) => {
+  const api = await servidor(datosPrueba())
+  t.after(api.cerrar)
+  for (const [quien, estado] of [
+    [null, 401],
+    ['gestor', 403],
+    ['admin', 200],
+    ['super', 200],
+  ]) {
+    assert.equal((await api.pedir(quien, '/1/ajustadores')).status, estado)
+  }
+  assert.deepEqual((await (await api.pedir('admin', '/3/ajustadores')).json()).ajustadores, [])
+  assert.equal((await api.pedir('admin', '/99/ajustadores')).status, 404)
+  assert.equal((await api.pedir('admin', '/abc/ajustadores')).status, 400)
+})
+
+test('baja con id inexistente no produce escrituras', async (t) => {
+  const datos = datosPrueba()
+  const api = await servidor(datos)
+  t.after(api.cerrar)
+  assert.equal((await api.pedir('admin', '/99/baja', { method: 'PATCH' })).status, 404)
+  assert.equal(datos.escrituras, 0)
 })
