@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { AuthLayout } from '@/components/layout/auth-layout'
-import { RecuperacionHeader } from '@/components/layout/recuperacion-header'
+import { AuthLayout } from '../components/auth-layout'
+import { RecuperacionHeader } from '../components/recuperacion-header'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
@@ -10,7 +10,11 @@ import { SolicitarRecuperacionForm } from '../components/solicitar-recuperacion-
 import { VerificarCodigoForm } from '../components/verificar-codigo-form'
 import { NuevaContrasenaForm } from '../components/nueva-contrasena-form'
 
-const titulos = { 1: 'Recuperar contraseña', 2: 'Ingresá el código', 3: 'Definí tu contraseña' }
+const titulos = {
+  1: 'Recuperar contraseña',
+  2: 'Ingresá el código',
+  3: 'Creá una contraseña nueva',
+}
 function ocultarEmail(email: string) {
   const [nombre, dominio] = email.split('@')
   return `${nombre?.slice(0, 1)}•••@${dominio ?? ''}`
@@ -97,7 +101,7 @@ export function RecuperarContrasenaPage() {
             {paso === 2 && (
               <>
                 Si la cuenta está registrada y activa, recibirás un código de 6 dígitos en{' '}
-                <strong className="break-all">{ocultarEmail(email)}</strong>. Vence en{' '}
+                <strong className="whitespace-nowrap">{ocultarEmail(email)}</strong>. Vence en{' '}
                 {Math.ceil((respuesta?.vigenciaSegundos ?? 300) / 60)} minutos.
               </>
             )}
@@ -105,7 +109,7 @@ export function RecuperarContrasenaPage() {
               'Elegí una contraseña nueva. Al guardarla se cerrarán las sesiones anteriores de tu cuenta.'}
           </p>
           {error && (
-            <Aviso tipo="error" className="mt-5">
+            <Aviso tipo="error" enfocar className="mt-5">
               {error}
             </Aviso>
           )}

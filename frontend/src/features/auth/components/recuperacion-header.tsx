@@ -18,11 +18,15 @@ export function RecuperacionHeader({ paso, volver }: { paso: 1 | 2 | 3; volver?:
         </Button>
       )}
       <div className="mb-5 flex items-center gap-4" aria-label={`Paso ${paso} de 3`}>
-        <div className="grid w-28 grid-cols-3 gap-2" aria-hidden="true">
+        <div className="grid w-28 grid-cols-3 items-center gap-2" aria-hidden="true">
           {[1, 2, 3].map((n) => (
             <span
               key={n}
-              className={cn('h-1 rounded-full', n <= paso ? 'bg-primary' : 'bg-line')}
+              // Hecho: azul y grueso; pendiente: gris medio y fino (un gris claro casi no se veía sobre blanco)
+              className={cn(
+                'rounded-full',
+                n <= paso ? 'h-1.5 bg-primary' : 'h-0.5 bg-control-border',
+              )}
             />
           ))}
         </div>

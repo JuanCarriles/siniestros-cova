@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { CircleAlert } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
@@ -8,13 +9,17 @@ export function CodigoField({
   value,
   onChange,
   error,
+  invalido = false,
   disabled,
 }: {
   value: string
   onChange: (value: string) => void
   error?: string
+  /** Código rechazado por el servidor: casilleros en rojo, aunque el mensaje esté en el aviso de arriba */
+  invalido?: boolean
   disabled?: boolean
 }) {
+  const conError = !!error || invalido
   const id = useId()
   const [focus, setFocus] = useState(false)
   return (
@@ -27,7 +32,8 @@ export function CodigoField({
               key={n}
               className={cn(
                 'grid h-14 min-w-0 place-items-center rounded-md border-2 border-input bg-surface font-mono text-2xl font-semibold text-foreground',
-                error && 'border-destructive',
+                // Con error, además de rojo el borde es más grueso (se nota aunque no se distinga el color)
+                conError && 'border-[3px] border-destructive',
                 focus &&
                   Math.min(value.length, 5) === n &&
                   'border-ring outline-3 outline-offset-2 outline-ring',
@@ -47,7 +53,7 @@ export function CodigoField({
           value={value}
           disabled={disabled}
           required
-          aria-invalid={!!error}
+          aria-invalid={conError}
           aria-describedby={`${id}-ayuda${error ? ` ${id}-error` : ''}`}
           className="absolute inset-0 h-full w-full cursor-text opacity-0"
           onFocus={() => setFocus(true)}
@@ -63,7 +69,11 @@ export function CodigoField({
         Ingresá o pegá los 6 dígitos del correo.
       </p>
       {error && (
-        <p id={`${id}-error`} className="text-sm font-semibold text-destructive">
+        <p
+          id={`${id}-error`}
+          className="flex items-start gap-1.5 text-sm font-semibold text-destructive"
+        >
+          <CircleAlert className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           {error}
         </p>
       )}

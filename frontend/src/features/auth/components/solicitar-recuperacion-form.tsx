@@ -45,7 +45,11 @@ export function SolicitarRecuperacionForm({
       className="mt-6 grid gap-5"
       aria-busy={isSubmitting}
     >
-      {error && <Aviso tipo="error">{error}</Aviso>}
+      {error && (
+        <Aviso tipo="error" enfocar>
+          {error}
+        </Aviso>
+      )}
       <TextField
         label="Email"
         type="email"

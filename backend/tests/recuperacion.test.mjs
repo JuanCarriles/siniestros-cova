@@ -130,6 +130,14 @@ test('Zod: email, código exacto de 6 dígitos y confirmación de contraseña', 
       .success,
     false,
   )
+  // Mockup de CU-01: al menos 8 caracteres, una mayúscula y un número
+  const contrasena = (valor) =>
+    nuevaContrasenaSchema.safeParse({ contrasena: valor, confirmarContrasena: valor })
+  for (const valor of ['Corta1', 'sin mayuscula 1', 'Sin numero aca'])
+    assert.equal(contrasena(valor).success, false, valor)
+  assert.match(contrasena('Sin numero aca').error.issues[0].message, /un número/)
+  assert.equal(contrasena('Válida en 2026').success, true)
+  assert.equal(contrasena('Ñandú12345').success, true, 'mayúsculas con tilde o eñe')
 })
 test('solicitud: código de seis dígitos, vencimiento y sólo hashes en la base', async () => {
   const a = armar()
@@ -274,7 +282,10 @@ test('HTTP: respuesta genérica, cookie httpOnly y token ausente del JSON', asyn
     (
       await post(
         '/cambiar',
-        { contrasena: 'Una contraseña nueva', confirmarContrasena: 'Una contraseña nueva' },
+        {
+          contrasena: 'Una Contraseña nueva 2026',
+          confirmarContrasena: 'Una Contraseña nueva 2026',
+        },
         cookie,
       )
     ).status,
@@ -285,7 +296,7 @@ test('HTTP: respuesta genérica, cookie httpOnly y token ausente del JSON', asyn
   const token = verificada.headers.get('set-cookie').split(';')[0]
   const cambio = await post(
     '/cambiar',
-    { contrasena: 'Una contraseña nueva', confirmarContrasena: 'Una contraseña nueva' },
+    { contrasena: 'Una Contraseña nueva 2026', confirmarContrasena: 'Una Contraseña nueva 2026' },
     token,
   )
   assert.equal(cambio.status, 204)

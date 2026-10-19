@@ -1,6 +1,6 @@
 # Recuperación de contraseña
 
-Abrir `/login` y elegir «¿Olvidaste tu contraseña?». Las tres pantallas siguen el mockup de la página 11: correo, código y nueva contraseña. El marco compartido está en `frontend/src/components/layout/auth-layout.tsx`.
+Abrir `/login` y elegir «¿Olvidaste tu contraseña?». Las tres pantallas siguen el mockup de la página 11: correo, código y nueva contraseña. El marco compartido con el login está en `frontend/src/features/auth/components/auth-layout.tsx`. La contraseña nueva exige al menos 8 caracteres, una mayúscula y un número (mockup); la pantalla muestra esas reglas y marca las que se cumplen (`reglasContrasena` en `@cova/shared`).
 
 El backend expone POST `/api/auth/recuperacion/solicitar`, `/verificar` y `/cambiar`. La solicitud siempre responde 202 con el mismo mensaje para cuentas activas, ausentes y dadas de baja. Código y autorización vencen a los 5 minutos por defecto (`RESET_TOKEN_TTL_MINUTES`), con 5 intentos por código, 60 segundos entre reenvíos y límites adicionales por IP/email. Los límites por IP/email viven en el proceso actual; para varias réplicas deben compartir almacenamiento. Los intentos del código persisten en PostgreSQL.
 
@@ -16,4 +16,4 @@ Prueba manual: abrir dos sesiones del mismo usuario, solicitar el correo, ingres
 
 Pruebas automáticas: `npm run test:recuperacion -w backend`. Para incluir la prueba de PostgreSQL, desde `backend/`: definir `RECUPERACION_TEST_DB=1` y ejecutar `node --experimental-strip-types --env-file=.env --test tests/recuperacion.test.mjs`. La prueba crea y elimina solamente su usuario, dirección, sesiones y recuperación temporales; no envía correos reales ni cambia contraseñas existentes.
 
-El requisito de envío desde dominio propio queda pendiente hasta verificar el dominio en Resend, configurar un remitente de ese dominio y comprobar la entrega. Los errores de envío se registran sin códigos, tokens, destinatarios ni credenciales; el cliente recibe la misma respuesta genérica.
+El requisito de envío desde dominio propio queda pendiente hasta verificar el dominio en Resend, configurar un remitente de ese dominio y comprobar la entrega. Los errores de envío se registran con su motivo (falta la clave, Resend rechazó con tal estado, tiempo agotado) y sin códigos, tokens, destinatarios ni credenciales; el cliente recibe la misma respuesta genérica.

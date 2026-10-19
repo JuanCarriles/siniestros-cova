@@ -98,9 +98,10 @@ export function crearServicioRecuperacion(deps: {
       if (destinatario) {
         // No esperar al proveedor evita que el tiempo de envío revele si la cuenta existe.
         // El error se registra sin correo, código, tokens ni credenciales.
-        void enviarCorreo({ email: destinatario, codigo, minutos }).catch(() => {
+        // El motivo (falta la clave, Resend rechazó con tal estado, tiempo agotado) no incluye datos sensibles
+        void enviarCorreo({ email: destinatario, codigo, minutos }).catch((error: unknown) => {
           console.error(
-            'No se pudo enviar el correo de recuperación con Resend. Revisar el panel del proveedor.',
+            `No se pudo enviar el correo de recuperación: ${error instanceof Error ? error.message : 'error desconocido'}`,
           )
         })
       }

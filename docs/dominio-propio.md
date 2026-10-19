@@ -131,7 +131,7 @@ docker compose exec certbot certbot delete --cert-name 203-0-113-10.sslip.io
 1. En Resend, agregar el dominio (**Domains → Add domain**). Resend muestra unos registros DNS (SPF, DKIM y,
    opcionalmente, DMARC).
 2. Crearlos en el panel de DNS del dominio y esperar a que Resend lo marque como verificado.
-3. En `backend/.env` del VPS, `MAIL_FROM="Estudio Cova <no-reply@midominio.com.ar>"`, y aplicarlo con
+3. En `backend/.env` del VPS, `RESEND_FROM="Estudio Cova <no-reply@midominio.com.ar>"`, y aplicarlo con
    `docker compose up -d --wait backend`.
 
 ---

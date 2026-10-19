@@ -45,11 +45,20 @@ export function VerificarCodigoForm({
           .finally(() => setEnviando(false))
       }}
     >
-      {error && <Aviso tipo="error">{error}</Aviso>}
+      {error && (
+        // Como en el login: el foco va al aviso, así con la pantalla ampliada el zoom llega al mensaje
+        <Aviso tipo="error" enfocar>
+          {error}
+        </Aviso>
+      )}
       <CodigoField
         value={codigo}
-        onChange={setCodigo}
+        onChange={(valor) => {
+          setCodigo(valor)
+          setError(null)
+        }}
         error={errorCodigo}
+        invalido={!!error}
         disabled={enviando || reenviando}
       />
       <Button type="submit" size="lg" loading={enviando} disabled={reenviando} className="w-full">

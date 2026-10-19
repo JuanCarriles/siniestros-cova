@@ -27,11 +27,22 @@ export const solicitarRecuperacionSchema = z.strictObject({ email: emailSchema }
 export const verificarCodigoSchema = z.strictObject({
   codigo: z.string().regex(/^\d{6}$/, 'Ingresá los 6 dígitos del código'),
 })
+// Reglas de una contraseña nueva (mockup de CU-01, paso 3). La pantalla las muestra como lista y marca las que ya
+// se cumplen; el esquema las exige con el mismo texto.
+export const reglasContrasena = [
+  { texto: 'Al menos 8 caracteres', cumple: (valor: string) => valor.length >= 8 },
+  { texto: 'Una letra mayúscula', cumple: (valor: string) => /\p{Lu}/u.test(valor) },
+  { texto: 'Un número', cumple: (valor: string) => /\d/.test(valor) },
+] as const
+
+export const contrasenaNuevaSchema = reglasContrasena.reduce(
+  (esquema, regla) => esquema.refine(regla.cumple, `Falta: ${regla.texto.toLowerCase()}`),
+  contrasenaSchema.max(128, 'Usá hasta 128 caracteres'),
+)
+
 export const nuevaContrasenaSchema = z
   .strictObject({
-    contrasena: contrasenaSchema
-      .min(8, 'Usá al menos 8 caracteres')
-      .max(128, 'Usá hasta 128 caracteres'),
+    contrasena: contrasenaNuevaSchema,
     confirmarContrasena: z.string().max(128),
   })
   .refine((datos) => datos.contrasena === datos.confirmarContrasena, {

@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from 'react'
+import { useEffect, useRef, type ReactNode, type Ref } from 'react'
 import { CircleAlert, CircleCheck, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -9,17 +9,29 @@ export function Aviso({
   tipo,
   children,
   className,
+  enfocar = false,
   ref,
 }: {
   tipo: 'error' | 'info' | 'exito'
   children: ReactNode
   className?: string
+  /** Mover el foco al aviso cuando aparece o cambia su texto (errores que devuelve el servidor) */
+  enfocar?: boolean
   ref?: Ref<HTMLDivElement>
 }) {
+  const propio = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (enfocar) propio.current?.focus()
+  }, [enfocar, children])
+
   const Icono = { error: CircleAlert, info: Info, exito: CircleCheck }[tipo]
   return (
     <div
-      ref={ref}
+      ref={(elemento) => {
+        propio.current = elemento
+        if (typeof ref === 'function') ref(elemento)
+        else if (ref) ref.current = elemento
+      }}
       tabIndex={-1}
       role={tipo === 'error' ? 'alert' : 'status'}
       className={cn(
