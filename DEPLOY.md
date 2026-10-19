@@ -234,6 +234,16 @@ curl -s http://127.0.0.1:3000/api/health
 
 Tiene que devolver `"db":"ok"`. Desde el navegador: `http://DOMINIO/api/health`.
 
+**7. Crear el primer superadministrador.** La base de producción arranca sin usuarios (la seed de desarrollo no corre
+en producción: sus contraseñas están en el repo):
+
+```
+docker compose exec backend node dist/crear-superadmin.mjs EMAIL "NOMBRES" "APELLIDOS"
+```
+
+Muestra una contraseña generada al azar **una sola vez**: guardala en el gestor de contraseñas. Documento y teléfono
+quedan como `PENDIENTE`; se corrigen desde "Mi perfil". Si ya hay un superadministrador, no hace nada.
+
 ---
 
 ## 5. HTTPS

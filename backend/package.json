@@ -19,6 +19,7 @@
     "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs",
     "test:aseguradoras": "node --experimental-strip-types --test tests/aseguradoras.test.mjs",
     "test:aseguradoras:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/aseguradoras.db.test.mjs",
+    "test:usuarios": "node --experimental-strip-types --test tests/primer-superadmin.test.mjs",
     "test:r2": "node --experimental-strip-types --test tests/r2.test.mjs",
     "r2:smoke": "tsx --env-file=.env src/scripts/probar-r2.ts",
     "r2:demo": "tsx --env-file=.env src/dev/r2-demo/server.ts",
@@ -29,6 +30,7 @@
     "prisma:migrate:dev": "prisma migrate dev --config prisma.config.ts",
     "prisma:migrate:deploy": "prisma migrate deploy --config prisma.config.ts",
     "seed:base": "tsx --env-file-if-exists=.env prisma/seeds/seed-base.ts",
+    "crear-superadmin": "tsx --env-file-if-exists=.env src/scripts/crear-superadmin.ts",
     "seed:dev": "tsx --env-file-if-exists=.env prisma/seeds/seed-dev.ts",
     "db:reset:dev": "prisma migrate reset --config prisma.config.ts && npm run seed:dev"
   },
