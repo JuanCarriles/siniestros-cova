@@ -16,6 +16,7 @@
     "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc",
     "lint": "eslint .",
+    "test:recuperacion": "node --experimental-strip-types --test tests/recuperacion.test.mjs",
     "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs",
     "test:aseguradoras": "node --experimental-strip-types --test tests/aseguradoras.test.mjs",
     "test:aseguradoras:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/aseguradoras.db.test.mjs",

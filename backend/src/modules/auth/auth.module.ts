@@ -1,3 +1,7 @@
+import { crearCorreoRecuperacion } from '../../lib/correo-recuperacion.ts'
+import { baseRecuperacion } from './recuperacion.prisma.ts'
+import { crearServicioRecuperacion } from './recuperacion.service.ts'
+import { crearRecuperacionRouter } from './recuperacion.routes.ts'
 import { env } from '../../config/env.ts'
 import { getPrisma } from '../../lib/prisma.ts'
 import { crearRequerirSesion } from '../../middlewares/autenticar.ts'
@@ -46,3 +50,13 @@ const auth = crearServicioAuth({
 })
 
 export const authRouter = crearAuthRouter({ auth, sesiones, requerirSesion })
+
+const recuperacion = crearServicioRecuperacion({
+  base: baseRecuperacion,
+  minutos: env.RESET_TOKEN_TTL_MINUTES,
+  enviarCorreo: crearCorreoRecuperacion({
+    apiKey: env.RESEND_API_KEY,
+    remitente: env.RESEND_FROM ?? env.MAIL_FROM ?? 'Estudio Cova <onboarding@resend.dev>',
+  }),
+})
+authRouter.use('/recuperacion', crearRecuperacionRouter(recuperacion))

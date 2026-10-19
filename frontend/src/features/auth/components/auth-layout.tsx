@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-// Marco de las pantallas de acceso (login y, más adelante, los pasos de recuperar contraseña): marca del
+// Marco de las pantallas de acceso (login y los tres pasos de recuperar contraseña): marca del
 // estudio, una tarjeta con el formulario y el pie. En celular la tarjeta ocupa todo el ancho con 16 px de margen.
 export function AuthLayout({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
