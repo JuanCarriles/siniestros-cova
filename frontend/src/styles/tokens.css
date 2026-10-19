@@ -134,4 +134,7 @@
   --color-sidebar-accent-foreground: var(--color-on-navy);
   --color-sidebar-border: var(--color-navy-active);
   --color-sidebar-ring: var(--color-focus);
+  /* Encabezado de las tablas: franja gris azulada con títulos en azul y línea azul debajo */
+  --color-table-head: var(--color-damage-header);
+  --color-table-head-foreground: var(--color-navy);
 }

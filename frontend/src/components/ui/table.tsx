@@ -47,7 +47,10 @@ function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
   return (
     <thead
       data-slot="table-header"
-      className={cn('[&_tr]:border-b-2 [&_tr]:border-line-strong', className)}
+      className={cn(
+        '[&_tr]:border-b-[3px] [&_tr]:border-table-head-foreground [&_tr]:hover:bg-transparent',
+        className,
+      )}
       {...props}
     />
   )
@@ -76,15 +79,15 @@ function TableFooter({ className, ...props }: React.ComponentProps<'tfoot'>) {
   )
 }
 
-// Filas alternas para seguir una fila con la vista, resaltado bajo el puntero y fila seleccionada con fondo
-// azul y una barra a la izquierda (se distingue aunque no se perciba bien el color).
-// Para marcarla: <TableRow data-state="selected">.
+// Filas blancas separadas por una línea (como en los mockups: con filas alternas grises el encabezado se
+// confundía con los datos), resaltado bajo el puntero y fila seleccionada con fondo azul y una barra a la
+// izquierda (se distingue aunque no se perciba bien el color). Para marcarla: <TableRow data-state="selected">.
 function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
   return (
     <tr
       data-slot="table-row"
       className={cn(
-        'border-b border-line-strong transition-colors odd:bg-surface even:bg-row-alt hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected data-[state=selected]:shadow-[inset_4px_0_0_var(--color-navy)]',
+        'border-b border-line bg-surface transition-colors hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected data-[state=selected]:shadow-[inset_4px_0_0_var(--color-navy)]',
         className,
       )}
       {...props}
@@ -97,7 +100,10 @@ function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
     <th
       data-slot="table-head"
       className={cn(
-        'bg-muted px-4 py-4 text-left align-middle text-base font-semibold whitespace-normal text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
+        // Franja propia del encabezado, bien distinta del cuerpo: fondo gris azulado, títulos en azul y en
+        // mayúsculas, y línea azul gruesa abajo (en TableHeader). A 16 px (no a 11 px como en el mockup) para
+        // que se lean.
+        'bg-table-head px-4 py-3.5 text-left align-middle text-sm font-bold tracking-[0.06em] whitespace-normal text-table-head-foreground uppercase [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
         className,
       )}
       {...props}
@@ -110,7 +116,7 @@ function TableCell({ className, ...props }: React.ComponentProps<'td'>) {
     <td
       data-slot="table-cell"
       className={cn(
-        'px-4 py-3 align-middle whitespace-normal [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
+        'px-4 py-4 align-middle whitespace-normal [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
         className,
       )}
       {...props}

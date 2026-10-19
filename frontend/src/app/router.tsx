@@ -1,8 +1,10 @@
 import type { ComponentType } from 'react'
-import { createBrowserRouter, type RouteObject } from 'react-router'
+import { createBrowserRouter, type LoaderFunction, type RouteObject } from 'react-router'
 import type { PanelSection } from '@/components/layout/panel-navigation'
 import { SeccionNoDisponible } from '@/components/layout/seccion-no-disponible'
 import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
+import { cargarAseguradoras } from '@/features/aseguradoras/loader'
+import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { RecuperarContrasenaPage } from '@/features/auth/pages/recuperar-contrasena-page'
 import {
@@ -40,11 +42,16 @@ const secciones: Record<PanelSection, ComponentType> = {
   dashboard: DashboardPage,
   siniestros: () => <SeccionPendiente section="siniestros" />,
   plantillas: () => <SeccionPendiente section="plantillas" />,
-  aseguradoras: () => <SeccionPendiente section="aseguradoras" />,
+  aseguradoras: AseguradorasPage,
   ajustadores: () => <SeccionPendiente section="ajustadores" />,
   usuarios: () => <SeccionPendiente section="usuarios" />,
   informes: () => <SeccionPendiente section="informes" />,
   perfil: PerfilPage,
+}
+
+// Loader propio de las secciones que traen datos. Tiene que llamar a requerirSeccion antes de pedirlos.
+const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
+  aseguradoras: cargarAseguradoras,
 }
 
 export const router = createBrowserRouter([
@@ -72,7 +79,8 @@ export const router = createBrowserRouter([
             children: [
               ...Object.entries(secciones).map(([seccion, Component]): RouteObject => ({
                 path: seccion,
-                loader: requerirSeccion(seccion as PanelSection),
+                loader:
+                  loaders[seccion as PanelSection] ?? requerirSeccion(seccion as PanelSection),
                 Component,
               })),
               { path: '*', Component: SeccionNoDisponible },
