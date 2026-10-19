@@ -112,7 +112,9 @@ export function crearServicioAseguradoras(prisma: BaseAseguradoras) {
         }
         throw new HttpError(
           409,
-          `No se puede dar de baja: tiene ${cantidad} ${cantidad === 1 ? 'ajustador activo' : 'ajustadores activos'}. Primero dalos de baja o pasalos a otra aseguradora.`,
+          cantidad === 1
+            ? 'No se puede dar de baja: tiene 1 ajustador activo. Primero dalo de baja o pasalo a otra aseguradora.'
+            : `No se puede dar de baja: tiene ${cantidad} ajustadores activos. Primero dalos de baja o pasalos a otra aseguradora.`,
           bloqueo,
         )
       }

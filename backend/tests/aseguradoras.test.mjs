@@ -244,7 +244,10 @@ test('baja: solo sin ajustadores activos; conserva todo y se puede reactivar', a
   // Andina tiene 1 ajustador activo (el dado de baja no cuenta)
   let respuesta = await accion(1, 'baja')
   assert.equal(respuesta.status, 409)
-  assert.match((await respuesta.json()).error, /tiene 1 ajustador activo/)
+  assert.match(
+    (await respuesta.json()).error,
+    /tiene 1 ajustador activo\. Primero dalo de baja o pasalo/,
+  )
   assert.equal(datos.aseguradoras[0].eliminado, false)
 
   // Mutual Pampeana solo tiene un ajustador dado de baja

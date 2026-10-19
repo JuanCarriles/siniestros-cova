@@ -38,13 +38,15 @@ export function AjustadoresAseguradoraPage() {
           <ChevronLeft aria-hidden="true" /> Volver a aseguradoras
         </Link>
       </Button>
-      <SectionHeading section="ajustadores" />
-      <p className="mb-6 rounded-lg border bg-surface px-5 py-4 text-muted-foreground">
-        Ajustadores activos de <strong className="text-primary">{aseguradora.nombre}</strong>.
-        {ajustadores.length > 0
-          ? ' Estos registros impiden dar de baja la aseguradora.'
-          : ' Ya no tiene ajustadores activos que impidan darla de baja.'}
-      </p>
+      <SectionHeading
+        section="ajustadores"
+        titulo={`Ajustadores de ${aseguradora.nombre}`}
+        descripcion={
+          ajustadores.length > 0
+            ? 'Los ajustadores activos de esta aseguradora. Mientras tenga alguno, no se la puede dar de baja.'
+            : 'Ya no tiene ajustadores activos: se la puede dar de baja.'
+        }
+      />
       <BarraAbm
         busqueda={busqueda}
         onBusqueda={setBusqueda}

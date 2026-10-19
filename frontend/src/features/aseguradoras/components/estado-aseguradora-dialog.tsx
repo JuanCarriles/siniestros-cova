@@ -30,6 +30,7 @@ export function EstadoAseguradoraDialog({
   cambio,
   onCerrar,
   onHecho,
+  onDesactualizada,
 }: {
   /** Separado de "cambio": al cerrar, el contenido no cambia durante la animación de salida */
   abierto: boolean
@@ -38,6 +39,8 @@ export function EstadoAseguradoraDialog({
   cambio: CambioEstado | null
   onCerrar: () => void
   onHecho: (mensaje: string) => void
+  /** El servidor rechazó la baja por ajustadores que la lista no mostraba: hay que volver a cargarla */
+  onDesactualizada?: () => void
 }) {
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,6 +70,7 @@ export function EstadoAseguradoraDialog({
       )
       if (err instanceof ApiError && err.status === 409 && datos.success) {
         setBloqueoServidor(datos.data)
+        onDesactualizada?.()
       } else {
         setError(err instanceof ApiError ? err.message : 'No se pudo completar. Probá de nuevo.')
       }
@@ -115,7 +119,9 @@ export function EstadoAseguradoraDialog({
           </DialogTitle>
           <DialogDescription>
             {bloqueada
-              ? `Tiene ${ajustadores} ${ajustadores === 1 ? 'ajustador activo' : 'ajustadores activos'}. Primero dalos de baja o pasalos a otra aseguradora desde Ajustadores.`
+              ? ajustadores === 1
+                ? 'Tiene 1 ajustador activo. Primero dalo de baja o pasalo a otra aseguradora desde Ajustadores.'
+                : `Tiene ${ajustadores} ajustadores activos. Primero dalos de baja o pasalos a otra aseguradora desde Ajustadores.`
               : cambio?.tipo === 'baja'
                 ? 'No se va a poder elegir para ajustadores ni siniestros nuevos. Sus siniestros se conservan y podés reactivarla cuando quieras.'
                 : 'Vuelve a estar disponible para asignar ajustadores y siniestros.'}
