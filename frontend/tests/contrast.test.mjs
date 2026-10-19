@@ -43,6 +43,8 @@ test('texto principal supera 7:1 y texto secundario/estados superan 4.5:1', () =
     ['warning-ink', 'warning-bg'],
     ['danger-ink', 'danger-bg'],
     ['neutral-ink', 'neutral-bg'],
+    // Encabezado de las tablas
+    ['table-head-foreground', 'table-head'],
     ['destructive', 'surface'],
     ['owner-ink', 'owner-bg'],
     ['injury-ink', 'injury-bg'],

@@ -93,6 +93,8 @@ Importar desde `@/components/ui/*`. La configuración de shadcn está en `compon
 | `Dialog`                      | Modal con Title, Description, Content y Footer. Content acepta `size="default"` (600 px) o `size="wide"` (768 px), limitado por el viewport.                                                                                                 |
 | `Table`                       | Componer cabecera, cuerpo y filas; dar nombres a acciones y columnas. Fila seleccionada: `<TableRow data-state="selected">`. `containerLabel` nombra la región cuando se desplaza. `TableEmpty` muestra ausencia de resultados.              |
 | `Badge`, `EstadoChip`         | Etiquetas con variantes semánticas. `EstadoChip` centraliza el color del estado y conserva el texto recibido.                                                                                                                                |
+| `DropdownMenu`                | Menú desplegable (Trigger, Content, Item, Separator). Opciones de 48 px; `peligro` en el Item pinta en rojo una baja o un borrado.                                                                                                           |
+| `Aviso`                       | Mensaje arriba de un formulario o listado: `tipo="error"`, `"info"` o `"exito"`. Con ícono y borde grueso; puede recibir el foco.                                                                                                            |
 
 ```tsx
 import { Button } from '@/components/ui/button'
@@ -108,6 +110,21 @@ import { EstadoChip } from '@/components/estado-chip'
 `Button asChild` sirve para enlaces activos. No admite `disabled` ni `loading`, porque un enlace no implementa la deshabilitación nativa de un botón. Para botones que solo contienen un icono, proporcionar `aria-label`.
 
 `src/lib/estados-visuales.ts` contempla los nombres del seed actual de Prisma. Un estado desconocido usa un estilo neutral; no se cambian IDs, reglas de negocio ni catálogos de la base. El HTML tiene nombres adicionales o distintos y no define por sí solo el catálogo real.
+
+## Pantallas ABM (altas, bajas y modificaciones)
+
+Aseguradoras, ajustadores, usuarios y plantillas comparten la misma estructura (mockups de CU-02 a CU-05). Las piezas
+están en `src/components/abm/`; `src/features/aseguradoras/pages/aseguradoras-page.tsx` es el ejemplo completo.
+
+| Componente       | Qué resuelve                                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `BarraAbm`       | Buscador, "Mostrar dadas de baja" y botón de alta, sobre el fondo de la página (fuera de la tarjeta).                             |
+| `ListadoAbm`     | Tarjeta del listado: "6 aseguradoras" con su resumen, aviso del último cambio, contenido y nota al pie.                           |
+| `TablaAbm`       | Recibe `columnas` y `acciones`: tabla desde 768 px; en celular, una tarjeta por fila. Una columna `principal` es el título.       |
+| `MenuAcciones`   | Menú ⋮ de cada fila. `onSelect` recibe el botón ⋮: pasarlo al diálogo (`elementoAlCerrar`) para que el foco vuelva ahí al cerrar. |
+| `EstadoRegistro` | "Activa / Dada de baja desde 15/08/2026" (`genero="masculino"` para "Activo / Dado de baja").                                     |
+
+Para buscar sin importar tildes ni mayúsculas: `normalizarBusqueda` (`src/lib/texto.ts`).
 
 ## Verificación
 

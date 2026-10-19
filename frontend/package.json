@@ -11,7 +11,7 @@
     "typecheck": "tsc -b",
     "prebuild": "npm run check:tokens",
     "check:tokens": "node scripts/check-tokens.mjs",
-    "test:design": "node --test tests/*.test.mjs"
+    "test:design": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "@cova/shared": "*",

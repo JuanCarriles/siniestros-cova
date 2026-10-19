@@ -11,7 +11,11 @@ EstadoSiniestro, Siniestro y LecturaMensajeChat.
 
 Se conservan exactamente las siete enumeraciones solicitadas: TipoUsuario,
 TipoNotificacion, TipoEventoHistorial, TipoPerito, RolAccidente, UsoVehiculo y
-TipoLesion. No se agregaron entidades de sesión ni tokens.
+TipoLesion.
+
+`Sesion` (migración `20261016173654_sesiones`, historia E1-01) guarda las sesiones iniciadas: el hash
+SHA-256 del token de la cookie, nunca el token, y su vencimiento por inactividad (RNF-08). Es una tabla
+interna del backend: no tiene esquema Zod de alta en `@cova/shared`. Ver `src/modules/auth/`.
 
 Prisma CLI, Client y el adaptador PostgreSQL están fijados en 7.10.0. Se requiere
 Node >=22.12.0 (usar una versión LTS compatible con Prisma). La configuración

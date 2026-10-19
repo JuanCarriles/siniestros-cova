@@ -1,5 +1,24 @@
-import { createBrowserRouter, Link, type RouteObject } from 'react-router'
-import { Button } from '@/components/ui/button'
+import type { ComponentType } from 'react'
+import { createBrowserRouter, type LoaderFunction, type RouteObject } from 'react-router'
+import type { PanelSection } from '@/components/layout/panel-navigation'
+import { SeccionNoDisponible } from '@/components/layout/seccion-no-disponible'
+import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
+import { cargarAseguradoras } from '@/features/aseguradoras/loader'
+import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
+import { LoginPage } from '@/features/auth/pages/login-page'
+import { RecuperarContrasenaPage } from '@/features/auth/pages/recuperar-contrasena-page'
+import {
+  cargarPanel,
+  irAInicio,
+  redirigirSiHaySesion,
+  requerirSeccion,
+  salir,
+} from '@/features/auth/sesion'
+import { DashboardPage } from '@/features/dashboard/pages/dashboard-page'
+import { PerfilPage } from '@/features/perfil/pages/perfil-page'
+import { ErrorPagina } from '@/pages/error-pagina'
+import { Panel } from './panel'
+import { Raiz } from './raiz'
 
 const developmentRoutes: RouteObject[] = import.meta.env.DEV
   ? [
@@ -18,28 +37,59 @@ const developmentRoutes: RouteObject[] = import.meta.env.DEV
     ]
   : []
 
-// Las rutas de cada feature (login, siniestros, aseguradoras…) se registran acá a medida que se construyen.
+// Página de cada sección del panel. Cada historia reemplaza su SeccionPendiente por la página real de la feature.
+const secciones: Record<PanelSection, ComponentType> = {
+  dashboard: DashboardPage,
+  siniestros: () => <SeccionPendiente section="siniestros" />,
+  plantillas: () => <SeccionPendiente section="plantillas" />,
+  aseguradoras: AseguradorasPage,
+  ajustadores: () => <SeccionPendiente section="ajustadores" />,
+  usuarios: () => <SeccionPendiente section="usuarios" />,
+  informes: () => <SeccionPendiente section="informes" />,
+  perfil: PerfilPage,
+}
+
+// Loader propio de las secciones que traen datos. Tiene que llamar a requerirSeccion antes de pedirlos.
+const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
+  aseguradoras: cargarAseguradoras,
+}
+
 export const router = createBrowserRouter([
   {
-    path: '/',
-    element: (
-      <main className="grid min-h-screen place-items-center p-4">
-        <div className="flex items-center gap-3 rounded-lg border border-line bg-surface p-6 shadow-card">
-          <div className="grid size-10 place-items-center rounded-md bg-brand-accent font-bold text-foreground">
-            EC
-          </div>
-          <div>
-            <p className="text-base font-bold text-navy">Estudio Cova</p>
-            <p className="text-muted-foreground">Sistema de gestión de siniestros</p>
-            {import.meta.env.DEV && (
-              <Button asChild variant="link" size="sm" className="mt-2 px-0">
-                <Link to="/sistema-diseno">Ver sistema de diseño</Link>
-              </Button>
-            )}
-          </div>
-        </div>
-      </main>
-    ),
+    Component: Raiz,
+    errorElement: <ErrorPagina />,
+    children: [
+      // Pantallas de acceso: sin sesión
+      { path: '/login', loader: redirigirSiHaySesion, Component: LoginPage },
+      { path: '/recuperar-contrasena', Component: RecuperarContrasenaPage },
+      { path: '/salir', action: salir },
+
+      // Panel: exige sesión. Cada sección controla el rol en su loader antes de mostrarse.
+      {
+        id: 'panel',
+        path: '/',
+        loader: cargarPanel,
+        Component: Panel,
+        errorElement: <ErrorPagina />,
+        children: [
+          { index: true, loader: irAInicio },
+          {
+            // Sin path: sus errores (403 por rol, fallas al cargar) se muestran dentro del panel, con el menú
+            errorElement: <SeccionNoDisponible />,
+            children: [
+              ...Object.entries(secciones).map(([seccion, Component]): RouteObject => ({
+                path: seccion,
+                loader:
+                  loaders[seccion as PanelSection] ?? requerirSeccion(seccion as PanelSection),
+                Component,
+              })),
+              { path: '*', Component: SeccionNoDisponible },
+            ],
+          },
+        ],
+      },
+
+      ...developmentRoutes,
+    ],
   },
-  ...developmentRoutes,
 ])
