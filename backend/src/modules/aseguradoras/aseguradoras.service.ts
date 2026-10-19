@@ -1,8 +1,12 @@
-import type { AseguradoraData, AseguradoraUpdateData } from '@cova/shared/schemas/aseguradoras'
+import type {
+  AseguradoraData,
+  AseguradoraUpdateData,
+  BloqueoBajaAseguradora,
+} from '@cova/shared/schemas/aseguradoras'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 
-type BaseAseguradoras = Pick<Prisma.TransactionClient, 'aseguradora'>
+type BaseAseguradoras = Pick<Prisma.TransactionClient, 'aseguradora' | 'ajustador'>
 
 // Solo los ajustadores activos cuentan: los dados de baja no impiden dar de baja la aseguradora
 const detalle = {
@@ -79,21 +83,45 @@ export function crearServicioAseguradoras(prisma: BaseAseguradoras) {
       )
     },
 
-    // CU-02 3.a: solo sin ajustadores activos. Sus siniestros y vehículos se conservan.
+    async listarAjustadores(id: number) {
+      const aseguradora = await buscar(id)
+      const ajustadores = await prisma.ajustador.findMany({
+        where: { idAseguradora: id, eliminado: false },
+        select: { id: true, nombres: true, apellidos: true, email: true, telefono: true },
+        orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }, { id: 'asc' }],
+      })
+      return { aseguradora: { id: aseguradora.id, nombre: aseguradora.nombre }, ajustadores }
+    },
+
+    // El predicado y la baja se ejecutan en una sola sentencia: no confiar en un conteo previo del cliente.
     async darDeBaja(id: number) {
+      const resultado = await prisma.aseguradora.updateMany({
+        where: { id, eliminado: false, ajustadores: { none: { eliminado: false } } },
+        data: { eliminado: true, fechaBaja: new Date() },
+      })
+      if (resultado.count === 1) return
       const actual = await buscar(id)
       if (actual.eliminado) throw new HttpError(409, 'La aseguradora ya está dada de baja.')
       const cantidad = actual._count.ajustadores
       if (cantidad > 0) {
+        const bloqueo: BloqueoBajaAseguradora = {
+          codigo: 'ASEGURADORA_CON_AJUSTADORES',
+          idAseguradora: actual.id,
+          nombreAseguradora: actual.nombre,
+          cantidadAjustadores: cantidad,
+        }
         throw new HttpError(
           409,
-          `No se puede dar de baja: tiene ${cantidad} ${cantidad === 1 ? 'ajustador activo' : 'ajustadores activos'}. Primero dalos de baja o pasalos a otra aseguradora.`,
+          cantidad === 1
+            ? 'No se puede dar de baja: tiene 1 ajustador activo. Primero dalo de baja o pasalo a otra aseguradora.'
+            : `No se puede dar de baja: tiene ${cantidad} ajustadores activos. Primero dalos de baja o pasalos a otra aseguradora.`,
+          bloqueo,
         )
       }
-      await prisma.aseguradora.update({
-        where: { id },
-        data: { eliminado: true, fechaBaja: new Date() },
-      })
+      throw new HttpError(
+        409,
+        'Los datos de la aseguradora cambiaron. Actualizá el listado e intentá nuevamente.',
+      )
     },
 
     // CU-02 3.c

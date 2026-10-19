@@ -1,3 +1,4 @@
+import { ajustadoresAseguradoraSchema } from '@cova/shared/schemas/aseguradoras'
 import type { AseguradoraData, AseguradoraListado } from '@cova/shared/schemas/aseguradoras'
 import { api } from '@/lib/api'
 
@@ -23,4 +24,8 @@ export function darDeBajaAseguradora(id: number): Promise<void> {
 
 export function reactivarAseguradora(id: number): Promise<void> {
   return api(`/aseguradoras/${id}/reactivacion`, { method: 'PATCH' })
+}
+
+export async function listarAjustadoresAseguradora(id: number) {
+  return ajustadoresAseguradoraSchema.parse(await api<unknown>(`/aseguradoras/${id}/ajustadores`))
 }

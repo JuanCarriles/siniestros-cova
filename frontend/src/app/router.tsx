@@ -3,7 +3,8 @@ import { createBrowserRouter, type LoaderFunction, type RouteObject } from 'reac
 import type { PanelSection } from '@/components/layout/panel-navigation'
 import { SeccionNoDisponible } from '@/components/layout/seccion-no-disponible'
 import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
-import { cargarAseguradoras } from '@/features/aseguradoras/loader'
+import { AjustadoresAseguradoraPage } from '@/features/aseguradoras/pages/ajustadores-aseguradora-page'
+import { cargarAseguradoras, cargarAjustadoresAseguradora } from '@/features/aseguradoras/loader'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { RecuperarContrasenaPage } from '@/features/auth/pages/recuperar-contrasena-page'
@@ -77,6 +78,11 @@ export const router = createBrowserRouter([
             // Sin path: sus errores (403 por rol, fallas al cargar) se muestran dentro del panel, con el menú
             errorElement: <SeccionNoDisponible />,
             children: [
+              {
+                path: 'aseguradoras/:idAseguradora/ajustadores',
+                loader: cargarAjustadoresAseguradora,
+                Component: AjustadoresAseguradoraPage,
+              },
               ...Object.entries(secciones).map(([seccion, Component]): RouteObject => ({
                 path: seccion,
                 loader:

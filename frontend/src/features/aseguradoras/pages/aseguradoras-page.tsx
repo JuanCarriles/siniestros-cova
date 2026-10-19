@@ -186,6 +186,7 @@ export function AseguradorasPage() {
         cambio={cambio}
         onCerrar={() => setCambioAbierto(false)}
         onHecho={terminar}
+        onDesactualizada={() => void revalidator.revalidate()}
       />
     </>
   )
