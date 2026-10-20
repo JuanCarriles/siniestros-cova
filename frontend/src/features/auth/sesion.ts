@@ -70,7 +70,7 @@ export async function redirigirSiHaySesion() {
   return null
 }
 
-/** Action de /salir (botón "Cerrar sesión"). */
+/** Action de /salir (botón "Salir" de la barra lateral). */
 export async function salir() {
   // Aunque falle el pedido (sin conexión) se vuelve al login; esa sesión vence a las 7 h sin uso
   await cerrarSesion().catch(() => undefined)

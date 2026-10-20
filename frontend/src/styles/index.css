@@ -2,6 +2,11 @@
 @import 'tw-animate-css';
 @import './tokens.css';
 
+/* Escritorio con pantalla baja (notebooks, o con el zoom del navegador): la barra lateral achica espacios, no la
+   letra, para que todas las secciones entren sin desplazarse. En celular el menú conserva su tamaño. */
+@custom-variant baja (@media (min-width: 64rem) and (max-height: 52rem));
+@custom-variant muy-baja (@media (min-width: 64rem) and (max-height: 38rem));
+
 @layer base {
   * {
     @apply border-border;
