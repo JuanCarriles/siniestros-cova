@@ -33,17 +33,3 @@ export const bloqueoBajaAseguradoraSchema = z.strictObject({
   cantidadAjustadores: z.number().int().positive(),
 })
 export type BloqueoBajaAseguradora = z.output<typeof bloqueoBajaAseguradoraSchema>
-
-export const ajustadorVinculadoSchema = z.strictObject({
-  id: idSchema,
-  nombres: textoSchema,
-  apellidos: textoSchema,
-  email: z.email(),
-  telefono: textoSchema,
-})
-export const ajustadoresAseguradoraSchema = z.strictObject({
-  aseguradora: z.strictObject({ id: idSchema, nombre: textoSchema }),
-  ajustadores: z.array(ajustadorVinculadoSchema),
-})
-export type AjustadorVinculado = z.output<typeof ajustadorVinculadoSchema>
-export type AjustadoresAseguradora = z.output<typeof ajustadoresAseguradoraSchema>

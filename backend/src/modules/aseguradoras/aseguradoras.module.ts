@@ -5,9 +5,6 @@ import { crearServicioAseguradoras } from './aseguradoras.service.ts'
 
 // Acceso diferido a la base: el cliente se crea en el primer pedido, no al importar
 const db = {
-  get ajustador() {
-    return getPrisma().ajustador
-  },
   get aseguradora() {
     return getPrisma().aseguradora
   },

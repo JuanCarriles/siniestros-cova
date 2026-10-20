@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ApiError } from '@/lib/api'
+import type { DesdeAseguradoras } from '@/features/ajustadores/pages/ajustadores-page'
 import { darDeBajaAseguradora, reactivarAseguradora } from '../api/aseguradoras.api'
 
 export type CambioEstado = { tipo: 'baja' | 'reactivar'; aseguradora: AseguradoraListado }
@@ -136,7 +137,11 @@ export function EstadoAseguradoraDialog({
           </DialogClose>
           {bloqueada && cambio && (
             <Button asChild>
-              <Link to={`/aseguradoras/${cambio.aseguradora.id}/ajustadores`} onClick={onCerrar}>
+              <Link
+                to={`/ajustadores?aseguradora=${cambio.aseguradora.id}`}
+                state={{ desde: 'aseguradoras' } satisfies DesdeAseguradoras}
+                onClick={onCerrar}
+              >
                 Ver ajustadores <ArrowRight aria-hidden="true" />
               </Link>
             </Button>

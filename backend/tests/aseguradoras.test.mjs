@@ -40,19 +40,6 @@ function datosPrueba() {
   const coincideNombre = (fila, where) =>
     !where.nombre || fila.nombre.toLowerCase() === where.nombre.equals.toLowerCase()
   const prisma = {
-    ajustador: {
-      async findMany({ where }) {
-        return ajustadores
-          .filter((a) => a.idAseguradora === where.idAseguradora && a.eliminado === where.eliminado)
-          .map(({ id, nombres, apellidos, email, telefono }) => ({
-            id,
-            nombres,
-            apellidos,
-            email,
-            telefono,
-          }))
-      },
-    },
     aseguradora: {
       async findMany({ where }) {
         return aseguradoras
@@ -264,7 +251,7 @@ test('baja: solo sin ajustadores activos; conserva todo y se puede reactivar', a
   assert.equal((await accion(99, 'reactivacion')).status, 404)
 })
 
-test('bloqueo: respuesta estructurada con cantidad actual y listado de los ajustadores que lo causan', async (t) => {
+test('bloqueo: respuesta estructurada con la cantidad actual de ajustadores activos', async (t) => {
   const datos = datosPrueba()
   const api = await servidor(datos)
   t.after(api.cerrar)
@@ -288,29 +275,6 @@ test('bloqueo: respuesta estructurada con cantidad actual y listado de los ajust
     cantidadAjustadores: 2,
   })
   assert.equal(datos.escrituras, 0)
-  const listado = await (await api.pedir('admin', '/1/ajustadores')).json()
-  assert.deepEqual(listado.aseguradora, { id: 1, nombre: 'Andina Seguros' })
-  assert.deepEqual(
-    listado.ajustadores.map((a) => a.id),
-    [1, 5],
-  )
-  assert.equal(listado.ajustadores.length, details.cantidadAjustadores)
-})
-
-test('consulta de ajustadores: exige rol, valida id, no mezcla aseguradoras y permite lista vacía', async (t) => {
-  const api = await servidor(datosPrueba())
-  t.after(api.cerrar)
-  for (const [quien, estado] of [
-    [null, 401],
-    ['gestor', 403],
-    ['admin', 200],
-    ['super', 200],
-  ]) {
-    assert.equal((await api.pedir(quien, '/1/ajustadores')).status, estado)
-  }
-  assert.deepEqual((await (await api.pedir('admin', '/3/ajustadores')).json()).ajustadores, [])
-  assert.equal((await api.pedir('admin', '/99/ajustadores')).status, 404)
-  assert.equal((await api.pedir('admin', '/abc/ajustadores')).status, 400)
 })
 
 test('baja con id inexistente no produce escrituras', async (t) => {

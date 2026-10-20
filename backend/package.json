@@ -20,6 +20,8 @@
     "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs",
     "test:aseguradoras": "node --experimental-strip-types --test tests/aseguradoras.test.mjs",
     "test:aseguradoras:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/aseguradoras.db.test.mjs",
+    "test:ajustadores": "node --experimental-strip-types --test tests/ajustadores.test.mjs",
+    "test:ajustadores:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/ajustadores.db.test.mjs",
     "test:usuarios": "node --experimental-strip-types --test tests/primer-superadmin.test.mjs",
     "test:r2": "node --experimental-strip-types --test tests/r2.test.mjs",
     "r2:smoke": "tsx --env-file=.env src/scripts/probar-r2.ts",

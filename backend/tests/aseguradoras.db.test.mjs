@@ -47,9 +47,6 @@ test('PostgreSQL: listado, conteo y cambios de estado persisten dentro de una tr
             servicio.darDeBaja(id),
             (error) => error.status === 409 && error.details?.cantidadAjustadores === 1,
           )
-          const vinculados = await servicio.listarAjustadores(id)
-          assert.equal(vinculados.ajustadores.length, 1)
-          assert.equal(vinculados.ajustadores[0].apellidos, 'Activo')
           await tx.ajustador.updateMany({
             where: { idAseguradora: id, eliminado: false },
             data: { eliminado: true, fechaBaja: new Date() },

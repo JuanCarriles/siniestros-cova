@@ -3,8 +3,9 @@ import { createBrowserRouter, type LoaderFunction, type RouteObject } from 'reac
 import type { PanelSection } from '@/components/layout/panel-navigation'
 import { SeccionNoDisponible } from '@/components/layout/seccion-no-disponible'
 import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
-import { AjustadoresAseguradoraPage } from '@/features/aseguradoras/pages/ajustadores-aseguradora-page'
-import { cargarAseguradoras, cargarAjustadoresAseguradora } from '@/features/aseguradoras/loader'
+import { cargarAjustadores } from '@/features/ajustadores/loader'
+import { AjustadoresPage } from '@/features/ajustadores/pages/ajustadores-page'
+import { cargarAseguradoras } from '@/features/aseguradoras/loader'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { RecuperarContrasenaPage } from '@/features/auth/pages/recuperar-contrasena-page'
@@ -44,7 +45,7 @@ const secciones: Record<PanelSection, ComponentType> = {
   siniestros: () => <SeccionPendiente section="siniestros" />,
   plantillas: () => <SeccionPendiente section="plantillas" />,
   aseguradoras: AseguradorasPage,
-  ajustadores: () => <SeccionPendiente section="ajustadores" />,
+  ajustadores: AjustadoresPage,
   usuarios: () => <SeccionPendiente section="usuarios" />,
   informes: () => <SeccionPendiente section="informes" />,
   perfil: PerfilPage,
@@ -53,6 +54,7 @@ const secciones: Record<PanelSection, ComponentType> = {
 // Loader propio de las secciones que traen datos. Tiene que llamar a requerirSeccion antes de pedirlos.
 const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
   aseguradoras: cargarAseguradoras,
+  ajustadores: cargarAjustadores,
 }
 
 export const router = createBrowserRouter([
@@ -78,11 +80,6 @@ export const router = createBrowserRouter([
             // Sin path: sus errores (403 por rol, fallas al cargar) se muestran dentro del panel, con el menú
             errorElement: <SeccionNoDisponible />,
             children: [
-              {
-                path: 'aseguradoras/:idAseguradora/ajustadores',
-                loader: cargarAjustadoresAseguradora,
-                Component: AjustadoresAseguradoraPage,
-              },
               ...Object.entries(secciones).map(([seccion, Component]): RouteObject => ({
                 path: seccion,
                 loader:
