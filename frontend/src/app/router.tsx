@@ -17,6 +17,8 @@ import {
   salir,
 } from '@/features/auth/sesion'
 import { DashboardPage } from '@/features/dashboard/pages/dashboard-page'
+import { cargarUsuarios } from '@/features/usuarios/loader'
+import { UsuariosPage } from '@/features/usuarios/pages/usuarios-page'
 import { PerfilPage } from '@/features/perfil/pages/perfil-page'
 import { ErrorPagina } from '@/pages/error-pagina'
 import { Panel } from './panel'
@@ -46,7 +48,7 @@ const secciones: Record<PanelSection, ComponentType> = {
   plantillas: () => <SeccionPendiente section="plantillas" />,
   aseguradoras: AseguradorasPage,
   ajustadores: AjustadoresPage,
-  usuarios: () => <SeccionPendiente section="usuarios" />,
+  usuarios: UsuariosPage,
   informes: () => <SeccionPendiente section="informes" />,
   perfil: PerfilPage,
 }
@@ -55,6 +57,7 @@ const secciones: Record<PanelSection, ComponentType> = {
 const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
   aseguradoras: cargarAseguradoras,
   ajustadores: cargarAjustadores,
+  usuarios: cargarUsuarios,
 }
 
 export const router = createBrowserRouter([

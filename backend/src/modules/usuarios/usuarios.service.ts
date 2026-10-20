@@ -1,0 +1,236 @@
+import type { SesionUsuario } from '@cova/shared/schemas/auth'
+import {
+  tiposUsuarioAdministrables,
+  type UsuarioAltaData,
+  type UsuarioModificacionData,
+} from '@cova/shared/schemas/usuarios-abm'
+import type { Prisma } from '../../generated/prisma/client.ts'
+import { hashPassword } from '../../lib/password.ts'
+import { HttpError } from '../../utils/httpError.ts'
+
+type Transaccion = Pick<
+  Prisma.TransactionClient,
+  'usuario' | 'direccion' | 'provincia' | 'sesion' | 'recuperacionContrasena'
+>
+export type BaseUsuarios = Pick<Prisma.TransactionClient, 'usuario' | 'pais' | 'provincia'> & {
+  transaccion<T>(trabajo: (tx: Transaccion) => Promise<T>): Promise<T>
+}
+const siniestroActivo = {
+  eliminado: false,
+  estadoSiniestro: { esCierre: false },
+} satisfies Prisma.SiniestroWhereInput
+// Selección explícita: ni el listado ni las respuestas de alta/modificación contienen contraseñas.
+const detalle = {
+  id: true,
+  nombres: true,
+  apellidos: true,
+  documento: true,
+  email: true,
+  telefono: true,
+  tipoUsuario: true,
+  eliminado: true,
+  fechaBaja: true,
+  direccion: {
+    select: {
+      id: true,
+      localidad: true,
+      calle: true,
+      pisoDepartamento: true,
+      codigoPostal: true,
+      idProvincia: true,
+      provincia: {
+        select: {
+          id: true,
+          nombre: true,
+          idPais: true,
+          pais: { select: { id: true, nombre: true } },
+        },
+      },
+    },
+  },
+  _count: { select: { siniestros: { where: siniestroActivo } } },
+} as const satisfies Prisma.UsuarioSelect
+type Fila = Prisma.UsuarioGetPayload<{ select: typeof detalle }>
+const aListado = ({ _count, ...fila }: Fila) => ({ ...fila, casosActivos: _count.siniestros })
+
+async function buscar(tx: Pick<Transaccion, 'usuario'>, id: number) {
+  const usuario = await tx.usuario.findUnique({ where: { id }, select: detalle })
+  if (!usuario) throw new HttpError(404, 'El usuario no existe.')
+  return usuario
+}
+
+async function autorizar(tx: Transaccion, actor: SesionUsuario, tipo: Fila['tipoUsuario']) {
+  const actual = await tx.usuario.findUnique({
+    where: { id: actor.id },
+    select: { tipoUsuario: true, eliminado: true },
+  })
+  if (
+    !actual ||
+    actual.eliminado ||
+    !tiposUsuarioAdministrables(actual.tipoUsuario).includes(tipo)
+  ) {
+    throw new HttpError(
+      403,
+      'Solo podés administrar usuarios de una jerarquía inferior a la tuya.',
+      { campo: 'tipoUsuario' },
+    )
+  }
+}
+
+async function exigirEmailLibre(tx: Transaccion, email: string, excepto?: number) {
+  const existente = await tx.usuario.findFirst({
+    where: {
+      email: { equals: email, mode: 'insensitive' },
+      ...(excepto ? { id: { not: excepto } } : {}),
+    },
+    select: { id: true },
+  })
+  if (existente)
+    throw new HttpError(
+      409,
+      'Ya existe un usuario con ese email, incluso entre los dados de baja.',
+      { campo: 'email' },
+    )
+}
+
+async function exigirProvincia(tx: Transaccion, idProvincia: number, anterior?: number | null) {
+  if (idProvincia === anterior) return
+  const provincia = await tx.provincia.findFirst({
+    where: { id: idProvincia, eliminado: false, pais: { eliminado: false } },
+    select: { id: true },
+  })
+  if (!provincia)
+    throw new HttpError(409, 'La provincia elegida ya no está disponible. Elegí otra.', {
+      campo: 'direccion.idProvincia',
+    })
+}
+
+export function crearServicioUsuarios(base: BaseUsuarios) {
+  return {
+    async listar(incluirBajas: boolean) {
+      const filas = await base.usuario.findMany({
+        where: incluirBajas ? {} : { eliminado: false },
+        select: detalle,
+        orderBy: [{ eliminado: 'asc' }, { apellidos: 'asc' }, { nombres: 'asc' }, { id: 'asc' }],
+      })
+      return filas.map(aListado)
+    },
+    async catalogos() {
+      const [paises, provincias] = await Promise.all([
+        base.pais.findMany({
+          where: { eliminado: false },
+          select: { id: true, nombre: true },
+          orderBy: { nombre: 'asc' },
+        }),
+        base.provincia.findMany({
+          where: { eliminado: false, pais: { eliminado: false } },
+          select: { id: true, nombre: true, idPais: true },
+          orderBy: { nombre: 'asc' },
+        }),
+      ])
+      return { paises, provincias }
+    },
+    async crear(actor: SesionUsuario, datos: UsuarioAltaData) {
+      if (!tiposUsuarioAdministrables(actor.tipoUsuario).includes(datos.tipoUsuario))
+        throw new HttpError(403, 'Solo podés crear usuarios de una jerarquía inferior a la tuya.', {
+          campo: 'tipoUsuario',
+        })
+      const contrasena = await hashPassword(datos.contrasena)
+      return base.transaccion(async (tx) => {
+        await autorizar(tx, actor, datos.tipoUsuario)
+        await exigirEmailLibre(tx, datos.email)
+        await exigirProvincia(tx, datos.direccion.idProvincia)
+        const { direccion, ...personales } = datos
+        const fila = await tx.usuario.create({
+          data: { ...personales, contrasena, direccion: { create: direccion } },
+          select: detalle,
+        })
+        return aListado(fila)
+      })
+    },
+    async modificar(actor: SesionUsuario, id: number, datos: UsuarioModificacionData) {
+      // '' y undefined conservan el hash. Nunca se devuelve el hash guardado al formulario.
+      const hash = datos.contrasena ? await hashPassword(datos.contrasena) : undefined
+      return base.transaccion(async (tx) => {
+        const actual = await buscar(tx, id)
+        await autorizar(tx, actor, actual.tipoUsuario)
+        if (datos.tipoUsuario) await autorizar(tx, actor, datos.tipoUsuario)
+        if (actual.eliminado)
+          throw new HttpError(409, 'El usuario está dado de baja. Reactivalo para modificarlo.')
+        if (datos.email) await exigirEmailLibre(tx, datos.email, id)
+        if (datos.direccion)
+          await exigirProvincia(tx, datos.direccion.idProvincia, actual.direccion.idProvincia)
+        const { direccion, contrasena: _contrasena, ...personales } = datos
+        let nuevaDireccion: { connect: { id: number } } | undefined
+        if (direccion) {
+          const vinculada = await tx.direccion.findUniqueOrThrow({
+            where: { id: actual.direccion.id },
+            select: {
+              _count: { select: { usuarios: true, siniestros: true } },
+              perito: { select: { id: true } },
+              personaInvolucrada: { select: { id: true } },
+            },
+          })
+          const compartida =
+            vinculada._count.usuarios > 1 ||
+            vinculada._count.siniestros > 0 ||
+            vinculada.perito !== null ||
+            vinculada.personaInvolucrada !== null
+          // Actualiza la dirección propia. Si la comparte otro registro, crea una copia para no cambiarlo.
+          if (compartida) {
+            const propia = await tx.direccion.create({ data: direccion, select: { id: true } })
+            nuevaDireccion = { connect: { id: propia.id } }
+          } else await tx.direccion.update({ where: { id: actual.direccion.id }, data: direccion })
+        }
+        const fila = await tx.usuario.update({
+          where: { id },
+          data: {
+            ...personales,
+            ...(hash ? { contrasena: hash } : {}),
+            ...(nuevaDireccion ? { direccion: nuevaDireccion } : {}),
+          },
+          select: detalle,
+        })
+        if (
+          hash ||
+          (datos.email && datos.email !== actual.email) ||
+          (datos.tipoUsuario && datos.tipoUsuario !== actual.tipoUsuario)
+        ) {
+          await tx.sesion.deleteMany({ where: { idUsuario: id } })
+          await tx.recuperacionContrasena.deleteMany({ where: { idUsuario: id } })
+        }
+        return aListado(fila)
+      })
+    },
+    async darDeBaja(actor: SesionUsuario, id: number) {
+      return base.transaccion(async (tx) => {
+        const actual = await buscar(tx, id)
+        await autorizar(tx, actor, actual.tipoUsuario)
+        if (actual.eliminado) throw new HttpError(409, 'El usuario ya está dado de baja.')
+        // El conteo y el cambio de estado comparten transacción serializable y predicado SQL.
+        const resultado = await tx.usuario.updateMany({
+          where: { id, eliminado: false, siniestros: { none: siniestroActivo } },
+          data: { eliminado: true, fechaBaja: new Date() },
+        })
+        if (resultado.count !== 1) {
+          const actualizado = await buscar(tx, id)
+          throw new HttpError(
+            409,
+            `No se puede dar de baja: tiene ${actualizado._count.siniestros} casos activos. Reasignalos antes de continuar.`,
+            { codigo: 'USUARIO_CON_SINIESTROS', casosActivos: actualizado._count.siniestros },
+          )
+        }
+        await tx.sesion.deleteMany({ where: { idUsuario: id } })
+        await tx.recuperacionContrasena.deleteMany({ where: { idUsuario: id } })
+      })
+    },
+    async reactivar(actor: SesionUsuario, id: number) {
+      return base.transaccion(async (tx) => {
+        const actual = await buscar(tx, id)
+        await autorizar(tx, actor, actual.tipoUsuario)
+        if (!actual.eliminado) throw new HttpError(409, 'El usuario ya está activo.')
+        await tx.usuario.update({ where: { id }, data: { eliminado: false, fechaBaja: null } })
+      })
+    },
+  }
+}
