@@ -6,7 +6,7 @@ import type {
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 
-type BaseAseguradoras = Pick<Prisma.TransactionClient, 'aseguradora' | 'ajustador'>
+type BaseAseguradoras = Pick<Prisma.TransactionClient, 'aseguradora'>
 
 // Solo los ajustadores activos cuentan: los dados de baja no impiden dar de baja la aseguradora
 const detalle = {
@@ -81,16 +81,6 @@ export function crearServicioAseguradoras(prisma: BaseAseguradoras) {
       return aListado(
         await prisma.aseguradora.update({ where: { id }, data: datos, select: detalle }),
       )
-    },
-
-    async listarAjustadores(id: number) {
-      const aseguradora = await buscar(id)
-      const ajustadores = await prisma.ajustador.findMany({
-        where: { idAseguradora: id, eliminado: false },
-        select: { id: true, nombres: true, apellidos: true, email: true, telefono: true },
-        orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }, { id: 'asc' }],
-      })
-      return { aseguradora: { id: aseguradora.id, nombre: aseguradora.nombre }, ajustadores }
     },
 
     // El predicado y la baja se ejecutan en una sola sentencia: no confiar en un conteo previo del cliente.

@@ -1,11 +1,11 @@
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 
-// Barra de arriba de un ABM (aseguradoras, ajustadores, usuarios…): buscador, "Mostrar dadas de baja" y el
-// botón de alta. Va sobre el fondo de la página, separada de la tarjeta del listado (mockups).
+// Barra de arriba de un ABM (aseguradoras, ajustadores, usuarios…): buscador, filtros propios de la pantalla,
+// "Mostrar dadas de baja" y el botón de alta. Va sobre el fondo de la página, separada de la tarjeta del listado (mockups).
 export function BarraAbm({
   busqueda,
   onBusqueda,
@@ -13,6 +13,7 @@ export function BarraAbm({
   mostrarBajas,
   onMostrarBajas,
   etiquetaBajas = 'Mostrar dadas de baja',
+  filtros,
   etiquetaAlta,
   onAlta,
 }: {
@@ -23,6 +24,8 @@ export function BarraAbm({
   mostrarBajas?: boolean
   onMostrarBajas?: (mostrar: boolean) => void
   etiquetaBajas?: string
+  /** Controles de filtro de la pantalla (p. ej. FiltroAbm por aseguradora), antes de "Mostrar dadas de baja" */
+  filtros?: ReactNode
   /** Texto del botón de alta, p. ej. "Nueva aseguradora". Sin él no se muestra el botón. */
   etiquetaAlta?: string
   onAlta?: () => void
@@ -48,7 +51,8 @@ export function BarraAbm({
           className="h-13 pl-12 shadow-card"
         />
       </div>
-      <div className="flex flex-1 flex-wrap gap-3 sm:flex-none">
+      <div className="flex flex-1 flex-wrap gap-3 sm:flex-initial">
+        {filtros}
         {onMostrarBajas && (
           <label className="flex min-h-13 flex-1 cursor-pointer items-center gap-3 rounded-md border border-input bg-surface px-4 font-medium whitespace-nowrap shadow-card hover:bg-accent sm:flex-none">
             <Checkbox
