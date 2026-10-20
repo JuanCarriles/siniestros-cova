@@ -3,10 +3,10 @@
 Al iniciar sesión cada rol entra a su página: el **gestor** a Siniestros y el **administrador** y el
 **superadministrador** al Dashboard (`initialSection` en `panel-navigation.ts`).
 
-| Rol                                | Menú principal                                                                   | Abajo                    |
-| ---------------------------------- | -------------------------------------------------------------------------------- | ------------------------ |
-| Gestor                             | Siniestros, Plantillas (solo descarga, CU-06)                                    | Mi perfil, Cerrar sesión |
-| Administrador y superadministrador | Dashboard, Siniestros, Aseguradoras, Ajustadores, Usuarios, Plantillas, Informes | Mi perfil, Cerrar sesión |
+| Rol                                | Menú principal                                                                   | Abajo            |
+| ---------------------------------- | -------------------------------------------------------------------------------- | ---------------- |
+| Gestor                             | Siniestros, Plantillas (solo descarga, CU-06)                                    | Mi perfil, Salir |
+| Administrador y superadministrador | Dashboard, Siniestros, Aseguradoras, Ajustadores, Usuarios, Plantillas, Informes | Mi perfil, Salir |
 
 Para probarlo, entrar con los usuarios de prueba del seed de desarrollo (`backend/prisma/seeds/desarrollo.ts`),
 uno por rol.
@@ -15,7 +15,9 @@ uno por rol.
 
 - `src/components/layout/panel-layout.tsx`: estructura común. Menú lateral en escritorio (desde 64rem), menú
   desplegable en celular (Dialog con foco contenido, Escape y cierre al navegar), "Saltar al contenido", foco al
-  contenido al cambiar de sección y botón "Cerrar sesión" (action `/salir`).
+  contenido al cambiar de sección y botón "Salir" (action `/salir`, con confirmación). En pantallas bajas la barra
+  lateral achica márgenes y alto de las opciones (variantes `baja` y `muy-baja` de `src/styles/index.css`) para que
+  todas las secciones entren sin desplazarse; el tamaño de letra no cambia.
 - `src/components/layout/panel-navigation.ts`: secciones y lista explícita por rol. No se deducen permisos por
   jerarquía.
 - `src/components/layout/panel-context.ts`: `usePanel()` da el usuario y la ruta base a las páginas.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Form, Link, NavLink, Outlet, useLocation, useNavigation } from 'react-router'
-import { ArrowRight, ChevronRight, LogOut, Menu, UserRound } from 'lucide-react'
+import { ArrowRight, LogOut, Menu, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,14 +22,14 @@ function Brand() {
   return (
     <div className="flex items-center gap-3">
       <span
-        className="grid size-12 shrink-0 place-items-center rounded-lg bg-brand-accent font-bold text-foreground"
+        className="grid size-12 shrink-0 place-items-center rounded-lg bg-brand-accent font-bold text-foreground baja:size-10"
         aria-hidden="true"
       >
         EC
       </span>
       <div>
         <p className="text-lg font-bold tracking-wide">ESTUDIO COVA</p>
-        <p className="text-sm text-on-navy-muted">Gestión de siniestros</p>
+        <p className="text-sm text-on-navy-muted muy-baja:hidden">Gestión de siniestros</p>
       </div>
     </div>
   )
@@ -43,14 +43,23 @@ function Sidebar({
 }: PanelContext & { onNavigate?: () => void; mobile?: boolean }) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
-      <div className={cn('px-6 pb-7', mobile ? 'pt-16' : 'pt-8')}>
+      <div
+        className={cn(
+          'px-6 pb-7 baja:pb-4 muy-baja:pb-2',
+          mobile ? 'pt-16' : 'pt-8 baja:pt-5 muy-baja:pt-3',
+        )}
+      >
         <Brand />
       </div>
-      <div className="mx-6 border-t border-sidebar-border pt-6 pb-3 text-sm font-medium tracking-wide text-on-navy-muted">
+      <div className="mx-6 border-t border-sidebar-border pt-6 pb-3 text-sm font-medium tracking-wide text-on-navy-muted baja:pt-4 baja:pb-2 muy-baja:pt-2 muy-baja:pb-1">
         ESPACIO DE TRABAJO
       </div>
-      <nav aria-label="Navegación principal" className="min-h-0 flex-1 overflow-y-auto px-3 pb-6">
-        <ul className="grid gap-2">
+      {/* El desplazamiento queda solo como último recurso (pantallas muy bajas o con mucho zoom) */}
+      <nav
+        aria-label="Navegación principal"
+        className="min-h-0 flex-1 overflow-y-auto px-3 pb-6 baja:pb-3 muy-baja:pb-2"
+      >
+        <ul className="grid gap-2 baja:gap-1 muy-baja:gap-0.5">
           {navigationFor(usuario.tipo).map((section) => {
             const Icon = sectionIcons[section]
             return (
@@ -60,7 +69,7 @@ function Sidebar({
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     cn(
-                      'group flex min-h-14 items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-3 text-base font-medium transition-colors hover:bg-sidebar-accent focus-visible:outline-offset-0 focus-visible:outline-on-navy',
+                      'group flex min-h-14 items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-3 text-base font-medium transition-colors hover:bg-sidebar-accent focus-visible:outline-offset-0 focus-visible:outline-on-navy baja:min-h-11 baja:py-2 muy-baja:min-h-10 muy-baja:py-1.5',
                       isActive
                         ? 'border-brand-accent bg-sidebar-accent font-bold text-on-navy'
                         : 'text-on-navy-muted',
@@ -75,27 +84,25 @@ function Sidebar({
           })}
         </ul>
       </nav>
-      <div className="shrink-0 border-t border-sidebar-border p-3">
+      {/* Perfil y salida en una sola fila: el rol ya se ve arriba a la derecha, en el encabezado */}
+      <div className="flex shrink-0 items-stretch gap-1 border-t border-sidebar-border p-2">
         <NavLink
           to={`${basePath}/perfil`}
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex min-h-20 items-center gap-3 rounded-lg p-3 transition-colors hover:bg-sidebar-accent focus-visible:outline-offset-0 focus-visible:outline-on-navy',
+              'flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-sidebar-accent focus-visible:outline-offset-0 focus-visible:outline-on-navy',
               isActive && 'bg-sidebar-accent',
             )
           }
         >
-          <span className="grid size-12 shrink-0 place-items-center rounded-full border border-on-navy-muted bg-sidebar-accent">
-            <UserRound className="size-6" aria-hidden="true" />
-          </span>
+          <UserRound className="size-6 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1">
-            <span className="block font-semibold break-words">{usuario.nombre}</span>
-            <span className="block text-sm break-words text-on-navy-muted">
-              Mi perfil <span aria-hidden="true">·</span> {roleLabels[usuario.tipo]}
+            <span className="block leading-snug font-semibold break-words">{usuario.nombre}</span>
+            <span className="block text-sm text-on-navy-muted">
+              Mi perfil<span className="sr-only">, {roleLabels[usuario.tipo]}</span>
             </span>
           </span>
-          <ChevronRight className="size-5 shrink-0" aria-hidden="true" />
         </NavLink>
         <CerrarSesion />
       </div>
@@ -112,12 +119,13 @@ function CerrarSesion() {
   return (
     <Dialog>
       <DialogTrigger asChild>
+        {/* Ícono con el texto debajo: angosto para compartir fila con el perfil, sin depender solo del ícono */}
         <button
           type="button"
-          className="mt-2 flex min-h-12 w-full items-center gap-3 rounded-lg px-3 py-2 font-medium text-on-navy-muted transition-colors hover:bg-sidebar-accent hover:text-on-navy focus-visible:outline-offset-0 focus-visible:outline-on-navy"
+          className="flex w-18 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-sm leading-tight font-medium text-on-navy-muted transition-colors hover:bg-sidebar-accent hover:text-on-navy focus-visible:outline-offset-0 focus-visible:outline-on-navy"
         >
           <LogOut className="size-6 shrink-0" aria-hidden="true" />
-          Cerrar sesión
+          Salir
         </button>
       </DialogTrigger>
       <DialogContent
@@ -128,9 +136,9 @@ function CerrarSesion() {
         }}
       >
         <DialogHeader>
-          <DialogTitle>¿Cerrar la sesión?</DialogTitle>
+          <DialogTitle>¿Salir del sistema?</DialogTitle>
           <DialogDescription>
-            Vas a salir del sistema. Para volver a entrar vas a necesitar tu email y tu contraseña.
+            Se cierra tu sesión. Para volver a entrar vas a necesitar tu email y tu contraseña.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -142,7 +150,7 @@ function CerrarSesion() {
           <Form method="post" action="/salir">
             <Button type="submit" loading={saliendo} className="w-full">
               <LogOut aria-hidden="true" />
-              {saliendo ? 'Cerrando sesión…' : 'Cerrar sesión'}
+              {saliendo ? 'Saliendo…' : 'Salir'}
             </Button>
           </Form>
         </DialogFooter>
