@@ -8,10 +8,13 @@ import type { Prisma } from '../../generated/prisma/client.ts'
 import { hashPassword } from '../../lib/password.ts'
 import { HttpError } from '../../utils/httpError.ts'
 
-type Transaccion = Pick<
-  Prisma.TransactionClient,
-  'usuario' | 'direccion' | 'provincia' | 'sesion' | 'recuperacionContrasena'
->
+import {
+  exigirEmailLibre,
+  exigirProvincia,
+  guardarDireccion,
+  type TransaccionUsuarios as Transaccion,
+} from './usuarios.datos.ts'
+
 export type BaseUsuarios = Pick<Prisma.TransactionClient, 'usuario' | 'pais' | 'provincia'> & {
   transaccion<T>(trabajo: (tx: Transaccion) => Promise<T>): Promise<T>
 }
@@ -77,34 +80,6 @@ async function autorizar(tx: Transaccion, actor: SesionUsuario, tipo: Fila['tipo
   }
 }
 
-async function exigirEmailLibre(tx: Transaccion, email: string, excepto?: number) {
-  const existente = await tx.usuario.findFirst({
-    where: {
-      email: { equals: email, mode: 'insensitive' },
-      ...(excepto ? { id: { not: excepto } } : {}),
-    },
-    select: { id: true },
-  })
-  if (existente)
-    throw new HttpError(
-      409,
-      'Ya existe un usuario con ese email, incluso entre los dados de baja.',
-      { campo: 'email' },
-    )
-}
-
-async function exigirProvincia(tx: Transaccion, idProvincia: number, anterior?: number | null) {
-  if (idProvincia === anterior) return
-  const provincia = await tx.provincia.findFirst({
-    where: { id: idProvincia, eliminado: false, pais: { eliminado: false } },
-    select: { id: true },
-  })
-  if (!provincia)
-    throw new HttpError(409, 'La provincia elegida ya no está disponible. Elegí otra.', {
-      campo: 'direccion.idProvincia',
-    })
-}
-
 export function crearServicioUsuarios(base: BaseUsuarios) {
   return {
     async listar(incluirBajas: boolean) {
@@ -163,24 +138,8 @@ export function crearServicioUsuarios(base: BaseUsuarios) {
         const { direccion, contrasena: _contrasena, ...personales } = datos
         let nuevaDireccion: { connect: { id: number } } | undefined
         if (direccion) {
-          const vinculada = await tx.direccion.findUniqueOrThrow({
-            where: { id: actual.direccion.id },
-            select: {
-              _count: { select: { usuarios: true, siniestros: true } },
-              perito: { select: { id: true } },
-              personaInvolucrada: { select: { id: true } },
-            },
-          })
-          const compartida =
-            vinculada._count.usuarios > 1 ||
-            vinculada._count.siniestros > 0 ||
-            vinculada.perito !== null ||
-            vinculada.personaInvolucrada !== null
-          // Actualiza la dirección propia. Si la comparte otro registro, crea una copia para no cambiarlo.
-          if (compartida) {
-            const propia = await tx.direccion.create({ data: direccion, select: { id: true } })
-            nuevaDireccion = { connect: { id: propia.id } }
-          } else await tx.direccion.update({ where: { id: actual.direccion.id }, data: direccion })
+          const propia = await guardarDireccion(tx, actual.direccion.id, direccion)
+          nuevaDireccion = { connect: { id: propia.id } }
         }
         const fila = await tx.usuario.update({
           where: { id },
@@ -216,7 +175,7 @@ export function crearServicioUsuarios(base: BaseUsuarios) {
           const actualizado = await buscar(tx, id)
           throw new HttpError(
             409,
-            `No se puede dar de baja: tiene ${actualizado._count.siniestros} casos activos. Reasignalos antes de continuar.`,
+            `No se puede dar de baja: tiene ${actualizado._count.siniestros} ${actualizado._count.siniestros === 1 ? 'caso activo. Reasignalo' : 'casos activos. Reasignalos'} antes de continuar.`,
             { codigo: 'USUARIO_CON_SINIESTROS', casosActivos: actualizado._count.siniestros },
           )
         }

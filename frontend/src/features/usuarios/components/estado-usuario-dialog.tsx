@@ -27,12 +27,14 @@ export function EstadoUsuarioDialog({
   rol,
   onCerrar,
   onHecho,
+  onDesactualizado,
   elementoAlCerrar,
 }: {
   cambio: CambioEstadoUsuario | null
   rol: TipoUsuario
   onCerrar: () => void
   onHecho: (mensaje: string) => void
+  onDesactualizado: () => void
   elementoAlCerrar: () => HTMLElement | null
 }) {
   const [enviando, setEnviando] = useState(false)
@@ -58,8 +60,11 @@ export function EstadoUsuarioDialog({
       const bloqueo = bloqueoBajaUsuarioSchema.safeParse(
         err instanceof ApiError ? err.detalles : null,
       )
-      if (bloqueo.success) setCasosServidor(bloqueo.data.casosActivos)
-      else setError(err instanceof ApiError ? err.message : 'No se pudo completar. Probá de nuevo.')
+      if (bloqueo.success) {
+        setCasosServidor(bloqueo.data.casosActivos)
+        onDesactualizado()
+      } else
+        setError(err instanceof ApiError ? err.message : 'No se pudo completar. Probá de nuevo.')
     } finally {
       setEnviando(false)
     }
@@ -94,7 +99,7 @@ export function EstadoUsuarioDialog({
           <DialogTitle aria-live="polite">
             {bloqueada
               ? sinPermiso
-                ? 'Tu rol no permite esta acción'
+                ? 'No podés administrar a este usuario'
                 : 'No podés dar de baja a este usuario'
               : `¿${cambio?.tipo === 'baja' ? 'Dar de baja' : 'Reactivar'} a ${nombre}?`}
           </DialogTitle>

@@ -192,7 +192,10 @@ test('PostgreSQL: CU-04, jerarquía, contraseñas, casos, baja y sesiones; todos
           )
           await assert.rejects(
             servicio.darDeBaja(admin, creado.id),
-            (error) => error.status === 409 && error.details.casosActivos === 1,
+            (error) =>
+              error.status === 409 &&
+              error.details.casosActivos === 1 &&
+              error.message.includes('1 caso activo. Reasignalo'),
           )
           assert.equal((await fila()).eliminado, false)
           await servicio.modificar(superadmin, creado.id, { tipoUsuario: 'ADMINISTRADOR' })

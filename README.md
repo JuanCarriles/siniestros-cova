@@ -1,6 +1,5 @@
 # Sistema de Gestión de Siniestros — Estudio Cova SRT
 
-
 Aplicación web responsiva para gestionar siniestros: aseguradoras, ajustadores, usuarios, la ficha del caso
 (vehículos, personas, abogados, peritos), novedades, documentos, chat interno, notificaciones e informes mensuales.
 

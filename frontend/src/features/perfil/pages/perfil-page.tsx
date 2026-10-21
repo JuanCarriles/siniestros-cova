@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Aviso } from '@/components/aviso'
 import type { cargarPerfil } from '../loader'
-import { bloquearPerfil } from '../api/perfil.api'
 import { PerfilDatosForm } from '../components/perfil-datos-form'
 import { VerificarPerfilDialog } from '../components/verificar-perfil-dialog'
 import { ContrasenaPerfilDialog } from '../components/contrasena-perfil-dialog'
@@ -27,9 +26,12 @@ export function PerfilPage() {
   const { perfil, catalogos } = useLoaderData<typeof cargarPerfil>()
   const revalidator = useRevalidator()
   const [verificacion, setVerificacion] = useState<AlcancePerfil | null>(null)
-  const [editando, setEditando] = useState(false)
-  const [contrasenaAbierta, setContrasenaAbierta] = useState(false)
-  const [revision, setRevision] = useState(0)
+  // Solo vive mientras el formulario está montado; nunca se persiste en almacenamiento del navegador.
+  const [edicion, setEdicion] = useState<{
+    alcance: AlcancePerfil
+    contrasenaActual: string
+  } | null>(null)
+  const editando = edicion?.alcance === 'datos'
   const [mensaje, setMensaje] = useState<string | null>(null)
   const modificar = useRef<HTMLButtonElement>(null)
   const cambiar = useRef<HTMLButtonElement>(null)
@@ -42,27 +44,19 @@ export function PerfilPage() {
   }, [editando])
   function cerrarDatos() {
     devolverFocoDatos.current = true
-    setEditando(false)
+    setEdicion(null)
   }
   const nombre = `${perfil.nombres} ${perfil.apellidos}`
   function solicitar(alcance: AlcancePerfil) {
     setMensaje(null)
     setVerificacion(alcance)
   }
-  function habilitar(alcance: AlcancePerfil) {
+  function habilitar(alcance: AlcancePerfil, contrasenaActual: string) {
     setVerificacion(null)
-    if (alcance === 'datos') {
-      setEditando(true)
-      setRevision((v) => v + 1)
-    } else setContrasenaAbierta(true)
-  }
-  function cancelarDatos() {
-    void bloquearPerfil().catch(() => undefined)
-    cerrarDatos()
+    setEdicion({ alcance, contrasenaActual })
   }
   function cancelarContrasena() {
-    void bloquearPerfil().catch(() => undefined)
-    setContrasenaAbierta(false)
+    setEdicion(null)
     cambiar.current?.focus()
   }
   return (
@@ -104,9 +98,8 @@ export function PerfilPage() {
                 <PerfilDatosForm
                   perfil={perfil}
                   catalogos={catalogos}
-                  revision={revision}
-                  onCancelar={cancelarDatos}
-                  onReverificar={() => solicitar('datos')}
+                  contrasenaActual={edicion.contrasenaActual}
+                  onCancelar={cerrarDatos}
                   onGuardado={() => {
                     cerrarDatos()
                     setMensaje('Se guardaron los cambios de tu perfil.')
@@ -248,8 +241,11 @@ export function PerfilPage() {
               valor={
                 perfil.ultimaConexion
                   ? new Intl.DateTimeFormat('es-AR', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
                     }).format(new Date(perfil.ultimaConexion))
                   : null
               }
@@ -266,16 +262,13 @@ export function PerfilPage() {
         onCerrar={() => setVerificacion(null)}
         onVerificado={habilitar}
       />
-      {contrasenaAbierta && (
+      {edicion?.alcance === 'contrasena' && (
         <ContrasenaPerfilDialog
           elementoAlCerrar={() => cambiar.current}
           onCerrar={cancelarContrasena}
-          onReverificar={() => {
-            setContrasenaAbierta(false)
-            solicitar('contrasena')
-          }}
+          contrasenaActual={edicion.contrasenaActual}
           onGuardado={() => {
-            setContrasenaAbierta(false)
+            setEdicion(null)
             setMensaje('Se actualizó tu contraseña y se cerraron tus otras sesiones.')
             cambiar.current?.focus()
           }}

@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { z } from 'zod'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -18,17 +17,15 @@ const esquema = perfilDatosSchema
 export function PerfilDatosForm({
   perfil,
   catalogos,
-  revision,
+  contrasenaActual,
   onCancelar,
   onGuardado,
-  onReverificar,
 }: {
   perfil: Perfil
   catalogos: CatalogosUsuarios
-  revision: number
+  contrasenaActual: string
   onCancelar: () => void
   onGuardado: () => void
-  onReverificar: () => void
 }) {
   const {
     control,
@@ -36,7 +33,6 @@ export function PerfilDatosForm({
     handleSubmit,
     setError,
     setValue,
-    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<z.input<typeof esquema>, unknown, PerfilDatosData>({
     resolver: zodResolver(esquema),
@@ -58,9 +54,6 @@ export function PerfilDatosForm({
     },
   })
   const pais = useWatch({ control, name: 'pais' })
-  useEffect(() => {
-    clearErrors('root')
-  }, [revision, clearErrors])
   const paises = [...catalogos.paises]
   const provincias = [...catalogos.provincias]
   const actual = perfil.direccion.provincia
@@ -68,7 +61,7 @@ export function PerfilDatosForm({
   if (actual && !provincias.some((p) => p.id === actual.id)) provincias.push(actual)
   const guardar = handleSubmit(async (datos) => {
     try {
-      await guardarPerfil(datos)
+      await guardarPerfil({ ...datos, contrasenaActual })
       onGuardado()
     } catch (err) {
       const campo =
@@ -82,28 +75,21 @@ export function PerfilDatosForm({
         setError(campo, { message: err.message }, { shouldFocus: true })
       else
         setError('root', {
-          type: err instanceof ApiError && err.status === 403 ? 'verificacion' : 'servidor',
           message: err instanceof ApiError ? err.message : 'No se pudo guardar. Probá de nuevo.',
         })
     }
   })
-  const bloqueado = errors.root?.type === 'verificacion'
   return (
     <form noValidate onSubmit={(e) => void guardar(e)} className="grid gap-5">
       <p className="text-base text-muted-foreground">
-        La edición queda habilitada durante diez minutos. El rol y el estado se conservan.
+        El rol y el estado los gestiona la administración y se conservan al guardar.
       </p>
       {errors.root?.message && (
         <Aviso tipo="error" enfocar>
           {errors.root.message}
-          {bloqueado && (
-            <Button type="button" variant="outline" className="mt-3" onClick={onReverificar}>
-              Volver a verificar
-            </Button>
-          )}
         </Aviso>
       )}
-      <fieldset disabled={isSubmitting || bloqueado} className="grid gap-5">
+      <fieldset disabled={isSubmitting} className="grid gap-5">
         <legend className="sr-only">Editar mis datos personales</legend>
         <TextField
           label="Email"
@@ -220,7 +206,7 @@ export function PerfilDatosForm({
         <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCancelar}>
           Cancelar edición
         </Button>
-        <Button type="submit" loading={isSubmitting} disabled={bloqueado}>
+        <Button type="submit" loading={isSubmitting}>
           Guardar cambios
         </Button>
       </div>

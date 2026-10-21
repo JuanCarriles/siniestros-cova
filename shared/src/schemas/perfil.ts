@@ -10,13 +10,19 @@ export const perfilDatosSchema = usuarioFormularioSchema.omit({
 })
 export const perfilVerificarSchema = z.strictObject({
   contrasena: contrasenaSchema.max(128),
-  alcance: z.enum(['datos', 'contrasena']),
 })
-export const perfilContrasenaSchema = nuevaContrasenaSchema
+export const perfilActualizacionSchema = perfilDatosSchema.extend({
+  contrasenaActual: perfilVerificarSchema.shape.contrasena,
+})
+export const perfilContrasenaSchema = nuevaContrasenaSchema.safeExtend({
+  contrasenaActual: perfilVerificarSchema.shape.contrasena,
+})
+export type PerfilActualizacionData = z.output<typeof perfilActualizacionSchema>
+export type PerfilContrasenaData = z.output<typeof perfilContrasenaSchema>
 export type PerfilDatosInput = z.input<typeof perfilDatosSchema>
 export type PerfilDatosData = z.output<typeof perfilDatosSchema>
 export type PerfilVerificarData = z.output<typeof perfilVerificarSchema>
-export type AlcancePerfil = PerfilVerificarData['alcance']
+export type AlcancePerfil = 'datos' | 'contrasena'
 
 export const perfilSchema = usuarioListadoSchema.extend({
   ultimaConexion: z.iso.datetime({ offset: true }).nullable(),

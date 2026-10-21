@@ -14,7 +14,7 @@ import { Aviso } from '@/components/aviso'
 import { TextField } from '@/components/text-field'
 import { SelectField } from '@/components/select-field'
 import { PasswordField } from '@/components/password-field'
-import { AyudaReglasContrasena } from '@/components/ayuda-reglas-contrasena'
+import { ReglasContrasena } from '@/components/reglas-contrasena'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -153,7 +153,7 @@ export function UsuarioDialog({
         showCloseButton={!isSubmitting}
         onOpenAutoFocus={(e) => {
           e.preventDefault()
-          setFocus('email')
+          setFocus('nombres')
         }}
         onCloseAutoFocus={(e) => {
           const el = elementoAlCerrar()
@@ -179,16 +179,6 @@ export function UsuarioDialog({
               {errors.root.message}
             </Aviso>
           )}
-          <TextField
-            label="Email"
-            type="email"
-            required
-            maxLength={120}
-            autoComplete="off"
-            spellCheck={false}
-            error={errors.email?.message}
-            {...register('email')}
-          />
           <fieldset className="grid gap-4 border-t pt-5">
             <legend className="mb-4 font-semibold text-primary">Datos personales</legend>
             <div className="grid items-start gap-4 sm:grid-cols-2">
@@ -226,6 +216,48 @@ export function UsuarioDialog({
                 {...register('telefono')}
               />
             </div>
+          </fieldset>
+          <fieldset className="grid gap-4 border-t pt-5">
+            <legend className="mb-1 pt-2 font-semibold text-primary">Acceso al sistema</legend>
+            <TextField
+              label="Email"
+              type="email"
+              required
+              maxLength={120}
+              autoComplete="off"
+              spellCheck={false}
+              error={errors.email?.message}
+              {...register('email')}
+            />
+            <Controller
+              name="tipoUsuario"
+              control={control}
+              render={({ field }) => (
+                <TipoUsuarioSelector
+                  rol={rol}
+                  valor={field.value}
+                  onCambio={field.onChange}
+                  error={errors.tipoUsuario?.message}
+                />
+              )}
+            />
+            <PasswordField
+              key={`${abierto}-${usuario?.id ?? 'nuevo'}`}
+              label={nuevo ? 'Contraseña' : 'Nueva contraseña (opcional)'}
+              required={nuevo}
+              maxLength={128}
+              autoComplete="new-password"
+              placeholder={nuevo ? 'Creá una contraseña' : 'Dejala vacía para conservar la actual'}
+              hint={
+                nuevo
+                  ? 'Usará esta contraseña para ingresar.'
+                  : 'Cambiarla cerrará sus sesiones abiertas.'
+              }
+              aria-describedby={nuevo || contrasena ? reglasId : undefined}
+              error={errors.contrasena?.message}
+              {...register('contrasena')}
+            />
+            {(nuevo || contrasena) && <ReglasContrasena id={reglasId} valor={contrasena} />}
           </fieldset>
           <fieldset className="grid gap-4 border-t pt-5">
             <legend className="mb-1 pt-2 font-semibold text-primary">Ubicación</legend>
@@ -287,38 +319,6 @@ export function UsuarioDialog({
                 {...register('direccion.pisoDepartamento')}
               />
             </div>
-          </fieldset>
-          <fieldset className="grid gap-4 border-t pt-5">
-            <legend className="mb-1 pt-2 font-semibold text-primary">Acceso al sistema</legend>
-            <Controller
-              name="tipoUsuario"
-              control={control}
-              render={({ field }) => (
-                <TipoUsuarioSelector
-                  rol={rol}
-                  valor={field.value}
-                  onCambio={field.onChange}
-                  error={errors.tipoUsuario?.message}
-                />
-              )}
-            />
-            <PasswordField
-              key={`${abierto}-${usuario?.id ?? 'nuevo'}`}
-              label={nuevo ? 'Contraseña' : 'Nueva contraseña (opcional)'}
-              required={nuevo}
-              maxLength={128}
-              autoComplete="new-password"
-              placeholder={nuevo ? 'Creá una contraseña' : 'Dejala vacía para conservar la actual'}
-              hint={
-                nuevo
-                  ? 'Usará esta contraseña para ingresar.'
-                  : 'Cambiarla cerrará sus sesiones abiertas.'
-              }
-              aria-describedby={reglasId}
-              error={errors.contrasena?.message}
-              {...register('contrasena')}
-            />
-            <AyudaReglasContrasena id={reglasId} valor={contrasena} />
           </fieldset>
           <DialogFooter className="sticky -bottom-6 -mx-5 -mb-5 border-t bg-surface px-5 py-4 sm:-mx-6 sm:-mb-6 sm:px-6">
             <DialogClose asChild>

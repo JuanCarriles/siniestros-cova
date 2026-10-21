@@ -1,7 +1,7 @@
 import { Router, type Request, type RequestHandler } from 'express'
 import {
   perfilContrasenaSchema,
-  perfilDatosSchema,
+  perfilActualizacionSchema,
   perfilVerificarSchema,
 } from '@cova/shared/schemas/perfil'
 import { tokenDeSesion, usuarioDeSesion } from '../../middlewares/autenticar.ts'
@@ -34,21 +34,18 @@ export function crearPerfilRouter({
   })
   router.post('/verificar', async (req, res) => {
     const { id, token } = contexto(req)
-    res.json(await servicio.verificar(id, token, perfilVerificarSchema.parse(req.body), req.ip))
-  })
-  router.post('/bloquear', (req, res) => {
-    servicio.bloquear(contexto(req).token)
+    await servicio.verificar(id, token, perfilVerificarSchema.parse(req.body), req.ip)
     res.status(204).end()
   })
   router.patch('/', async (req, res) => {
     const { id, token } = contexto(req)
-    await servicio.modificar(id, token, perfilDatosSchema.parse(req.body))
+    await servicio.modificar(id, token, perfilActualizacionSchema.parse(req.body), req.ip)
     res.status(204).end()
   })
   router.patch('/contrasena', async (req, res) => {
     const { id, token } = contexto(req)
     const datos = perfilContrasenaSchema.parse(req.body)
-    await servicio.cambiarContrasena(id, token, datos.contrasena)
+    await servicio.cambiarContrasena(id, token, datos, req.ip)
     res.status(204).end()
   })
   return router

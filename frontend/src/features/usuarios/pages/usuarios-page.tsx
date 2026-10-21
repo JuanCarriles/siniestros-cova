@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { useLoaderData, useRevalidator, useSearchParams } from 'react-router'
-import { CircleMinus, Pencil, RotateCcw, SearchX } from 'lucide-react'
+import { useLoaderData, useRevalidator, useSearchParams, useNavigate } from 'react-router'
+import { CircleMinus, Pencil, RotateCcw, SearchX, UserRound } from 'lucide-react'
 import { tiposUsuarioAdministrables, type UsuarioListado } from '@cova/shared/schemas/usuarios-abm'
 import { BarraAbm } from '@/components/abm/barra-abm'
 import { FiltroAbm } from '@/components/abm/filtro-abm'
@@ -10,6 +10,8 @@ import { TablaAbm, type ColumnaAbm } from '@/components/abm/tabla-abm'
 import type { AccionFila } from '@/components/abm/menu-acciones'
 import { SectionHeading } from '@/components/layout/section-heading'
 import { roleLabels } from '@/components/layout/panel-navigation'
+import { Badge } from '@/components/ui/badge'
+import { usePanel } from '@/components/layout/panel-context'
 import { Aviso } from '@/components/aviso'
 import { normalizarBusqueda, plural } from '@/lib/texto'
 import type { cargarUsuarios } from '../loader'
@@ -62,6 +64,21 @@ const columnas: ColumnaAbm<UsuarioListado>[] = [
 export function UsuariosPage() {
   const { usuarios, catalogos, actor } = useLoaderData<typeof cargarUsuarios>()
   const revalidator = useRevalidator()
+  const navigate = useNavigate()
+  const { basePath } = usePanel()
+  const columnasConIdentidad = columnas.map((columna) =>
+    columna.id !== 'nombre'
+      ? columna
+      : {
+          ...columna,
+          celda: (u: UsuarioListado) => (
+            <span className="inline-flex flex-wrap items-center gap-2">
+              {nombre(u)}
+              {u.id === actor.id && <Badge variant="info">Vos</Badge>}
+            </span>
+          ),
+        },
+  )
   const [params, setParams] = useSearchParams()
   const [busqueda, setBusqueda] = useState('')
   const [mensaje, setMensaje] = useState<string | null>(null)
@@ -113,10 +130,18 @@ export function UsuariosPage() {
     void revalidator.revalidate()
   }
   function acciones(u: UsuarioListado): AccionFila[] {
+    if (u.id === actor.id)
+      return [
+        {
+          etiqueta: 'Ir a mi perfil',
+          icono: <UserRound aria-hidden="true" />,
+          onSelect: () => void navigate(`${basePath}/perfil`),
+        },
+      ]
     if (!tipos.includes(u.tipoUsuario))
       return [
         {
-          etiqueta: 'Consultar restricción',
+          etiqueta: 'Ver por qué no se puede modificar',
           icono: <CircleMinus aria-hidden="true" />,
           onSelect: (d) => estado(u, u.eliminado ? 'reactivacion' : 'baja', d),
         },
@@ -180,7 +205,7 @@ export function UsuariosPage() {
       >
         <TablaAbm
           filas={visibles}
-          columnas={columnas}
+          columnas={columnasConIdentidad}
           clave={(u) => u.id}
           nombre={nombre}
           acciones={acciones}
@@ -211,6 +236,7 @@ export function UsuariosPage() {
         rol={actor.tipoUsuario}
         onCerrar={() => setCambio(null)}
         onHecho={terminar}
+        onDesactualizado={() => void revalidator.revalidate()}
         elementoAlCerrar={elementoAlCerrar}
       />
     </>

@@ -2,7 +2,7 @@ import { useId } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { nuevaContrasenaSchema, type NuevaContrasenaData } from '@cova/shared/schemas/auth'
-import { AyudaReglasContrasena } from '@/components/ayuda-reglas-contrasena'
+import { ReglasContrasena } from '@/components/reglas-contrasena'
 import { PasswordField } from '@/components/password-field'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
@@ -21,12 +21,12 @@ import { cambiarContrasenaPerfil } from '../api/perfil.api'
 export function ContrasenaPerfilDialog({
   onCerrar,
   onGuardado,
-  onReverificar,
+  contrasenaActual,
   elementoAlCerrar,
 }: {
   onCerrar: () => void
   onGuardado: () => void
-  onReverificar: () => void
+  contrasenaActual: string
   elementoAlCerrar: () => HTMLElement | null
 }) {
   const reglasId = useId()
@@ -45,14 +45,10 @@ export function ContrasenaPerfilDialog({
   const contrasena = useWatch({ control, name: 'contrasena' })
   const guardar = handleSubmit(async (datos) => {
     try {
-      await cambiarContrasenaPerfil(datos)
+      await cambiarContrasenaPerfil({ ...datos, contrasenaActual })
       reset()
       onGuardado()
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
-        onReverificar()
-        return
-      }
       setError('root', {
         message: err instanceof ApiError ? err.message : 'No se pudo cambiar. Probá de nuevo.',
       })
@@ -101,7 +97,7 @@ export function ContrasenaPerfilDialog({
             error={errors.contrasena?.message}
             {...register('contrasena')}
           />
-          <AyudaReglasContrasena id={reglasId} valor={contrasena} />
+          <ReglasContrasena id={reglasId} valor={contrasena} />
           <PasswordField
             label="Repetir nueva contraseña"
             required

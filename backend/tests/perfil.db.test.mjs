@@ -7,7 +7,7 @@ import { crearServicioPerfil } from '../src/modules/perfil/perfil.service.ts'
 import { perfilDatosSchema } from '@cova/shared/schemas/perfil'
 
 const status = (numero) => (error) => error.status === numero
-test('PostgreSQL: perfil propio, casos, autorización por sesión, expiración, baja y cambio de contraseña; rollback total', async () => {
+test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones, límites compartidos y cambio de contraseña; rollback total', async () => {
   const prisma = getPrisma()
   const marca = `perfil-${Date.now()}`
   const rollback = new Error('Revertir prueba de perfil')
@@ -55,7 +55,7 @@ test('PostgreSQL: perfil propio, casos, autorización por sesión, expiración, 
           await sesion(propio.id, token)
           await sesion(propio.id, segunda)
           await sesion(otro.id, tokenOtro)
-          const datos = perfilDatosSchema.parse({
+          const personales = perfilDatosSchema.parse({
             nombres: 'Ana María',
             apellidos: 'Prueba',
             documento: '123',
@@ -63,25 +63,27 @@ test('PostgreSQL: perfil propio, casos, autorización por sesión, expiración, 
             email: propio.email,
             direccion: { idProvincia: provincia.id, localidad: 'Rosario' },
           })
-          await assert.rejects(servicio.modificar(propio.id, token, datos), status(403))
+          const datos = { ...personales, contrasenaActual: 'Inicial.2026' }
           await assert.rejects(
-            servicio.verificar(propio.id, token, { contrasena: 'Incorrecta', alcance: 'datos' }),
+            servicio.modificar(propio.id, token, { ...datos, contrasenaActual: 'Incorrecta' }),
             status(400),
           )
           await assert.rejects(
-            servicio.verificar(otro.id, token, { contrasena: 'Inicial.2026', alcance: 'datos' }),
+            servicio.verificar(otro.id, token, { contrasena: 'Inicial.2026' }),
             status(401),
           )
-          await servicio.verificar(propio.id, token, {
-            contrasena: 'Inicial.2026',
-            alcance: 'datos',
-          })
-          await assert.rejects(servicio.modificar(propio.id, segunda, datos), status(403))
+          await servicio.verificar(propio.id, token, { contrasena: 'Inicial.2026' })
+          // Verificar no autoriza una escritura con contraseña incorrecta.
           await assert.rejects(
-            servicio.cambiarContrasena(propio.id, token, 'Otra.2026'),
-            status(403),
+            servicio.modificar(propio.id, token, { ...datos, contrasenaActual: 'Incorrecta' }),
+            status(400),
           )
-          await servicio.modificar(propio.id, token, datos)
+          // Otro proceso puede guardar sin compartir un permiso del primero.
+          const segundoProceso = crearServicioPerfil({ base, ahora: () => tiempo })
+          await segundoProceso.modificar(propio.id, token, datos)
+          // Tampoco hay una vigencia adicional de diez minutos: solo cuenta la sesión vigente.
+          tiempo += 600_001
+          await servicio.modificar(propio.id, segunda, datos)
           assert.equal(
             (await tx.usuario.findUnique({ where: { id: propio.id } })).contrasena,
             inicial,
@@ -91,15 +93,10 @@ test('PostgreSQL: perfil propio, casos, autorización por sesión, expiración, 
             (await tx.usuario.findUnique({ where: { id: propio.id } })).tipoUsuario,
             'GESTOR',
           )
-          await assert.rejects(servicio.modificar(propio.id, token, datos), status(403))
           // La dirección compartida se copia; no se pisan datos de otro registro.
           await tx.usuario.update({
             where: { id: otro.id },
             data: { idDireccion: propio.idDireccion },
-          })
-          await servicio.verificar(propio.id, token, {
-            contrasena: 'Inicial.2026',
-            alcance: 'datos',
           })
           await servicio.modificar(propio.id, token, {
             ...datos,
@@ -144,33 +141,35 @@ test('PostgreSQL: perfil propio, casos, autorización por sesión, expiración, 
           assert.equal(perfil.casosDemorados, 2)
           assert.equal(perfil.demorados.length, 2)
           assert.equal(Object.hasOwn(perfil, 'contrasena'), false)
-          // Cancelar, expirar, revocar sesión o cambiar el hash invalidan la edición.
-          await servicio.verificar(propio.id, token, {
-            contrasena: 'Inicial.2026',
-            alcance: 'datos',
-          })
-          servicio.bloquear(token)
-          await assert.rejects(servicio.modificar(propio.id, token, datos), status(403))
-          await servicio.verificar(propio.id, token, {
-            contrasena: 'Inicial.2026',
-            alcance: 'datos',
-          })
-          tiempo += 600_001
-          await assert.rejects(servicio.modificar(propio.id, token, datos), status(403))
-          await servicio.verificar(propio.id, token, {
-            contrasena: 'Inicial.2026',
-            alcance: 'datos',
-          })
+          // Si la contraseña cambia después de confirmar, la antigua ya no sirve.
+          await servicio.verificar(propio.id, token, { contrasena: 'Inicial.2026' })
           await tx.usuario.update({
             where: { id: propio.id },
             data: { contrasena: await hashPassword('Temporal.2026') },
           })
-          await assert.rejects(servicio.modificar(propio.id, token, datos), status(403))
+          await assert.rejects(servicio.modificar(propio.id, token, datos), status(400))
           await tx.usuario.update({ where: { id: propio.id }, data: { contrasena: inicial } })
-          await servicio.verificar(propio.id, token, {
-            contrasena: 'Inicial.2026',
-            alcance: 'datos',
+          // Las mismas comprobaciones de provincia y email se usan desde ambos servicios.
+          await tx.provincia.update({
+            where: { id: provincia.id },
+            data: { eliminado: true, fechaBaja: new Date(tiempo) },
           })
+          await servicio.modificar(propio.id, token, datos)
+          const inactiva = await tx.provincia.create({
+            data: {
+              nombre: `${marca}-inactiva`,
+              idPais: pais.id,
+              eliminado: true,
+              fechaBaja: new Date(tiempo),
+            },
+          })
+          await assert.rejects(
+            servicio.modificar(propio.id, token, {
+              ...datos,
+              direccion: { ...datos.direccion, idProvincia: inactiva.id },
+            }),
+            status(409),
+          )
           await assert.rejects(
             servicio.modificar(propio.id, token, { ...datos, email: otro.email }),
             status(409),
@@ -189,11 +188,19 @@ test('PostgreSQL: perfil propio, casos, autorización por sesión, expiración, 
               fechaVencimiento: new Date(tiempo + 60_000),
             },
           })
-          await servicio.verificar(propio.id, token, {
-            contrasena: 'Inicial.2026',
-            alcance: 'contrasena',
-          })
-          await servicio.cambiarContrasena(propio.id, token, 'Nueva.2026')
+          const cambio = {
+            contrasenaActual: 'Inicial.2026',
+            contrasena: 'Nueva.2026',
+            confirmarContrasena: 'Nueva.2026',
+          }
+          await assert.rejects(
+            servicio.cambiarContrasena(propio.id, token, {
+              ...cambio,
+              contrasenaActual: 'Incorrecta',
+            }),
+            status(400),
+          )
+          await servicio.cambiarContrasena(propio.id, token, cambio)
           assert.equal(
             await verifyPassword(
               (await tx.usuario.findUnique({ where: { id: propio.id } })).contrasena,
@@ -206,29 +213,38 @@ test('PostgreSQL: perfil propio, casos, autorización por sesión, expiración, 
             await tx.recuperacionContrasena.count({ where: { idUsuario: propio.id } }),
             0,
           )
-          await assert.rejects(
-            servicio.cambiarContrasena(propio.id, token, 'Repetida.2026'),
-            status(403),
-          )
-          await servicio.verificar(propio.id, token, { contrasena: 'Nueva.2026', alcance: 'datos' })
+          await assert.rejects(servicio.modificar(propio.id, token, datos), status(400))
           await tx.sesion.delete({ where: { tokenHash: hashToken(token) } })
-          await assert.rejects(servicio.modificar(propio.id, token, datos), status(401))
-          const limitado = crearServicioPerfil({ base, ahora: () => tiempo })
-          for (let i = 0; i < 5; i++)
-            await assert.rejects(
-              limitado.verificar(otro.id, tokenOtro, {
-                contrasena: 'Incorrecta',
-                alcance: 'datos',
-              }),
-              status(i === 4 ? 429 : 400),
-            )
           await assert.rejects(
-            limitado.verificar(otro.id, tokenOtro, {
-              contrasena: 'Inicial.2026',
-              alcance: 'datos',
-            }),
+            servicio.modificar(propio.id, token, { ...datos, contrasenaActual: 'Nueva.2026' }),
+            status(401),
+          )
+          // El límite de cinco fallos se comparte entre verificar y los dos PATCH.
+          const limitado = crearServicioPerfil({ base, ahora: () => tiempo })
+          const otros = { ...datos, email: otro.email, contrasenaActual: 'Incorrecta' }
+          const fallos = [
+            () => limitado.verificar(otro.id, tokenOtro, { contrasena: 'Incorrecta' }),
+            () => limitado.modificar(otro.id, tokenOtro, otros),
+            () =>
+              limitado.cambiarContrasena(otro.id, tokenOtro, {
+                ...cambio,
+                contrasenaActual: 'Incorrecta',
+              }),
+            () => limitado.modificar(otro.id, tokenOtro, otros),
+            () => limitado.verificar(otro.id, tokenOtro, { contrasena: 'Incorrecta' }),
+          ]
+          for (const [i, fallo] of fallos.entries())
+            await assert.rejects(fallo(), status(i === 4 ? 429 : 400))
+          await assert.rejects(
+            limitado.verificar(otro.id, tokenOtro, { contrasena: 'Inicial.2026' }),
             status(429),
           )
+          await assert.rejects(
+            limitado.modificar(otro.id, tokenOtro, { ...otros, contrasenaActual: 'Inicial.2026' }),
+            status(429),
+          )
+          tiempo += 600_001
+          await limitado.verificar(otro.id, tokenOtro, { contrasena: 'Inicial.2026' })
           await tx.usuario.update({
             where: { id: propio.id },
             data: { eliminado: true, fechaBaja: new Date(tiempo) },

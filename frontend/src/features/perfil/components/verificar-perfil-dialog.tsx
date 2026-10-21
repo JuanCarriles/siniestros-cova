@@ -22,8 +22,8 @@ import {
 import { ApiError } from '@/lib/api'
 import { verificarPerfil } from '../api/perfil.api'
 
-const esquema = perfilVerificarSchema.omit({ alcance: true })
-type DatosVerificacion = Omit<PerfilVerificarData, 'alcance'>
+const esquema = perfilVerificarSchema
+type DatosVerificacion = PerfilVerificarData
 
 export function VerificarPerfilDialog({
   alcance,
@@ -32,7 +32,7 @@ export function VerificarPerfilDialog({
 }: {
   alcance: AlcancePerfil | null
   onCerrar: () => void
-  onVerificado: (alcance: AlcancePerfil) => void
+  onVerificado: (alcance: AlcancePerfil, contrasenaActual: string) => void
 }) {
   const completada = useRef(false)
   const {
@@ -49,10 +49,10 @@ export function VerificarPerfilDialog({
   async function verificar(datos: DatosVerificacion) {
     if (!alcance) return
     try {
-      await verificarPerfil({ ...datos, alcance })
+      await verificarPerfil(datos)
       completada.current = true
       reset()
-      onVerificado(alcance)
+      onVerificado(alcance, datos.contrasena)
     } catch (err) {
       setError('root', {
         message: err instanceof ApiError ? err.message : 'No se pudo verificar. Probá de nuevo.',
