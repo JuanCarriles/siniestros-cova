@@ -30,6 +30,7 @@ async function servidor() {
   const servicio = {
     listar: registrar('listar'),
     opciones: registrar('opciones'),
+    obtener: registrar('obtener'),
     partes: registrar('partes'),
   }
   const app = express()
@@ -60,6 +61,12 @@ test('permisos: sin sesión 401; gestor y administrador acceden con su usuario',
   assert.equal((await api.pedir('admin', '/7/partes')).status, 200)
   assert.equal(api.llamadas[0][1].id, 3, 'el servicio recibe el usuario de la sesión')
   assert.deepEqual(api.llamadas[1].slice(2), [7])
+  // La ficha: el servicio decide el acceso con el usuario de la sesión (E4-03)
+  assert.equal((await api.pedir('gestor', '/9')).status, 200)
+  assert.deepEqual(
+    [api.llamadas[2][0], api.llamadas[2][1].id, api.llamadas[2][2]],
+    ['obtener', 3, 9],
+  )
 })
 
 test('filtros: valores por defecto y validación de la dirección', async (t) => {
@@ -103,5 +110,7 @@ test('filtros: valores por defecto y validación de la dirección', async (t) =>
     assert.equal((await api.pedir('admin', malo)).status, 400, malo)
   }
   assert.equal((await api.pedir('admin', '/abc/partes')).status, 400)
+  assert.equal((await api.pedir('admin', '/abc')).status, 400)
+  assert.equal((await api.pedir(null, '/7')).status, 401)
   assert.equal(api.llamadas.length, 0)
 })

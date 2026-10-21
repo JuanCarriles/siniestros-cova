@@ -6,7 +6,7 @@ import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
 import { cargarAjustadores } from '@/features/ajustadores/loader'
 import { AjustadoresPage } from '@/features/ajustadores/pages/ajustadores-page'
 import { cargarAseguradoras } from '@/features/aseguradoras/loader'
-import { cargarSiniestros } from '@/features/siniestros/loader'
+import { cargarFichaSiniestro, cargarSiniestros } from '@/features/siniestros/loader'
 import { FichaSiniestroPage } from '@/features/siniestros/pages/ficha-siniestro-page'
 import { SiniestrosPage } from '@/features/siniestros/pages/siniestros-page'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
@@ -91,7 +91,7 @@ export const router = createBrowserRouter([
             children: [
               {
                 path: 'siniestros/:idSiniestro',
-                loader: requerirSeccion('siniestros'),
+                loader: cargarFichaSiniestro,
                 Component: FichaSiniestroPage,
               },
               ...Object.entries(secciones).map(([seccion, Component]): RouteObject => ({

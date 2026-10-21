@@ -7,6 +7,7 @@ import type { crearServicioSiniestros } from './siniestros.service.ts'
 // CU-09. Todos los roles; el servicio limita al gestor a sus siniestros (RF-17).
 // GET /api/siniestros?pagina=&porPagina=&q=&estado=&aseguradora=&gestor=&bajas=&orden=
 // GET /api/siniestros/opciones
+// GET /api/siniestros/:id
 // GET /api/siniestros/:id/partes
 export function crearSiniestrosRouter(deps: {
   servicio: ReturnType<typeof crearServicioSiniestros>
@@ -22,6 +23,10 @@ export function crearSiniestrosRouter(deps: {
 
   router.get('/opciones', async (req, res) => {
     res.json(await servicio.opciones(usuarioDeSesion(req)))
+  })
+
+  router.get('/:id', async (req, res) => {
+    res.json(await servicio.obtener(usuarioDeSesion(req), idSchema.parse(req.params.id)))
   })
 
   router.get('/:id/partes', async (req, res) => {

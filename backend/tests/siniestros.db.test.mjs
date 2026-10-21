@@ -226,8 +226,25 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
           assert.deepEqual(partes.abogados[0].representa, ['José Ríos'])
           assert.equal(partes.peritos[0].tipo, 'CESVI')
           await servicio.partes(gestorA, s1.id)
-          await assert.rejects(servicio.partes(gestorB, s1.id), (e) => e.status === 404)
-          await assert.rejects(servicio.partes(gestorA, s3.id), (e) => e.status === 404)
+          // E4-03: abrir un siniestro ajeno es un error de permisos, también para sus partes
+          await assert.rejects(servicio.partes(gestorB, s1.id), (e) => e.status === 403)
+          await assert.rejects(servicio.partes(gestorA, s3.id), (e) => e.status === 403)
+
+          // Ficha: el gestor abre los suyos; los ajenos y los dados de baja dan 403; el administrador, todos
+          const ficha = await servicio.obtener(gestorA, s1.id)
+          assert.deepEqual(
+            [ficha.numeroSiniestro, ficha.aseguradora.id, ficha.gestor.id],
+            [s1.numeroSiniestro, aseguradora.id, gestorA.id],
+          )
+          await assert.rejects(servicio.obtener(gestorB, s1.id), (e) => {
+            assert.equal(e.status, 403)
+            assert.match(e.message, /no está asignado a vos/)
+            return true
+          })
+          await assert.rejects(servicio.obtener(gestorA, s3.id), (e) => e.status === 403)
+          assert.equal((await servicio.obtener(admin, s3.id)).id, s3.id)
+          await assert.rejects(servicio.obtener(admin, 2147483647), (e) => e.status === 404)
+          await assert.rejects(servicio.obtener(gestorA, 2147483647), (e) => e.status === 404)
 
           // Opciones de los filtros: el gestor no recibe la lista de gestores
           assert.deepEqual((await servicio.opciones(gestorA)).gestores, [])

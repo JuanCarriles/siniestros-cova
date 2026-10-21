@@ -3,6 +3,7 @@ import {
   type OpcionesSiniestros,
   type PaginaSiniestros,
   type PartesSiniestro,
+  type SiniestroResumen,
 } from '@cova/shared/schemas/siniestros'
 import { api } from '@/lib/api'
 
@@ -37,4 +38,8 @@ export function opcionesSiniestros(): Promise<OpcionesSiniestros> {
 
 export function partesSiniestro(id: number): Promise<PartesSiniestro> {
   return api(`/siniestros/${id}/partes`)
+}
+
+export function obtenerSiniestro(id: number): Promise<SiniestroResumen> {
+  return api(`/siniestros/${id}`)
 }
