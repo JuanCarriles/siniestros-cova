@@ -8,6 +8,7 @@ import { authRouter } from './modules/auth/auth.module.ts'
 import { usuariosRouter } from './modules/usuarios/usuarios.module.ts'
 import { perfilRouter } from './modules/perfil/perfil.module.ts'
 import { healthRouter } from './modules/health/health.routes.ts'
+import { siniestrosRouter } from './modules/siniestros/siniestros.module.ts'
 
 export const app = express()
 
@@ -27,6 +28,7 @@ api.use('/aseguradoras', aseguradorasRouter)
 api.use('/ajustadores', ajustadoresRouter)
 api.use('/usuarios', usuariosRouter)
 api.use('/perfil', perfilRouter)
+api.use('/siniestros', siniestrosRouter)
 
 // Los routers de cada módulo se montan acá. Las rutas protegidas usan requerirSesion y requerirRol
 // (ver modules/auth/auth.module.ts).

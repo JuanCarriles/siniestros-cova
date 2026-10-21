@@ -16,6 +16,8 @@ export type AccionFila = {
   onSelect: (disparador: HTMLButtonElement | null) => void
   /** Baja o borrado: va en rojo, separada de las demás */
   peligro?: boolean
+  /** Todavía no disponible: se ve (para saber que existirá) pero no se puede elegir */
+  proximamente?: boolean
 }
 
 // Menú ⋮ de cada fila (mockups). El botón mide 48 px y dice para el lector de pantalla de qué fila es
@@ -41,10 +43,11 @@ export function MenuAcciones({ nombre, acciones }: { nombre: string; acciones: A
         {comunes.map((accion) => (
           <DropdownMenuItem
             key={accion.etiqueta}
+            disabled={accion.proximamente}
             onSelect={() => accion.onSelect(disparador.current)}
           >
             {accion.icono}
-            {accion.etiqueta}
+            <Etiqueta accion={accion} />
           </DropdownMenuItem>
         ))}
         {comunes.length > 0 && peligrosas.length > 0 && <DropdownMenuSeparator />}
@@ -52,13 +55,23 @@ export function MenuAcciones({ nombre, acciones }: { nombre: string; acciones: A
           <DropdownMenuItem
             key={accion.etiqueta}
             peligro
+            disabled={accion.proximamente}
             onSelect={() => accion.onSelect(disparador.current)}
           >
             {accion.icono}
-            {accion.etiqueta}
+            <Etiqueta accion={accion} />
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function Etiqueta({ accion }: { accion: AccionFila }) {
+  return (
+    <span>
+      {accion.etiqueta}
+      {accion.proximamente && <span className="ml-1.5 text-sm font-normal">(próximamente)</span>}
+    </span>
   )
 }
