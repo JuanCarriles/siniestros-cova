@@ -80,8 +80,15 @@ export function SiniestrosPage() {
   }
 
   // Búsqueda: consulta al servidor cuando se deja de escribir
-  const [busqueda, setBusqueda] = useState(params.get('q') ?? '')
   const q = params.get('q') ?? ''
+  const [busqueda, setBusqueda] = useState(q)
+  // Si la búsqueda de la dirección cambia por otro camino (Atrás, Adelante, un enlace), el campo la acompaña. Cuando
+  // cambia porque se escribió, ya coinciden y no se toca lo que se está escribiendo.
+  const [qAnterior, setQAnterior] = useState(q)
+  if (q !== qAnterior) {
+    setQAnterior(q)
+    if (q !== busqueda.trim()) setBusqueda(q)
+  }
   useEffect(() => {
     const texto = busqueda.trim()
     if (texto === q) return

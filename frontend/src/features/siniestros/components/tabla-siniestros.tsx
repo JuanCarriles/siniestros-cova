@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ArrowDown } from 'lucide-react'
 import type { OrdenSiniestros, SiniestroListado } from '@cova/shared/schemas/siniestros'
@@ -19,9 +19,9 @@ import {
   type AlVer,
 } from './celdas-siniestro'
 
-// Ancho de la primera columna fija: la segunda se pega justo a su derecha
-const ANCHO_PRIMERA = 'w-32 min-w-32'
-const IZQUIERDA_SEGUNDA = 'left-32'
+// Ancho mínimo de la primera columna fija. La segunda se pega a su derecha según el ancho medido (puede crecer con
+// números o pólizas largos): si se supusiera fijo, al desplazar de costado una taparía a la otra.
+const ANCHO_PRIMERA = 'min-w-32'
 
 // Tabla densa de siniestros (desde 768 px; en celular son tarjetas). Está pensada para entrar completa en una
 // pantalla de escritorio. Si aun así no entra (tablet, zoom, muchas columnas), se desplaza dentro de su propio
@@ -53,6 +53,7 @@ export function TablaSiniestros({
   const contenedor = useRef<HTMLDivElement>(null)
   const tabla = useRef<HTMLTableElement>(null)
   const [desborda, setDesborda] = useState(false)
+  const [anchoPrimera, setAnchoPrimera] = useState(0)
   useEffect(() => {
     const caja = contenedor.current
     const tablaActual = tabla.current
@@ -65,6 +66,7 @@ export function TablaSiniestros({
       const minimo = tablaActual.scrollWidth
       tablaActual.style.width = anterior
       setDesborda(minimo > caja.clientWidth + 1)
+      setAnchoPrimera(tablaActual.querySelector('thead th')?.getBoundingClientRect().width ?? 0)
     }
     const observador = new ResizeObserver(medir)
     observador.observe(caja)
@@ -77,7 +79,7 @@ export function TablaSiniestros({
       ? cn(
           'sticky',
           encabezado ? 'z-30' : 'z-10 bg-inherit',
-          id === 'siniestro' ? 'left-0' : IZQUIERDA_SEGUNDA,
+          id === 'siniestro' ? 'left-0' : 'left-(--ancho-primera)',
           // Una línea marca dónde termina la parte fija
           id === 'asegurado' && 'shadow-[inset_-2px_0_0_var(--color-line-strong)]',
         )
@@ -154,6 +156,7 @@ export function TablaSiniestros({
         {/* Si se desplaza igual, cada dato va en su ancho natural (sin cortar palabras); si entra, ocupa el ancho */}
         <table
           ref={tabla}
+          style={{ '--ancho-primera': `${anchoPrimera}px` } as CSSProperties}
           className={cn(
             'border-separate border-spacing-0 text-base',
             desborda ? 'w-max min-w-full' : 'w-full',

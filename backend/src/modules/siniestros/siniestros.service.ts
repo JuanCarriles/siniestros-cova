@@ -171,6 +171,9 @@ export function crearServicioSiniestros(
               { eliminado: 'asc' },
               // Los cerrados no se mueven más: van después de los abiertos
               { estadoSiniestro: { esCierre: 'asc' } },
+              // Supone que todo siniestro tiene fechaUltimoMovimiento: el alta (E4-02) la tiene que cargar igual a
+              // la de asignación. Sin ella, un caso nuevo sin movimientos quedaría antes que uno quieto hace días
+              // (Prisma no ordena por "último movimiento o, si no hay, asignación").
               { fechaUltimoMovimiento: { sort: 'asc', nulls: 'first' } },
               { fechaAsignacion: 'asc' },
               { id: 'asc' },

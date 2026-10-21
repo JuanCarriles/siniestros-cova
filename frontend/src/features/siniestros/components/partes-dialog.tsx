@@ -95,6 +95,8 @@ export function PartesDialog({
     if (id === undefined) return
     const guardadas = cache.current.get(id)
     if (guardadas) {
+      // Un error de otro siniestro no puede quedar a la vista junto a estos datos
+      setError(null)
       setPartes(guardadas)
       return
     }
