@@ -126,6 +126,20 @@ están en `src/components/abm/`; `src/features/aseguradoras/pages/aseguradoras-p
 | `MenuAcciones`   | Menú ⋮ de cada fila. `onSelect` recibe el botón ⋮: pasarlo al diálogo (`elementoAlCerrar`) para que el foco vuelva ahí al cerrar. |
 | `EstadoRegistro` | "Activa / Dada de baja desde 15/08/2026" (`genero="masculino"` para "Activo / Dado de baja").                                     |
 
+`ListadoAbm` acepta `acciones` (controles a la derecha del encabezado). En `MenuAcciones`, una acción con
+`proximamente` se ve deshabilitada con "(próximamente)": sirve para mostrar lo que llega en otra historia. Un listado largo que se pagina en el
+servidor usa `Paginacion` (`src/components/paginacion.tsx`): cada página es un enlace con los filtros en la
+dirección. `Tooltip` (`src/components/ui/tooltip.tsx`) muestra ayuda al pasar el mouse o al enfocar.
+
+### Listado de siniestros (tabla densa)
+
+`src/features/siniestros/` no usa `TablaAbm`: necesita columnas fijas y orden. Los datos afines comparten
+columna en dos líneas (aseguradora y ajustador; gestor y asignación) para que la tabla entre completa: con el
+menú lateral abierto desde unos 1480 px de ancho, y con el menú achicado desde unos 1270 px. Si no entra, se
+desplaza dentro de su recuadro con Siniestro y Asegurado fijos y avisa cómo verla entera (achicar el menú u
+ocultar columnas). Mientras entra, el encabezado se pega al borde de la pantalla al bajar (por eso `ListadoAbm`
+recorta con `overflow-clip` y no con `overflow-hidden`).
+
 Para buscar sin importar tildes ni mayúsculas: `normalizarBusqueda` (`src/lib/texto.ts`). En los formularios, una lista
 desplegable es un `SelectField` (`src/components/select-field.tsx`) dentro de un `Controller` de react-hook-form.
 

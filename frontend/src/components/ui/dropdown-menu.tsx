@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui'
+import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // Menú desplegable (Radix): se abre con clic, Enter o Espacio; se recorre con las flechas y se cierra con Escape,
@@ -57,6 +58,56 @@ function DropdownMenuItem({
   )
 }
 
+// Opción que se marca y desmarca (p. ej. columnas visibles). El menú queda abierto para elegir varias: la casilla
+// se dibuja con borde y tilde, no solo con color.
+function DropdownMenuCheckboxItem({
+  className,
+  children,
+  checked,
+  onSelect,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      data-slot="dropdown-menu-checkbox-item"
+      checked={checked}
+      onSelect={(event) => {
+        event.preventDefault()
+        onSelect?.(event)
+      }}
+      className={cn(
+        'flex min-h-12 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-base font-medium outline-none select-none',
+        'focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:text-disabled-ink',
+        className,
+      )}
+      {...props}
+    >
+      <span
+        aria-hidden="true"
+        className="grid size-6 shrink-0 place-items-center rounded border-2 border-input bg-surface text-primary-foreground in-data-[state=checked]:border-primary in-data-[state=checked]:bg-primary"
+      >
+        <DropdownMenuPrimitive.ItemIndicator>
+          <Check className="size-4" strokeWidth={3} />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.CheckboxItem>
+  )
+}
+
+function DropdownMenuLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+  return (
+    <DropdownMenuPrimitive.Label
+      data-slot="dropdown-menu-label"
+      className={cn('px-3 pt-2 pb-1 text-sm font-semibold text-muted-foreground', className)}
+      {...props}
+    />
+  )
+}
+
 function DropdownMenuSeparator({
   className,
   ...props
@@ -75,5 +126,7 @@ export {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
 }

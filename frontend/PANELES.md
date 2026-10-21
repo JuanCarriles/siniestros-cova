@@ -18,6 +18,10 @@ uno por rol.
   contenido al cambiar de sección y botón "Salir" (action `/salir`, con confirmación). En pantallas bajas la barra
   lateral achica márgenes y alto de las opciones (variantes `baja` y `muy-baja` de `src/styles/index.css`) para que
   todas las secciones entren sin desplazarse; el tamaño de letra no cambia.
+  En escritorio el menú se puede achicar a una franja de íconos ("Achicar el menú", al pie de la lista): el
+  nombre de cada sección aparece al pasar el mouse o al enfocar, y la elección se recuerda en el navegador.
+  Las páginas lo leen y lo cambian con `usePanel().menuLateral` (el listado de siniestros lo ofrece cuando la
+  tabla no entra).
 - `src/components/layout/panel-navigation.ts`: secciones y lista explícita por rol. No se deducen permisos por
   jerarquía.
 - `src/components/layout/panel-context.ts`: `usePanel()` da el usuario y la ruta base a las páginas.

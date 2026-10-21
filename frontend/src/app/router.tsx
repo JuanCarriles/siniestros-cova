@@ -6,6 +6,9 @@ import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
 import { cargarAjustadores } from '@/features/ajustadores/loader'
 import { AjustadoresPage } from '@/features/ajustadores/pages/ajustadores-page'
 import { cargarAseguradoras } from '@/features/aseguradoras/loader'
+import { cargarSiniestros } from '@/features/siniestros/loader'
+import { FichaSiniestroPage } from '@/features/siniestros/pages/ficha-siniestro-page'
+import { SiniestrosPage } from '@/features/siniestros/pages/siniestros-page'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { RecuperarContrasenaPage } from '@/features/auth/pages/recuperar-contrasena-page'
@@ -42,7 +45,7 @@ const developmentRoutes: RouteObject[] = import.meta.env.DEV
 // Página de cada sección del panel. Cada historia reemplaza su SeccionPendiente por la página real de la feature.
 const secciones: Record<PanelSection, ComponentType> = {
   dashboard: DashboardPage,
-  siniestros: () => <SeccionPendiente section="siniestros" />,
+  siniestros: SiniestrosPage,
   plantillas: () => <SeccionPendiente section="plantillas" />,
   aseguradoras: AseguradorasPage,
   ajustadores: AjustadoresPage,
@@ -53,6 +56,7 @@ const secciones: Record<PanelSection, ComponentType> = {
 
 // Loader propio de las secciones que traen datos. Tiene que llamar a requerirSeccion antes de pedirlos.
 const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
+  siniestros: cargarSiniestros,
   aseguradoras: cargarAseguradoras,
   ajustadores: cargarAjustadores,
 }
@@ -80,6 +84,11 @@ export const router = createBrowserRouter([
             // Sin path: sus errores (403 por rol, fallas al cargar) se muestran dentro del panel, con el menú
             errorElement: <SeccionNoDisponible />,
             children: [
+              {
+                path: 'siniestros/:idSiniestro',
+                loader: requerirSeccion('siniestros'),
+                Component: FichaSiniestroPage,
+              },
               ...Object.entries(secciones).map(([seccion, Component]): RouteObject => ({
                 path: seccion,
                 loader:

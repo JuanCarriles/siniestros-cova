@@ -84,11 +84,15 @@ Requieren las tablas creadas (migración aplicada). Están en `prisma/seeds/`.
 | ---------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
 | Base       | País Argentina y sus 24 jurisdicciones, 7 estados de siniestro, 4 tipos de documento                                 | Desarrollo y producción | `npm run seed:base -w backend` / en el contenedor: `node dist/seed-base.mjs` |
 | Desarrollo | Base + 3 usuarios de prueba (uno por tipo), aseguradoras, ajustadores, abogados, plantillas y 6 siniestros completos | Solo desarrollo         | `npm run seed:dev -w backend`                                                |
+| Volumen    | 150 siniestros más (o la cantidad indicada), con partes, peritos y abogados, para probar el listado paginado (E4-01) | Solo desarrollo         | `npm run seed:volumen -w backend` (`-- 400` para otra cantidad)              |
 
 - **Base:** idempotente gracias a los `UNIQUE` por nombre de los catálogos: inserta con
   `skipDuplicates` (`ON CONFLICT DO NOTHING`), así que crea solo lo que falta y no modifica ni
   reactiva lo existente (los dados de baja también cuentan). Se puede correr en cada deploy. Los datos
   están en `catalogos.ts`; solo "Cierre enviado" tiene `esCierre = true`.
+- **Volumen:** va después de la de desarrollo y usa sus usuarios, aseguradoras y abogados. Solo carga lo
+  que muestra el listado (sin historial, novedades, documentos ni chat). Corre una sola vez (marca sus
+  siniestros con la sucursal "Carga de volumen (prueba)"); para quitarlos, `npm run db:reset:dev -w backend`.
 - **Desarrollo:** se niega a correr con `NODE_ENV=production`. Si los usuarios de prueba ya existen no
   agrega nada; para recargar desde cero: `npm run db:reset:dev -w backend` (borra la base, aplica las
   migraciones y corre la seed; pide confirmación). Usuarios y contraseñas: `USUARIOS_DEV` en
@@ -248,3 +252,10 @@ lecturas por usuario. Verificar la migración aplicada en cada entorno.
 - El hash de contraseñas (Argon2id) está en `src/lib/password.ts`. No se implementaron aún los
   permisos, la autenticación ni los servicios de baja,
   restauración o consulta. Este documento define su contrato, no su ejecución.
+
+## Búsqueda sin tildes (migración 20261020120000_busqueda_sin_tildes)
+
+Activa la extensión `unaccent` de PostgreSQL para que el buscador de siniestros encuentre "Ríos" escribiendo
+"rios" (RF-16). Viene con PostgreSQL y es de confianza: la crea el dueño de la base, sin pasos manuales en el
+VPS (la aplica el servicio `migrate` como cualquier otra). `schema.prisma` no la declara: Prisma no la compara y
+`migrate diff` no muestra diferencias. La usa solo la consulta SQL de `src/modules/siniestros/siniestros.service.ts`.
