@@ -20,6 +20,9 @@ import {
   salir,
 } from '@/features/auth/sesion'
 import { DashboardPage } from '@/features/dashboard/pages/dashboard-page'
+import { cargarUsuarios } from '@/features/usuarios/loader'
+import { UsuariosPage } from '@/features/usuarios/pages/usuarios-page'
+import { cargarPerfil } from '@/features/perfil/loader'
 import { PerfilPage } from '@/features/perfil/pages/perfil-page'
 import { ErrorPagina } from '@/pages/error-pagina'
 import { Panel } from './panel'
@@ -49,7 +52,7 @@ const secciones: Record<PanelSection, ComponentType> = {
   plantillas: () => <SeccionPendiente section="plantillas" />,
   aseguradoras: AseguradorasPage,
   ajustadores: AjustadoresPage,
-  usuarios: () => <SeccionPendiente section="usuarios" />,
+  usuarios: UsuariosPage,
   informes: () => <SeccionPendiente section="informes" />,
   perfil: PerfilPage,
 }
@@ -59,6 +62,8 @@ const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
   siniestros: cargarSiniestros,
   aseguradoras: cargarAseguradoras,
   ajustadores: cargarAjustadores,
+  usuarios: cargarUsuarios,
+  perfil: cargarPerfil,
 }
 
 export const router = createBrowserRouter([

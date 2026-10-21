@@ -5,6 +5,8 @@ import { errorHandler, notFound } from './middlewares/errorHandler.ts'
 import { ajustadoresRouter } from './modules/ajustadores/ajustadores.module.ts'
 import { aseguradorasRouter } from './modules/aseguradoras/aseguradoras.module.ts'
 import { authRouter } from './modules/auth/auth.module.ts'
+import { usuariosRouter } from './modules/usuarios/usuarios.module.ts'
+import { perfilRouter } from './modules/perfil/perfil.module.ts'
 import { healthRouter } from './modules/health/health.routes.ts'
 import { siniestrosRouter } from './modules/siniestros/siniestros.module.ts'
 
@@ -24,6 +26,8 @@ api.use('/health', healthRouter)
 api.use('/auth', authRouter)
 api.use('/aseguradoras', aseguradorasRouter)
 api.use('/ajustadores', ajustadoresRouter)
+api.use('/usuarios', usuariosRouter)
+api.use('/perfil', perfilRouter)
 api.use('/siniestros', siniestrosRouter)
 
 // Los routers de cada módulo se montan acá. Las rutas protegidas usan requerirSesion y requerirRol
