@@ -6,10 +6,11 @@ import {
   useNavigation,
   useSearchParams,
 } from 'react-router'
-import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, SearchX, Trash2 } from 'lucide-react'
+import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, Trash2 } from 'lucide-react'
 import {
   DIAS_ALERTA,
   DIAS_DEMORADO,
+  parametrosListadoValidos,
   POR_PAGINA,
   type OrdenSiniestros,
   type SiniestroListado,
@@ -17,6 +18,7 @@ import {
 import { BarraAbm } from '@/components/abm/barra-abm'
 import type { AccionFila } from '@/components/abm/menu-acciones'
 import { FiltroAbm } from '@/components/abm/filtro-abm'
+import { FiltrosActivos, type FiltroActivo } from '@/components/abm/filtros-activos'
 import { ListadoAbm } from '@/components/abm/listado-abm'
 import { usePanel } from '@/components/layout/panel-context'
 import { SectionHeading } from '@/components/layout/section-heading'
@@ -26,6 +28,7 @@ import { plural } from '@/lib/texto'
 import { cn } from '@/lib/utils'
 import { columnasDelRol } from '../columnas'
 import { DiasSinMovimiento } from '../components/celdas-siniestro'
+import { ListadoVacio } from '../components/listado-vacio'
 import { PartesDialog, type PedidoPartes, type VistaPartes } from '../components/partes-dialog'
 import { SelectorColumnas } from '../components/selector-columnas'
 import { TablaSiniestros } from '../components/tabla-siniestros'
@@ -79,8 +82,12 @@ export function SiniestrosPage() {
     return texto ? `?${texto}` : location.pathname
   }
 
+  // Lo que realmente se envía al servidor: los chips, el campo y el estado vacío se basan en esto, no en la dirección
+  // tal cual (un valor inválido se descarta en los dos lados por igual)
+  const validos = parametrosListadoValidos(params)
+
   // Búsqueda: consulta al servidor cuando se deja de escribir
-  const q = params.get('q') ?? ''
+  const q = (validos.q ?? '').trim()
   const [busqueda, setBusqueda] = useState(q)
   // Si la búsqueda de la dirección cambia por otro camino (Atrás, Adelante, un enlace), el campo la acompaña. Cuando
   // cambia porque se escribió, ya coinciden y no se toca lo que se está escribiendo.
@@ -109,7 +116,6 @@ export function SiniestrosPage() {
     titulo.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }, [pagina.pagina])
 
-  const conFiltros = FILTROS.some((clave) => params.get(clave))
   const verPartes = (siniestro: SiniestroListado, vista: VistaPartes) =>
     setPedido({
       siniestro: { id: siniestro.id, numeroSiniestro: siniestro.numeroSiniestro },
@@ -154,34 +160,39 @@ export function SiniestrosPage() {
         ]),
   ]
 
-  const vacio = (
-    <div className="grid justify-items-center gap-3 px-6 py-12 text-center">
-      <SearchX className="size-8 text-muted-foreground" aria-hidden="true" />
-      {conFiltros ? (
-        <>
-          <p className="font-semibold">
-            No hay siniestros que coincidan con la búsqueda o los filtros.
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setBusqueda('')
-              cambiar(Object.fromEntries(FILTROS.map((clave) => [clave, null])))
-            }}
-          >
-            Quitar búsqueda y filtros
-          </Button>
-        </>
-      ) : (
-        // CU-09 2.b. El alta llega en su propia historia.
-        <p className="font-semibold">
-          {esGestor
-            ? 'Todavía no tenés siniestros asignados.'
-            : 'Todavía no hay siniestros cargados.'}
-        </p>
-      )}
-    </div>
-  )
+  // Búsqueda y filtros aplicados, en palabras: los muestran los chips de arriba y el estado vacío (E4-02). Un filtro
+  // que el servidor recibe pero no figura en el catálogo (un enlace viejo, algo dado de baja) se muestra igual, como
+  // "no disponible", para que se vea y se pueda quitar.
+  const filtroDe = (
+    clave: 'estado' | 'aseguradora' | 'gestor',
+    etiqueta: string,
+    lista: { id: number; nombre: string }[],
+  ): FiltroActivo | null => {
+    const id = validos[clave]
+    if (!id) return null
+    const nombre = lista.find((o) => String(o.id) === id)?.nombre
+    return { clave, etiqueta, valor: nombre ?? 'no disponible' }
+  }
+  const activos = [
+    q ? { clave: 'q', etiqueta: 'Búsqueda', valor: `«${q}»` } : null,
+    filtroDe('estado', 'Estado', opciones.estados),
+    filtroDe('aseguradora', 'Aseguradora', opciones.aseguradoras),
+    // El servidor no aplica estos dos para el gestor (RF-17): no se muestran
+    esGestor ? null : filtroDe('gestor', 'Gestor', opciones.gestores),
+    !esGestor && validos.bajas === 'true'
+      ? { clave: 'bajas', etiqueta: 'Incluye', valor: 'dados de baja' }
+      : null,
+  ].filter((f): f is FiltroActivo => f !== null)
+
+  // También vacía el campo: si había una búsqueda a medio escribir, su espera se cancela y no vuelve a aplicarse
+  function quitarFiltro(clave: string) {
+    if (clave === 'q') setBusqueda('')
+    cambiar({ [clave]: null })
+  }
+  function quitarTodos() {
+    setBusqueda('')
+    cambiar(Object.fromEntries(FILTROS.map((clave) => [clave, null])))
+  }
 
   return (
     <>
@@ -238,6 +249,8 @@ export function SiniestrosPage() {
         etiquetaBajas="Mostrar dados de baja"
       />
 
+      <FiltrosActivos filtros={activos} onQuitar={quitarFiltro} onQuitarTodos={quitarTodos} />
+
       <ListadoAbm
         tituloRef={titulo}
         titulo={plural(pagina.total, 'siniestro')}
@@ -263,7 +276,14 @@ export function SiniestrosPage() {
       >
         <div aria-busy={cargando} className={cn('transition-opacity', cargando && 'opacity-60')}>
           {pagina.siniestros.length === 0 ? (
-            vacio
+            <ListadoVacio
+              esGestor={esGestor}
+              filtros={activos}
+              // El resumen cuenta los dados de baja que coinciden aunque no se muestren
+              bajasQueCoinciden={esGestor || validos.bajas === 'true' ? 0 : pagina.resumen.bajas}
+              onMostrarBajas={() => cambiar({ bajas: 'true' })}
+              onQuitarTodos={quitarTodos}
+            />
           ) : (
             <>
               <div className="hidden md:block">
