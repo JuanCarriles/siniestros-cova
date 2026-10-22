@@ -26,3 +26,21 @@ export async function obtenerSesion(): Promise<SesionUsuario | null> {
     throw err
   }
 }
+
+export type RecuperacionSolicitada = {
+  mensaje: string
+  reenvioSegundos: number
+  vigenciaSegundos: number
+}
+export function solicitarRecuperacion(datos: { email: string }): Promise<RecuperacionSolicitada> {
+  return api('/auth/recuperacion/solicitar', { method: 'POST', body: datos, sesion: 'opcional' })
+}
+export function verificarCodigo(datos: { codigo: string }): Promise<void> {
+  return api('/auth/recuperacion/verificar', { method: 'POST', body: datos, sesion: 'opcional' })
+}
+export function cambiarContrasenaRecuperada(datos: {
+  contrasena: string
+  confirmarContrasena: string
+}): Promise<void> {
+  return api('/auth/recuperacion/cambiar', { method: 'POST', body: datos, sesion: 'opcional' })
+}

@@ -114,17 +114,38 @@ import { EstadoChip } from '@/components/estado-chip'
 ## Pantallas ABM (altas, bajas y modificaciones)
 
 Aseguradoras, ajustadores, usuarios y plantillas comparten la misma estructura (mockups de CU-02 a CU-05). Las piezas
-están en `src/components/abm/`; `src/features/aseguradoras/pages/aseguradoras-page.tsx` es el ejemplo completo.
+están en `src/components/abm/`; `src/features/aseguradoras/pages/aseguradoras-page.tsx` es el ejemplo completo y
+`src/features/ajustadores/pages/ajustadores-page.tsx` suma un filtro y una lista desplegable en el formulario.
 
 | Componente       | Qué resuelve                                                                                                                      |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `BarraAbm`       | Buscador, "Mostrar dadas de baja" y botón de alta, sobre el fondo de la página (fuera de la tarjeta).                             |
+| `BarraAbm`       | Buscador, filtros (`filtros`), "Mostrar dadas de baja" y botón de alta, sobre el fondo de la página (fuera de la tarjeta).        |
+| `FiltroAbm`      | Lista desplegable para la barra ("Todas las aseguradoras"). Guardar el valor en la dirección (`?aseguradora=3`).                  |
+| `FiltrosActivos` | Chips con los filtros aplicados ("Estado: En pericia ✕") y "Quitar todos", entre la barra y el listado.                           |
 | `ListadoAbm`     | Tarjeta del listado: "6 aseguradoras" con su resumen, aviso del último cambio, contenido y nota al pie.                           |
 | `TablaAbm`       | Recibe `columnas` y `acciones`: tabla desde 768 px; en celular, una tarjeta por fila. Una columna `principal` es el título.       |
 | `MenuAcciones`   | Menú ⋮ de cada fila. `onSelect` recibe el botón ⋮: pasarlo al diálogo (`elementoAlCerrar`) para que el foco vuelva ahí al cerrar. |
 | `EstadoRegistro` | "Activa / Dada de baja desde 15/08/2026" (`genero="masculino"` para "Activo / Dado de baja").                                     |
 
-Para buscar sin importar tildes ni mayúsculas: `normalizarBusqueda` (`src/lib/texto.ts`).
+`ListadoAbm` acepta `acciones` (controles a la derecha del encabezado). En `MenuAcciones`, una acción con
+`proximamente` se ve deshabilitada con "(próximamente)": sirve para mostrar lo que llega en otra historia. Un listado largo que se pagina en el
+servidor usa `Paginacion` (`src/components/paginacion.tsx`): cada página es un enlace con los filtros en la
+dirección. `Tooltip` (`src/components/ui/tooltip.tsx`) muestra ayuda al pasar el mouse o al enfocar.
+
+### Listado de siniestros (tabla densa)
+
+`src/features/siniestros/` no usa `TablaAbm`: necesita columnas fijas y orden. Los datos afines comparten
+columna en dos líneas (aseguradora y ajustador; gestor y asignación) para que la tabla entre completa: con el
+menú lateral abierto desde unos 1480 px de ancho, y con el menú achicado desde unos 1270 px. Si no entra, se
+desplaza dentro de su recuadro con Siniestro y Asegurado fijos y avisa cómo verla entera (achicar el menú u
+ocultar columnas). Mientras entra, el encabezado se pega al borde de la pantalla al bajar (por eso `ListadoAbm`
+recorta con `overflow-clip` y no con `overflow-hidden`).
+
+Para buscar sin importar tildes ni mayúsculas: `normalizarBusqueda` (`src/lib/texto.ts`). En los formularios, una lista
+desplegable es un `SelectField` (`src/components/select-field.tsx`) dentro de un `Controller` de react-hook-form.
+
+Con la letra grande del sistema, una tabla de seis columnas más el menú ya no entra a 1280 px: agrupar datos afines en una
+columna (ajustadores: email y teléfono en "Contacto") antes que dejar que aparezca desplazamiento de costado.
 
 ## Verificación
 

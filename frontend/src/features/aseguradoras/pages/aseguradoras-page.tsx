@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { useLoaderData, useRevalidator, useSearchParams } from 'react-router'
-import { CircleMinus, Pencil, RotateCcw, SearchX } from 'lucide-react'
+import { useLoaderData, useNavigate, useRevalidator, useSearchParams } from 'react-router'
+import { CircleMinus, Pencil, RotateCcw, SearchX, UsersRound } from 'lucide-react'
 import type { AseguradoraListado } from '@cova/shared/schemas/aseguradoras'
 import { BarraAbm } from '@/components/abm/barra-abm'
 import { EstadoRegistro } from '@/components/abm/estado-registro'
@@ -9,6 +9,7 @@ import type { AccionFila } from '@/components/abm/menu-acciones'
 import { TablaAbm, type ColumnaAbm } from '@/components/abm/tabla-abm'
 import { Aviso } from '@/components/aviso'
 import { SectionHeading } from '@/components/layout/section-heading'
+import type { DesdeAseguradoras } from '@/features/ajustadores/pages/ajustadores-page'
 import { normalizarBusqueda, plural } from '@/lib/texto'
 import type { cargarAseguradoras } from '../loader'
 import { AseguradoraDialog, type EdicionAseguradora } from '../components/aseguradora-dialog'
@@ -35,6 +36,7 @@ const columnas: ColumnaAbm<AseguradoraListado>[] = [
 export function AseguradorasPage() {
   const { aseguradoras } = useLoaderData<typeof cargarAseguradoras>()
   const revalidator = useRevalidator()
+  const navigate = useNavigate()
   // El filtro queda en la dirección (?bajas=1): sobrevive a recargar y a volver atrás
   const [params, setParams] = useSearchParams()
   const mostrarBajas = params.get('bajas') === '1'
@@ -84,9 +86,21 @@ export function AseguradorasPage() {
     void revalidator.revalidate()
   }
 
+  // CU-03: los ajustadores de la aseguradora, en su ABM ya filtrado. De una dada de baja solo quedan bajas.
+  const verAjustadores = (aseguradora: AseguradoraListado): AccionFila => ({
+    etiqueta: 'Ver ajustadores',
+    icono: <UsersRound aria-hidden="true" />,
+    onSelect: () =>
+      void navigate(
+        `/ajustadores?aseguradora=${aseguradora.id}${aseguradora.eliminado ? '&bajas=1' : ''}`,
+        { state: { desde: 'aseguradoras' } satisfies DesdeAseguradoras },
+      ),
+  })
+
   const acciones = (aseguradora: AseguradoraListado): AccionFila[] =>
     aseguradora.eliminado
       ? [
+          verAjustadores(aseguradora),
           {
             etiqueta: 'Reactivar',
             icono: <RotateCcw aria-hidden="true" />,
@@ -94,6 +108,7 @@ export function AseguradorasPage() {
           },
         ]
       : [
+          verAjustadores(aseguradora),
           {
             etiqueta: 'Modificar',
             icono: <Pencil aria-hidden="true" />,
@@ -186,6 +201,7 @@ export function AseguradorasPage() {
         cambio={cambio}
         onCerrar={() => setCambioAbierto(false)}
         onHecho={terminar}
+        onDesactualizada={() => void revalidator.revalidate()}
       />
     </>
   )

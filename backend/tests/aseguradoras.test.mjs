@@ -20,6 +20,15 @@ function datosPrueba() {
     { idAseguradora: 2, eliminado: false },
     { idAseguradora: 3, eliminado: true },
   ]
+  ajustadores.forEach((a, i) =>
+    Object.assign(a, {
+      id: i + 1,
+      nombres: 'Prueba',
+      apellidos: `Ajustador ${i + 1}`,
+      email: `ajustador${i + 1}@cova.invalid`,
+      telefono: '0',
+    }),
+  )
   let siguienteId = 4
   let escrituras = 0
   const conConteo = (fila) => ({
@@ -53,6 +62,19 @@ function datosPrueba() {
         const fila = { id: siguienteId++, eliminado: false, fechaBaja: null, ...data }
         aseguradoras.push(fila)
         return conConteo(fila)
+      },
+      async updateMany({ where, data }) {
+        assert.deepEqual(where.ajustadores, { none: { eliminado: false } })
+        const fila = aseguradoras.find(
+          (f) =>
+            f.id === where.id &&
+            f.eliminado === where.eliminado &&
+            conConteo(f)._count.ajustadores === 0,
+        )
+        if (!fila) return { count: 0 }
+        escrituras++
+        Object.assign(fila, data)
+        return { count: 1 }
       },
       async update({ where, data }) {
         escrituras++
@@ -209,7 +231,10 @@ test('baja: solo sin ajustadores activos; conserva todo y se puede reactivar', a
   // Andina tiene 1 ajustador activo (el dado de baja no cuenta)
   let respuesta = await accion(1, 'baja')
   assert.equal(respuesta.status, 409)
-  assert.match((await respuesta.json()).error, /tiene 1 ajustador activo/)
+  assert.match(
+    (await respuesta.json()).error,
+    /tiene 1 ajustador activo\. Primero dalo de baja o pasalo/,
+  )
   assert.equal(datos.aseguradoras[0].eliminado, false)
 
   // Mutual Pampeana solo tiene un ajustador dado de baja
@@ -224,4 +249,38 @@ test('baja: solo sin ajustadores activos; conserva todo y se puede reactivar', a
   assert.equal(datos.aseguradoras[2].fechaBaja, null)
   assert.equal((await accion(3, 'reactivacion')).status, 409)
   assert.equal((await accion(99, 'reactivacion')).status, 404)
+})
+
+test('bloqueo: respuesta estructurada con la cantidad actual de ajustadores activos', async (t) => {
+  const datos = datosPrueba()
+  const api = await servidor(datos)
+  t.after(api.cerrar)
+  // Simula que se agrega otro ajustador después de haber cargado el listado en el cliente.
+  datos.ajustadores.push({
+    id: 5,
+    idAseguradora: 1,
+    eliminado: false,
+    nombres: 'Nuevo',
+    apellidos: 'Ajustador',
+    email: 'nuevo@cova.invalid',
+    telefono: '0',
+  })
+  const res = await api.pedir('admin', '/1/baja', { method: 'PATCH' })
+  assert.equal(res.status, 409)
+  const { details } = await res.json()
+  assert.deepEqual(details, {
+    codigo: 'ASEGURADORA_CON_AJUSTADORES',
+    idAseguradora: 1,
+    nombreAseguradora: 'Andina Seguros',
+    cantidadAjustadores: 2,
+  })
+  assert.equal(datos.escrituras, 0)
+})
+
+test('baja con id inexistente no produce escrituras', async (t) => {
+  const datos = datosPrueba()
+  const api = await servidor(datos)
+  t.after(api.cerrar)
+  assert.equal((await api.pedir('admin', '/99/baja', { method: 'PATCH' })).status, 404)
+  assert.equal(datos.escrituras, 0)
 })

@@ -202,7 +202,14 @@ R2_ACCOUNT_ID=<id de la cuenta>
 R2_ACCESS_KEY_ID=<token del backend>
 R2_SECRET_ACCESS_KEY=<token del backend>
 R2_BUCKET=siniestros-cova
+RESEND_API_KEY=<clave de la API de Resend>
 ```
+
+**Mails (Resend).** Sin `RESEND_API_KEY` el sistema funciona, pero no salen los mails de recuperación de contraseña: la
+pantalla responde igual (a propósito no dice si el mail existe) y el error solo queda en `docker compose logs
+backend`. Mientras no haya dominio propio, el remitente es `onboarding@resend.dev` y Resend **solo entrega al mail del
+dueño de la cuenta de Resend**. Con dominio propio, verificarlo en Resend y cambiar `RESEND_FROM` (ver
+[`docs/dominio-propio.md`](docs/dominio-propio.md)).
 
 `APP_URL` y `COOKIE_SECURE` se cambian en la sección 5. `DATABASE_URL` y `NODE_ENV` los pone el compose.
 

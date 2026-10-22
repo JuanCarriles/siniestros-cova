@@ -118,7 +118,7 @@ model Usuario {
   eliminado      Boolean     @default(false)
   fechaBaja      DateTime?   @db.Timestamptz(3)
 
-  direccion           Direccion            @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  direccion           Direccion               @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
   documentosPlantilla DocumentoPlantilla[]
   notificaciones      Notificacion[]
   eventosHistorial    HistorialSiniestro[]
@@ -127,6 +127,7 @@ model Usuario {
   documentosSiniestro DocumentoSiniestro[]
   siniestros          Siniestro[]
   sesiones            Sesion[]
+  recuperacion        RecuperacionContrasena?
 
   @@index([idDireccion])
 }
@@ -455,4 +456,19 @@ model Siniestro {
   @@index([idAjustador])
   @@index([idDireccion])
   @@index([numeroSiniestro])
+}
+
+/// Una recuperación vigente por usuario. Sólo hashes de desafíos/tokens y del código vinculado al desafío.
+model RecuperacionContrasena {
+  id                Int       @id @default(autoincrement())
+  idUsuario         Int       @unique
+  tokenHash         String    @unique
+  codigoHash        String?
+  intentos          Int       @default(0)
+  fechaCreacion     DateTime  @default(now()) @db.Timestamptz(3)
+  fechaVencimiento  DateTime  @db.Timestamptz(3)
+  fechaVerificacion DateTime? @db.Timestamptz(3)
+  usuario           Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@index([fechaVencimiento])
 }

@@ -1,24 +1,130 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { ChevronLeft } from 'lucide-react'
 import { AuthLayout } from '../components/auth-layout'
+import { RecuperacionHeader } from '../components/recuperacion-header'
+import { Aviso } from '@/components/aviso'
+import { Button } from '@/components/ui/button'
+import { ApiError } from '@/lib/api'
+import { solicitarRecuperacion, type RecuperacionSolicitada } from '../api/auth.api'
+import { SolicitarRecuperacionForm } from '../components/solicitar-recuperacion-form'
+import { VerificarCodigoForm } from '../components/verificar-codigo-form'
+import { NuevaContrasenaForm } from '../components/nueva-contrasena-form'
 
-// Provisoria: la recuperación por código (CU-01 3.a) es otra historia de usuario. Mientras tanto, lo que
-// corresponde hacer es pedirle una contraseña nueva a un administrador.
+const titulos = {
+  1: 'Recuperar contraseña',
+  2: 'Ingresá el código',
+  3: 'Creá una contraseña nueva',
+}
+function ocultarEmail(email: string) {
+  const [nombre, dominio] = email.split('@')
+  return `${nombre?.slice(0, 1)}•••@${dominio ?? ''}`
+}
+
 export function RecuperarContrasenaPage() {
+  const [paso, setPaso] = useState<1 | 2 | 3>(1)
+  const [email, setEmail] = useState('')
+  const [respuesta, setRespuesta] = useState<RecuperacionSolicitada | null>(null)
+  const [reenvioHasta, setReenvioHasta] = useState(0)
+  const [restante, setRestante] = useState(0)
+  const [reenviando, setReenviando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [guardada, setGuardada] = useState(false)
+  const titulo = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (paso > 1 || guardada) titulo.current?.focus()
+  }, [paso, guardada])
+  useEffect(() => {
+    if (!reenvioHasta) return
+    const timer = window.setInterval(
+      () => setRestante(Math.max(0, Math.ceil((reenvioHasta - Date.now()) / 1000))),
+      500,
+    )
+    return () => window.clearInterval(timer)
+  }, [reenvioHasta])
+  function solicitado(destino: string, datos: RecuperacionSolicitada) {
+    setEmail(destino)
+    setRespuesta(datos)
+    setPaso(2)
+    setError(null)
+    setRestante(datos.reenvioSegundos)
+    setReenvioHasta(Date.now() + datos.reenvioSegundos * 1000)
+  }
+  async function reenviar() {
+    if (reenviando || restante > 0) return
+    setReenviando(true)
+    setError(null)
+    try {
+      solicitado(email, await solicitarRecuperacion({ email }))
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'No se pudo reenviar el código. Probá de nuevo.',
+      )
+    } finally {
+      setReenviando(false)
+    }
+  }
   return (
-    <AuthLayout titulo="Recuperar contraseña">
-      <Link
-        to="/login"
-        className="mb-4 inline-flex min-h-12 items-center gap-1 font-semibold text-primary underline-offset-4 hover:underline"
+    <AuthLayout titulo={guardada ? 'Contraseña actualizada' : titulos[paso]}>
+      <RecuperacionHeader
+        paso={paso}
+        volver={
+          paso === 2
+            ? () => {
+                setPaso(1)
+                setError(null)
+              }
+            : undefined
+        }
+      />
+      <h1
+        ref={titulo}
+        tabIndex={-1}
+        className="text-2xl font-bold text-foreground focus:outline-none"
       >
-        <ChevronLeft className="size-5" aria-hidden="true" />
-        Volver a ingresar
-      </Link>
-      <h1 className="text-2xl font-bold text-foreground">Recuperar contraseña</h1>
-      <p className="mt-3">
-        Por ahora la contraseña no se puede recuperar desde acá. Pedile a un administrador del
-        estudio que te genere una nueva.
-      </p>
+        {guardada ? 'Contraseña actualizada' : titulos[paso]}
+      </h1>
+      {guardada ? (
+        <div className="mt-5 grid gap-6">
+          <Aviso tipo="exito">
+            Tu contraseña se guardó y se cerraron las sesiones anteriores. Ingresá con tu nueva
+            contraseña.
+          </Aviso>
+          <Button asChild size="lg" className="w-full">
+            <Link to="/login?motivo=contrasena-actualizada">Volver a ingresar</Link>
+          </Button>
+        </div>
+      ) : (
+        <>
+          <p role={paso === 2 ? 'status' : undefined} className="mt-3 text-muted-foreground">
+            {paso === 1 &&
+              'Ingresá el email de tu cuenta para solicitar un código y crear una contraseña nueva.'}
+            {paso === 2 && (
+              <>
+                Si la cuenta está registrada y activa, recibirás un código de 6 dígitos en{' '}
+                <strong className="whitespace-nowrap">{ocultarEmail(email)}</strong>. Vence en{' '}
+                {Math.ceil((respuesta?.vigenciaSegundos ?? 300) / 60)} minutos.
+              </>
+            )}
+            {paso === 3 &&
+              'Elegí una contraseña nueva. Al guardarla se cerrarán las sesiones anteriores de tu cuenta.'}
+          </p>
+          {error && (
+            <Aviso tipo="error" enfocar className="mt-5">
+              {error}
+            </Aviso>
+          )}
+          {paso === 1 && <SolicitarRecuperacionForm email={email} onEnviado={solicitado} />}
+          {paso === 2 && (
+            <VerificarCodigoForm
+              onVerificado={() => setPaso(3)}
+              onReenviar={() => void reenviar()}
+              espera={restante}
+              reenviando={reenviando}
+            />
+          )}
+          {paso === 3 && <NuevaContrasenaForm onGuardada={() => setGuardada(true)} />}
+        </>
+      )}
     </AuthLayout>
   )
 }

@@ -110,7 +110,7 @@ const models = new Map(
 )
 
 // Tablas que solo usa el backend: no tienen alta ni edición desde la interfaz
-const internos = new Set(['Sesion'])
+const internos = new Set(['Sesion', 'RecuperacionContrasena'])
 
 test('cubre todas las entidades de Prisma sin modelos adicionales', () => {
   assert.deepEqual(

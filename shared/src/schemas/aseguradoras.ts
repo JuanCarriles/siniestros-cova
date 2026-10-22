@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { esquemaEdicion, textoSchema } from './comunes.ts'
+import { esquemaEdicion, idSchema, textoSchema } from './comunes.ts'
 
 // Datos de alta de Aseguradora; id y baja lógica se gestionan por separado.
 // CU-02: entre 3 y 60 caracteres (mockup). Que no se repita lo controla el backend.
@@ -24,3 +24,12 @@ export type AseguradoraListado = {
   fechaBaja: string | null
   cantidadAjustadores: number
 }
+
+// Respuesta estructurada del servidor cuando la baja está bloqueada.
+export const bloqueoBajaAseguradoraSchema = z.strictObject({
+  codigo: z.literal('ASEGURADORA_CON_AJUSTADORES'),
+  idAseguradora: idSchema,
+  nombreAseguradora: textoSchema,
+  cantidadAjustadores: z.number().int().positive(),
+})
+export type BloqueoBajaAseguradora = z.output<typeof bloqueoBajaAseguradoraSchema>
