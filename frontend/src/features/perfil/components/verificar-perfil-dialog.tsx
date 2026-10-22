@@ -1,4 +1,5 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { LockKeyhole } from 'lucide-react'
@@ -35,17 +36,29 @@ export function VerificarPerfilDialog({
   onVerificado: (alcance: AlcancePerfil, contrasenaActual: string) => void
 }) {
   const completada = useRef(false)
+  const [escrituraHabilitada, setEscrituraHabilitada] = useState(false)
   const {
     register,
     handleSubmit,
     reset,
+    resetField,
     setError,
     setFocus,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<DatosVerificacion>({
     resolver: zodResolver(esquema),
     defaultValues: { contrasena: '' },
   })
+  function habilitarEscritura() {
+    if (escrituraHabilitada) return
+    // Habilitar antes de la acción nativa para conservar la primera tecla o el pegado.
+    flushSync(() => {
+      setValue('contrasena', '')
+      setEscrituraHabilitada(true)
+    })
+  }
+
   async function verificar(datos: DatosVerificacion) {
     if (!alcance) return
     try {
@@ -63,13 +76,19 @@ export function VerificarPerfilDialog({
     <Dialog
       open={alcance !== null}
       onOpenChange={(abrir) => {
-        if (!abrir && !isSubmitting) onCerrar()
+        if (!abrir && !isSubmitting) {
+          reset({ contrasena: '' })
+          setEscrituraHabilitada(false)
+          onCerrar()
+        }
       }}
     >
       <DialogContent
         showCloseButton={!isSubmitting}
         onOpenAutoFocus={(e) => {
           completada.current = false
+          setEscrituraHabilitada(false)
+          resetField('contrasena', { defaultValue: '' })
           e.preventDefault()
           setFocus('contrasena')
         }}
@@ -97,7 +116,12 @@ export function VerificarPerfilDialog({
             .
           </DialogDescription>
         </DialogHeader>
-        <form noValidate onSubmit={(e) => void handleSubmit(verificar)(e)} className="grid gap-5">
+        <form
+          autoComplete="off"
+          noValidate
+          onSubmit={(e) => void handleSubmit(verificar)(e)}
+          className="grid gap-5"
+        >
           {errors.root?.message && (
             <Aviso tipo="error" enfocar>
               {errors.root.message}
@@ -106,7 +130,20 @@ export function VerificarPerfilDialog({
           <PasswordField
             label="Contraseña actual"
             required
-            autoComplete="current-password"
+            autoComplete="off"
+            // El navegador puede ignorar autocomplete="off". El foco automático no
+            // habilita la escritura: se requiere un clic, una tecla o pegar texto.
+            readOnly={!escrituraHabilitada}
+            onPointerDown={habilitarEscritura}
+            onKeyDown={(event) => {
+              if (
+                event.key.length === 1 ||
+                ['Backspace', 'Delete', 'Process', 'Unidentified'].includes(event.key)
+              ) {
+                habilitarEscritura()
+              }
+            }}
+            onPaste={habilitarEscritura}
             maxLength={128}
             error={errors.contrasena?.message}
             {...register('contrasena')}

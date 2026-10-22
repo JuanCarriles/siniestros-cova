@@ -25,7 +25,7 @@
     "test:ajustadores": "node --experimental-strip-types --test tests/ajustadores.test.mjs",
     "test:ajustadores:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/ajustadores.db.test.mjs",
     "test:usuarios": "node --experimental-strip-types --test tests/primer-superadmin.test.mjs tests/usuarios.test.mjs",
-    "test:usuarios:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/usuarios.db.test.mjs",
+    "test:usuarios:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/usuarios.db.test.mjs tests/usuarios.jerarquia.db.test.mjs",
     "test:siniestros": "node --experimental-strip-types --test tests/siniestros.test.mjs",
     "test:siniestros:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros.db.test.mjs",
     "test:r2": "node --experimental-strip-types --test tests/r2.test.mjs",

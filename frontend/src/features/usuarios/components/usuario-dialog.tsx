@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { TipoUsuario } from '@cova/shared/schemas/enums'
 import {
   usuarioFormularioSchema,
+  motivoRestriccionUsuario,
   type CatalogosUsuarios,
   type UsuarioFormularioInput,
   type UsuarioFormularioData,
@@ -61,6 +62,10 @@ export function UsuarioDialog({
   const reglasId = useId()
   const esquema = usuarioFormularioSchema
     .extend({ pais: z.string() })
+    .superRefine((datos, ctx) => {
+      const motivo = motivoRestriccionUsuario(rol, datos.tipoUsuario, nuevo ? 'crear' : 'asignar')
+      if (motivo) ctx.addIssue({ code: 'custom', path: ['tipoUsuario'], message: motivo })
+    })
     .refine((datos) => !nuevo || datos.contrasena !== '', {
       message: 'La contraseña es obligatoria',
       path: ['contrasena'],
@@ -235,6 +240,7 @@ export function UsuarioDialog({
               render={({ field }) => (
                 <TipoUsuarioSelector
                   rol={rol}
+                  modo={nuevo ? 'alta' : 'edicion'}
                   valor={field.value}
                   onCambio={field.onChange}
                   error={errors.tipoUsuario?.message}
