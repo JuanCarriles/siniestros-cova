@@ -6,7 +6,7 @@ import {
   useNavigation,
   useSearchParams,
 } from 'react-router'
-import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, SearchX, Trash2 } from 'lucide-react'
+import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, Trash2 } from 'lucide-react'
 import {
   DIAS_ALERTA,
   DIAS_DEMORADO,
@@ -17,6 +17,7 @@ import {
 import { BarraAbm } from '@/components/abm/barra-abm'
 import type { AccionFila } from '@/components/abm/menu-acciones'
 import { FiltroAbm } from '@/components/abm/filtro-abm'
+import { FiltrosActivos, type FiltroActivo } from '@/components/abm/filtros-activos'
 import { ListadoAbm } from '@/components/abm/listado-abm'
 import { usePanel } from '@/components/layout/panel-context'
 import { SectionHeading } from '@/components/layout/section-heading'
@@ -26,6 +27,7 @@ import { plural } from '@/lib/texto'
 import { cn } from '@/lib/utils'
 import { columnasDelRol } from '../columnas'
 import { DiasSinMovimiento } from '../components/celdas-siniestro'
+import { ListadoVacio } from '../components/listado-vacio'
 import { PartesDialog, type PedidoPartes, type VistaPartes } from '../components/partes-dialog'
 import { SelectorColumnas } from '../components/selector-columnas'
 import { TablaSiniestros } from '../components/tabla-siniestros'
@@ -109,7 +111,6 @@ export function SiniestrosPage() {
     titulo.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }, [pagina.pagina])
 
-  const conFiltros = FILTROS.some((clave) => params.get(clave))
   const verPartes = (siniestro: SiniestroListado, vista: VistaPartes) =>
     setPedido({
       siniestro: { id: siniestro.id, numeroSiniestro: siniestro.numeroSiniestro },
@@ -154,34 +155,35 @@ export function SiniestrosPage() {
         ]),
   ]
 
-  const vacio = (
-    <div className="grid justify-items-center gap-3 px-6 py-12 text-center">
-      <SearchX className="size-8 text-muted-foreground" aria-hidden="true" />
-      {conFiltros ? (
-        <>
-          <p className="font-semibold">
-            No hay siniestros que coincidan con la búsqueda o los filtros.
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setBusqueda('')
-              cambiar(Object.fromEntries(FILTROS.map((clave) => [clave, null])))
-            }}
-          >
-            Quitar búsqueda y filtros
-          </Button>
-        </>
-      ) : (
-        // CU-09 2.b. El alta llega en su propia historia.
-        <p className="font-semibold">
-          {esGestor
-            ? 'Todavía no tenés siniestros asignados.'
-            : 'Todavía no hay siniestros cargados.'}
-        </p>
-      )}
-    </div>
-  )
+  // Búsqueda y filtros aplicados, en palabras: los muestran los chips de arriba y el estado vacío (E4-02)
+  const nombreDe = (lista: { id: number; nombre: string }[], clave: string) =>
+    lista.find((o) => String(o.id) === params.get(clave))?.nombre
+  const activos: FiltroActivo[] = [
+    q && { clave: 'q', etiqueta: 'Búsqueda', valor: `«${q}»` },
+    nombreDe(opciones.estados, 'estado') && {
+      clave: 'estado',
+      etiqueta: 'Estado',
+      valor: nombreDe(opciones.estados, 'estado')!,
+    },
+    nombreDe(opciones.aseguradoras, 'aseguradora') && {
+      clave: 'aseguradora',
+      etiqueta: 'Aseguradora',
+      valor: nombreDe(opciones.aseguradoras, 'aseguradora')!,
+    },
+    !esGestor &&
+      nombreDe(opciones.gestores, 'gestor') && {
+        clave: 'gestor',
+        etiqueta: 'Gestor',
+        valor: nombreDe(opciones.gestores, 'gestor')!,
+      },
+    !esGestor &&
+      params.get('bajas') === 'true' && {
+        clave: 'bajas',
+        etiqueta: 'Incluye',
+        valor: 'dados de baja',
+      },
+  ].filter((f): f is FiltroActivo => Boolean(f))
+  const quitarTodos = () => cambiar(Object.fromEntries(FILTROS.map((clave) => [clave, null])))
 
   return (
     <>
@@ -238,6 +240,12 @@ export function SiniestrosPage() {
         etiquetaBajas="Mostrar dados de baja"
       />
 
+      <FiltrosActivos
+        filtros={activos}
+        onQuitar={(clave) => cambiar({ [clave]: null })}
+        onQuitarTodos={quitarTodos}
+      />
+
       <ListadoAbm
         tituloRef={titulo}
         titulo={plural(pagina.total, 'siniestro')}
@@ -263,7 +271,16 @@ export function SiniestrosPage() {
       >
         <div aria-busy={cargando} className={cn('transition-opacity', cargando && 'opacity-60')}>
           {pagina.siniestros.length === 0 ? (
-            vacio
+            <ListadoVacio
+              esGestor={esGestor}
+              filtros={activos}
+              // El resumen cuenta los dados de baja que coinciden aunque no se muestren
+              bajasQueCoinciden={
+                esGestor || params.get('bajas') === 'true' ? 0 : pagina.resumen.bajas
+              }
+              onMostrarBajas={() => cambiar({ bajas: 'true' })}
+              onQuitarTodos={quitarTodos}
+            />
           ) : (
             <>
               <div className="hidden md:block">

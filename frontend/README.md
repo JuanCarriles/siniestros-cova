@@ -121,6 +121,7 @@ están en `src/components/abm/`; `src/features/aseguradoras/pages/aseguradoras-p
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `BarraAbm`       | Buscador, filtros (`filtros`), "Mostrar dadas de baja" y botón de alta, sobre el fondo de la página (fuera de la tarjeta).        |
 | `FiltroAbm`      | Lista desplegable para la barra ("Todas las aseguradoras"). Guardar el valor en la dirección (`?aseguradora=3`).                  |
+| `FiltrosActivos` | Chips con los filtros aplicados ("Estado: En pericia ✕") y "Quitar todos", entre la barra y el listado.                           |
 | `ListadoAbm`     | Tarjeta del listado: "6 aseguradoras" con su resumen, aviso del último cambio, contenido y nota al pie.                           |
 | `TablaAbm`       | Recibe `columnas` y `acciones`: tabla desde 768 px; en celular, una tarjeta por fila. Una columna `principal` es el título.       |
 | `MenuAcciones`   | Menú ⋮ de cada fila. `onSelect` recibe el botón ⋮: pasarlo al diálogo (`elementoAlCerrar`) para que el foco vuelva ahí al cerrar. |

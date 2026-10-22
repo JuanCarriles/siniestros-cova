@@ -188,7 +188,10 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
           ])
 
           // Búsqueda (RF-16): sin tildes ni mayúsculas, por persona, número, póliza o patente sin espacios
+          // E4-02: por apellido del asegurado (Castro) y de los terceros (Ríos, Benítez), sin tildes ni mayúsculas
           for (const q of [
+            'castro',
+            'Martina',
             'rios',
             'RÍOS',
             'benitez',
