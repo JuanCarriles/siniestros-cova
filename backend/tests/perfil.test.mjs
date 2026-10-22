@@ -3,6 +3,8 @@ import test from 'node:test'
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import { perfilDatosSchema, perfilActualizacionSchema } from '@cova/shared/schemas/perfil'
+import { crearServicioPerfil } from '../src/modules/perfil/perfil.service.ts'
+import { crearCorreoCambioContrasena } from '../src/lib/correo-cambio-contrasena.ts'
 import { crearPerfilRouter } from '../src/modules/perfil/perfil.routes.ts'
 import { errorHandler } from '../src/middlewares/errorHandler.ts'
 
@@ -42,7 +44,7 @@ async function servidor(t) {
       nombre,
       async (...args) => {
         llamadas.push([nombre, ...args])
-        return { id: args[0] }
+        return nombre === 'cambiarContrasena' ? { correoEnviado: true } : { id: args[0] }
       },
     ]),
   )
@@ -130,9 +132,81 @@ test('API: verificar no entrega permisos; cambio exige actual y nueva confirmada
   for (const body of [
     { contrasena: nueva.contrasena, confirmarContrasena: nueva.confirmarContrasena },
     { ...nueva, confirmarContrasena: 'Otra.2026' },
-    { ...nueva, contrasena: 'insegura', confirmarContrasena: 'insegura' },
-  ])
-    assert.equal((await pedir('GESTOR', '/contrasena', 'PATCH', body)).status, 400)
-  assert.equal((await pedir('GESTOR', '/contrasena', 'PATCH', nueva)).status, 204)
+    ...['Corta1', 'sinmayuscula1', 'SinNumeros', 'A1' + 'x'.repeat(127)].map((contrasena) => ({
+      ...nueva,
+      contrasena,
+      confirmarContrasena: contrasena,
+    })),
+  ]) {
+    const rechazado = await pedir('GESTOR', '/contrasena', 'PATCH', body)
+    assert.equal(rechazado.status, 400)
+    assert.equal(rechazado.headers.get('set-cookie'), null, 'un rechazo no cierra la sesión')
+  }
+  assert.equal(llamadas.filter(([nombre]) => nombre === 'cambiarContrasena').length, 0)
+  const cambiado = await pedir('GESTOR', '/contrasena', 'PATCH', nueva)
+  assert.equal(cambiado.status, 200)
+  assert.deepEqual(await cambiado.json(), { correoEnviado: true })
+  assert.match(cambiado.headers.get('set-cookie'), /cova_sesion=;.*Expires=Thu, 01 Jan 1970/)
+  assert.match(cambiado.headers.get('set-cookie'), /HttpOnly/i)
   assert.deepEqual(llamadas.at(-1).slice(0, 4), ['cambiarContrasena', 7, 'sesion-actual', nueva])
+})
+
+test('un fallo de la transacción no envía un aviso de cambio', async () => {
+  let enviados = 0
+  const error = new Error('falló el commit')
+  const servicio = crearServicioPerfil({
+    base: {
+      transaccion: async () => {
+        throw error
+      },
+    },
+    enviarAvisoCambio: async () => {
+      enviados++
+    },
+  })
+  await assert.rejects(
+    servicio.cambiarContrasena(7, 'token', {
+      contrasenaActual: 'Inicial.2026',
+      contrasena: 'Nueva.2026',
+      confirmarContrasena: 'Nueva.2026',
+    }),
+    (e) => e === error,
+  )
+  assert.equal(enviados, 0)
+})
+
+test('Resend: aviso al correo de la cuenta, HTML y texto, sin contraseñas ni datos privados del proveedor', async (t) => {
+  let pedido
+  t.mock.method(globalThis, 'fetch', async (url, opciones) => {
+    pedido = { url, ...opciones }
+    return new Response('{}', { status: 200 })
+  })
+  const config = { apiKey: 'clave-ficticia', remitente: 'Estudio Cova <seguridad@example.test>' }
+  const enviar = crearCorreoCambioContrasena(config)
+  await enviar('usuario@example.test')
+  assert.equal(pedido.url, 'https://api.resend.com/emails')
+  assert.equal(pedido.headers.Authorization, 'Bearer clave-ficticia')
+  const body = JSON.parse(pedido.body)
+  assert.deepEqual(body.to, ['usuario@example.test'])
+  assert.equal(body.from, config.remitente)
+  assert.match(body.html, /Tu contraseña cambió/)
+  assert.match(body.html, /max-width:560px/)
+  assert.match(body.text, /todas tus sesiones/)
+  assert.match(body.text, /Si no hiciste este cambio/)
+  for (const valor of ['Inicial.2026', 'Nueva.2026', config.apiKey]) {
+    assert.equal(body.text.includes(valor), false)
+    assert.equal(body.html.includes(valor), false)
+  }
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () => new Response('información privada', { status: 403 }),
+  )
+  await assert.rejects(enviar('usuario@example.test'), { message: 'Resend rechazó el envío (403)' })
+  await assert.rejects(
+    crearCorreoCambioContrasena({ remitente: config.remitente })('usuario@example.test'),
+    {
+      message: 'RESEND_API_KEY no configurada',
+    },
+  )
 })

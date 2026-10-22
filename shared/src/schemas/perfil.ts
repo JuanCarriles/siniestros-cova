@@ -19,6 +19,8 @@ export const perfilContrasenaSchema = nuevaContrasenaSchema.safeExtend({
 })
 export type PerfilActualizacionData = z.output<typeof perfilActualizacionSchema>
 export type PerfilContrasenaData = z.output<typeof perfilContrasenaSchema>
+export const perfilContrasenaRespuestaSchema = z.strictObject({ correoEnviado: z.boolean() })
+export type PerfilContrasenaRespuesta = z.output<typeof perfilContrasenaRespuestaSchema>
 export type PerfilDatosInput = z.input<typeof perfilDatosSchema>
 export type PerfilDatosData = z.output<typeof perfilDatosSchema>
 export type PerfilVerificarData = z.output<typeof perfilVerificarSchema>

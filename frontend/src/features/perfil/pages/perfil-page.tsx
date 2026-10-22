@@ -25,6 +25,7 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | null | un
 export function PerfilPage() {
   const { perfil, catalogos } = useLoaderData<typeof cargarPerfil>()
   const revalidator = useRevalidator()
+  const [cambiandoContrasena, setCambiandoContrasena] = useState(false)
   const [verificacion, setVerificacion] = useState<AlcancePerfil | null>(null)
   // Solo vive mientras el formulario está montado; nunca se persiste en almacenamiento del navegador.
   const [edicion, setEdicion] = useState<{
@@ -56,7 +57,7 @@ export function PerfilPage() {
     setEdicion({ alcance, contrasenaActual })
   }
   function cancelarContrasena() {
-    setEdicion(null)
+    setCambiandoContrasena(false)
     cambiar.current?.focus()
   }
   return (
@@ -147,7 +148,10 @@ export function PerfilPage() {
                 ref={cambiar}
                 variant="outline"
                 disabled={editando}
-                onClick={() => solicitar('contrasena')}
+                onClick={() => {
+                  setMensaje(null)
+                  setCambiandoContrasena(true)
+                }}
               >
                 <KeyRound aria-hidden="true" />
                 Cambiar contraseña
@@ -262,15 +266,17 @@ export function PerfilPage() {
         onCerrar={() => setVerificacion(null)}
         onVerificado={habilitar}
       />
-      {edicion?.alcance === 'contrasena' && (
+      {cambiandoContrasena && (
         <ContrasenaPerfilDialog
           elementoAlCerrar={() => cambiar.current}
           onCerrar={cancelarContrasena}
-          contrasenaActual={edicion.contrasenaActual}
-          onGuardado={() => {
+          onGuardado={({ correoEnviado }) => {
             setEdicion(null)
-            setMensaje('Se actualizó tu contraseña y se cerraron tus otras sesiones.')
-            cambiar.current?.focus()
+            setCambiandoContrasena(false)
+            // Recargar elimina los datos de sesión y contraseñas que vivían en memoria del panel.
+            window.location.replace(
+              `/login?motivo=contrasena-actualizada${correoEnviado ? '' : '&aviso=correo-no-enviado'}`,
+            )
           }}
         />
       )}

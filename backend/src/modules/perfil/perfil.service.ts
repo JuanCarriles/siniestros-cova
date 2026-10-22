@@ -51,9 +51,11 @@ type Tx = Parameters<Parameters<BaseUsuarios['transaccion']>[0]>[0]
 // vigente dentro de la transacción, sin permisos guardados en memoria ni vigencias adicionales.
 export function crearServicioPerfil({
   base,
+  enviarAvisoCambio,
   ahora = Date.now,
 }: {
   base: BaseUsuarios
+  enviarAvisoCambio: (email: string) => Promise<void>
   ahora?: () => number
 }) {
   const limites = crearLimiteIntentos({ maximo: 5, ventanaMs: 600_000, bloqueoMs: 600_000, ahora })
@@ -180,14 +182,28 @@ export function crearServicioPerfil({
       })
     },
     async cambiarContrasena(id: number, token: string, datos: PerfilContrasenaData, ip = '') {
-      await conContrasena(id, token, datos.contrasenaActual, ip, async (tx) => {
-        const hash = await hashPassword(datos.contrasena)
-        await tx.usuario.update({ where: { id }, data: { contrasena: hash } })
-        await tx.sesion.deleteMany({
-          where: { idUsuario: id, tokenHash: { not: hashToken(token) } },
-        })
-        await tx.recuperacionContrasena.deleteMany({ where: { idUsuario: id } })
-      })
+      const email = await conContrasena(
+        id,
+        token,
+        datos.contrasenaActual,
+        ip,
+        async (tx, usuario) => {
+          const hash = await hashPassword(datos.contrasena)
+          await tx.usuario.update({ where: { id }, data: { contrasena: hash } })
+          // El cambio, las recuperaciones y TODAS las sesiones se invalidan juntos, incluida la actual.
+          await tx.sesion.deleteMany({ where: { idUsuario: id } })
+          await tx.recuperacionContrasena.deleteMany({ where: { idUsuario: id } })
+          return usuario.email
+        },
+      )
+      // Solo después del commit: un correo fallido no debe deshacer el cambio ni conservar sesiones.
+      try {
+        await enviarAvisoCambio(email)
+        return { correoEnviado: true }
+      } catch {
+        console.error('No se pudo enviar el aviso de cambio de contraseña.')
+        return { correoEnviado: false }
+      }
     },
   }
 }

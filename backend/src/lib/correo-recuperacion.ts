@@ -1,3 +1,4 @@
+import { enviarCorreoResend, type ConfigCorreo } from './correo-resend.ts'
 import type { CorreoRecuperacion } from '../modules/auth/recuperacion.service.ts'
 
 // HTML de correo con tablas y estilos inline para conservar la tarjeta en los clientes de email.
@@ -72,22 +73,14 @@ function tarjetaRecuperacion(codigo: string, minutos: number): string {
 </html>`
 }
 
-// API oficial de Resend sobre fetch nativo de Node: no se agrega una dependencia sólo para un POST.
-export function crearCorreoRecuperacion(config: { apiKey?: string; remitente: string }) {
+// Conserva el mismo mensaje de recuperación y comparte el transporte con los avisos de seguridad.
+export function crearCorreoRecuperacion(config: ConfigCorreo) {
   return async ({ email, codigo, minutos }: CorreoRecuperacion): Promise<void> => {
-    if (!config.apiKey) throw new Error('RESEND_API_KEY no configurada')
-    const respuesta = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      signal: AbortSignal.timeout(10_000),
-      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: config.remitente,
-        to: [email],
-        subject: 'Tu código para recuperar la contraseña · Estudio Cova',
-        html: tarjetaRecuperacion(codigo, minutos),
-        text: `Estudio Cova\n\nTu código para recuperar la contraseña es: ${codigo}\n\nVence en ${minutos} minutos y sólo puede utilizarse una vez.\nSi no solicitaste este cambio, ignorá este mensaje. Tu contraseña no cambió.\n\nNo compartas este código con nadie.`,
-      }),
+    await enviarCorreoResend(config, {
+      email,
+      asunto: 'Tu código para recuperar la contraseña · Estudio Cova',
+      html: tarjetaRecuperacion(codigo, minutos),
+      texto: `Estudio Cova\n\nTu código para recuperar la contraseña es: ${codigo}\n\nVence en ${minutos} minutos y sólo puede utilizarse una vez.\nSi no solicitaste este cambio, ignorá este mensaje. Tu contraseña no cambió.\n\nNo compartas este código con nadie.`,
     })
-    if (!respuesta.ok) throw new Error(`Resend rechazó el envío (${respuesta.status})`)
   }
 }

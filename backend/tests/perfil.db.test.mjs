@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
 import { hashPassword, verifyPassword } from '../src/lib/password.ts'
-import { hashToken } from '../src/modules/auth/sesiones.service.ts'
+import { crearServicioSesiones, hashToken } from '../src/modules/auth/sesiones.service.ts'
 import { crearServicioPerfil } from '../src/modules/perfil/perfil.service.ts'
 import { perfilDatosSchema } from '@cova/shared/schemas/perfil'
 
@@ -23,7 +23,16 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
             provincia: tx.provincia,
             transaccion: (trabajo) => trabajo(tx),
           }
-          const servicio = crearServicioPerfil({ base, ahora: () => tiempo })
+          const correos = []
+          const enviarAvisoCambio = async (email) => {
+            correos.push(email)
+          }
+          const sesiones = crearServicioSesiones({
+            prisma: tx,
+            duracionMs: 3_600_000,
+            ahora: () => new Date(tiempo),
+          })
+          const servicio = crearServicioPerfil({ base, enviarAvisoCambio, ahora: () => tiempo })
           const pais = await tx.pais.create({ data: { nombre: marca } })
           const provincia = await tx.provincia.create({ data: { nombre: marca, idPais: pais.id } })
           const usuario = (sufijo, tipoUsuario = 'GESTOR') =>
@@ -79,7 +88,11 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
             status(400),
           )
           // Otro proceso puede guardar sin compartir un permiso del primero.
-          const segundoProceso = crearServicioPerfil({ base, ahora: () => tiempo })
+          const segundoProceso = crearServicioPerfil({
+            base,
+            enviarAvisoCambio,
+            ahora: () => tiempo,
+          })
           await segundoProceso.modificar(propio.id, token, datos)
           // Tampoco hay una vigencia adicional de diez minutos: solo cuenta la sesión vigente.
           tiempo += 600_001
@@ -200,7 +213,22 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
             }),
             status(400),
           )
-          await servicio.cambiarContrasena(propio.id, token, cambio)
+          assert.deepEqual(correos, [], 'no hay aviso por un intento rechazado')
+          assert.equal(await tx.sesion.count({ where: { idUsuario: propio.id } }), 2)
+          assert.deepEqual(await servicio.cambiarContrasena(propio.id, token, cambio), {
+            correoEnviado: true,
+          })
+          assert.deepEqual(correos, [`nuevo-${marca}@example.test`])
+          assert.equal(await sesiones.validar(token), null)
+          assert.equal(await sesiones.validar(segunda), null)
+          assert.ok(await sesiones.validar(tokenOtro))
+          assert.equal(
+            await verifyPassword(
+              (await tx.usuario.findUnique({ where: { id: propio.id } })).contrasena,
+              'Inicial.2026',
+            ),
+            false,
+          )
           assert.equal(
             await verifyPassword(
               (await tx.usuario.findUnique({ where: { id: propio.id } })).contrasena,
@@ -208,19 +236,56 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
             ),
             true,
           )
-          assert.equal(await tx.sesion.count({ where: { idUsuario: propio.id } }), 1)
+          assert.equal(await tx.sesion.count({ where: { idUsuario: propio.id } }), 0)
+          assert.equal(await tx.sesion.count({ where: { idUsuario: otro.id } }), 1)
           assert.equal(
             await tx.recuperacionContrasena.count({ where: { idUsuario: propio.id } }),
             0,
           )
-          await assert.rejects(servicio.modificar(propio.id, token, datos), status(400))
-          await tx.sesion.delete({ where: { tokenHash: hashToken(token) } })
+          await assert.rejects(servicio.modificar(propio.id, token, datos), status(401))
+          await assert.rejects(
+            servicio.verificar(propio.id, segunda, { contrasena: 'Nueva.2026' }),
+            status(401),
+          )
           await assert.rejects(
             servicio.modificar(propio.id, token, { ...datos, contrasenaActual: 'Nueva.2026' }),
             status(401),
           )
+          // Un fallo del proveedor no conserva sesiones ni informa que el cambio falló.
+          const sinCorreo = await usuario('sin-correo', 'ADMINISTRADOR')
+          await sesion(sinCorreo.id, `${marca}-fallo-1`)
+          await sesion(sinCorreo.id, `${marca}-fallo-2`)
+          const errores = []
+          const errorOriginal = console.error
+          console.error = (...args) => {
+            errores.push(args.join(' '))
+          }
+          try {
+            const fallaCorreo = crearServicioPerfil({
+              base,
+              ahora: () => tiempo,
+              enviarAvisoCambio: async () => {
+                throw new Error('datos privados del proveedor')
+              },
+            })
+            assert.deepEqual(
+              await fallaCorreo.cambiarContrasena(sinCorreo.id, `${marca}-fallo-1`, cambio),
+              { correoEnviado: false },
+            )
+          } finally {
+            console.error = errorOriginal
+          }
+          assert.equal(await tx.sesion.count({ where: { idUsuario: sinCorreo.id } }), 0)
+          assert.equal(
+            await verifyPassword(
+              (await tx.usuario.findUnique({ where: { id: sinCorreo.id } })).contrasena,
+              'Nueva.2026',
+            ),
+            true,
+          )
+          assert.deepEqual(errores, ['No se pudo enviar el aviso de cambio de contraseña.'])
           // El límite de cinco fallos se comparte entre verificar y los dos PATCH.
-          const limitado = crearServicioPerfil({ base, ahora: () => tiempo })
+          const limitado = crearServicioPerfil({ base, enviarAvisoCambio, ahora: () => tiempo })
           const otros = { ...datos, email: otro.email, contrasenaActual: 'Incorrecta' }
           const fallos = [
             () => limitado.verificar(otro.id, tokenOtro, { contrasena: 'Incorrecta' }),
