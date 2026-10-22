@@ -119,6 +119,16 @@ export type OpcionesSiniestros = {
   gestores: { id: number; nombre: string; eliminado: boolean }[]
 }
 
+/** Datos básicos de un siniestro (GET /api/siniestros/:id), para la ficha. CU-10 la va a ampliar. */
+export type SiniestroResumen = {
+  id: number
+  numeroSiniestro: string
+  numeroPoliza: string
+  aseguradora: { id: number; nombre: string }
+  estado: { id: number; nombre: string }
+  gestor: ParteResumen
+}
+
 /** Datos de contacto de las partes (GET /api/siniestros/:id/partes), para los modales del listado (CU-09 3.b y 3.c). */
 export type PartesSiniestro = {
   siniestro: { id: number; numeroSiniestro: string }

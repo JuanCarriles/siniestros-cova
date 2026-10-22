@@ -6,6 +6,7 @@ import {
   type PaginaSiniestros,
   type PartesSiniestro,
   type SiniestroListado,
+  type SiniestroResumen,
 } from '@cova/shared/schemas/siniestros'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
@@ -126,6 +127,21 @@ export function crearServicioSiniestros(
 ) {
   const esGestor = (usuario: SesionUsuario) => usuario.tipoUsuario === 'GESTOR'
 
+  // E4-03: un gestor solo abre los siniestros asignados a él (RF-17), y nunca uno dado de baja. Si existe pero no
+  // le corresponde, error de permisos (403); el administrador y el superadministrador abren cualquiera.
+  async function exigirAcceso(usuario: SesionUsuario, id: number) {
+    const fila = await prisma.siniestro.findUnique({
+      where: { id },
+      select: { idUsuario: true, eliminado: true },
+    })
+    if (!fila) throw new HttpError(404, 'El siniestro no existe.')
+    if (!esGestor(usuario)) return
+    if (fila.idUsuario !== usuario.id) {
+      throw new HttpError(403, 'Este siniestro no está asignado a vos.')
+    }
+    if (fila.eliminado) throw new HttpError(403, 'Este siniestro está dado de baja.')
+  }
+
   return {
     async listar(usuario: SesionUsuario, filtros: FiltrosSiniestros): Promise<PaginaSiniestros> {
       const ahora = reloj()
@@ -220,11 +236,34 @@ export function crearServicioSiniestros(
       }
     },
 
-    // CU-09 3.b y 3.c. Un gestor solo puede ver las partes de sus siniestros; si no es suyo, responde como si no
-    // existiera.
+    async obtener(usuario: SesionUsuario, id: number): Promise<SiniestroResumen> {
+      await exigirAcceso(usuario, id)
+      const fila = await prisma.siniestro.findUniqueOrThrow({
+        where: { id },
+        select: {
+          id: true,
+          numeroSiniestro: true,
+          numeroPoliza: true,
+          aseguradora: { select: { id: true, nombre: true } },
+          estadoSiniestro: { select: { id: true, nombre: true } },
+          usuario: { select: { id: true, nombres: true, apellidos: true } },
+        },
+      })
+      return {
+        id: fila.id,
+        numeroSiniestro: fila.numeroSiniestro,
+        numeroPoliza: fila.numeroPoliza,
+        aseguradora: fila.aseguradora,
+        estado: fila.estadoSiniestro,
+        gestor: { id: fila.usuario.id, nombre: nombreDe(fila.usuario) },
+      }
+    },
+
+    // CU-09 3.b y 3.c, con el mismo control de acceso que la ficha
     async partes(usuario: SesionUsuario, id: number): Promise<PartesSiniestro> {
-      const fila = await prisma.siniestro.findFirst({
-        where: { id, ...(esGestor(usuario) ? { idUsuario: usuario.id, eliminado: false } : {}) },
+      await exigirAcceso(usuario, id)
+      const fila = await prisma.siniestro.findUnique({
+        where: { id },
         select: {
           id: true,
           numeroSiniestro: true,
