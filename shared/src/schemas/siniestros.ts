@@ -78,6 +78,36 @@ export const filtrosSiniestrosSchema = z.strictObject({
 })
 export type FiltrosSiniestros = z.output<typeof filtrosSiniestrosSchema>
 
+/** Parámetros de la dirección que entiende GET /api/siniestros */
+export const PARAMETROS_LISTADO = [
+  'pagina',
+  'porPagina',
+  'q',
+  'estado',
+  'aseguradora',
+  'gestor',
+  'bajas',
+  'orden',
+] as const
+
+/**
+ * Los parámetros válidos de la dirección del listado: un valor inválido (una dirección editada a mano, un enlace
+ * viejo, una búsqueda de más de 100 caracteres) se descarta. La pantalla usa este mismo resultado para mostrar los
+ * filtros aplicados, así nunca muestra uno que el servidor no recibió.
+ */
+export function parametrosListadoValidos(params: {
+  get(clave: string): string | null
+}): Partial<Record<(typeof PARAMETROS_LISTADO)[number], string>> {
+  const validos: Partial<Record<(typeof PARAMETROS_LISTADO)[number], string>> = {}
+  for (const clave of PARAMETROS_LISTADO) {
+    const valor = params.get(clave)
+    if (valor && filtrosSiniestrosSchema.shape[clave].safeParse(valor).success) {
+      validos[clave] = valor
+    }
+  }
+  return validos
+}
+
 export type ParteResumen = { id: number; nombre: string }
 
 /** Fila del listado (GET /api/siniestros). Las partes se resumen; sus datos de contacto van aparte. */

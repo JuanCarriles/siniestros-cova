@@ -10,6 +10,7 @@ import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, Trash2 } from 'lucide
 import {
   DIAS_ALERTA,
   DIAS_DEMORADO,
+  parametrosListadoValidos,
   POR_PAGINA,
   type OrdenSiniestros,
   type SiniestroListado,
@@ -81,8 +82,12 @@ export function SiniestrosPage() {
     return texto ? `?${texto}` : location.pathname
   }
 
+  // Lo que realmente se envía al servidor: los chips, el campo y el estado vacío se basan en esto, no en la dirección
+  // tal cual (un valor inválido se descarta en los dos lados por igual)
+  const validos = parametrosListadoValidos(params)
+
   // Búsqueda: consulta al servidor cuando se deja de escribir
-  const q = params.get('q') ?? ''
+  const q = (validos.q ?? '').trim()
   const [busqueda, setBusqueda] = useState(q)
   // Si la búsqueda de la dirección cambia por otro camino (Atrás, Adelante, un enlace), el campo la acompaña. Cuando
   // cambia porque se escribió, ya coinciden y no se toca lo que se está escribiendo.
@@ -155,35 +160,39 @@ export function SiniestrosPage() {
         ]),
   ]
 
-  // Búsqueda y filtros aplicados, en palabras: los muestran los chips de arriba y el estado vacío (E4-02)
-  const nombreDe = (lista: { id: number; nombre: string }[], clave: string) =>
-    lista.find((o) => String(o.id) === params.get(clave))?.nombre
-  const activos: FiltroActivo[] = [
-    q && { clave: 'q', etiqueta: 'Búsqueda', valor: `«${q}»` },
-    nombreDe(opciones.estados, 'estado') && {
-      clave: 'estado',
-      etiqueta: 'Estado',
-      valor: nombreDe(opciones.estados, 'estado')!,
-    },
-    nombreDe(opciones.aseguradoras, 'aseguradora') && {
-      clave: 'aseguradora',
-      etiqueta: 'Aseguradora',
-      valor: nombreDe(opciones.aseguradoras, 'aseguradora')!,
-    },
-    !esGestor &&
-      nombreDe(opciones.gestores, 'gestor') && {
-        clave: 'gestor',
-        etiqueta: 'Gestor',
-        valor: nombreDe(opciones.gestores, 'gestor')!,
-      },
-    !esGestor &&
-      params.get('bajas') === 'true' && {
-        clave: 'bajas',
-        etiqueta: 'Incluye',
-        valor: 'dados de baja',
-      },
-  ].filter((f): f is FiltroActivo => Boolean(f))
-  const quitarTodos = () => cambiar(Object.fromEntries(FILTROS.map((clave) => [clave, null])))
+  // Búsqueda y filtros aplicados, en palabras: los muestran los chips de arriba y el estado vacío (E4-02). Un filtro
+  // que el servidor recibe pero no figura en el catálogo (un enlace viejo, algo dado de baja) se muestra igual, como
+  // "no disponible", para que se vea y se pueda quitar.
+  const filtroDe = (
+    clave: 'estado' | 'aseguradora' | 'gestor',
+    etiqueta: string,
+    lista: { id: number; nombre: string }[],
+  ): FiltroActivo | null => {
+    const id = validos[clave]
+    if (!id) return null
+    const nombre = lista.find((o) => String(o.id) === id)?.nombre
+    return { clave, etiqueta, valor: nombre ?? 'no disponible' }
+  }
+  const activos = [
+    q ? { clave: 'q', etiqueta: 'Búsqueda', valor: `«${q}»` } : null,
+    filtroDe('estado', 'Estado', opciones.estados),
+    filtroDe('aseguradora', 'Aseguradora', opciones.aseguradoras),
+    // El servidor no aplica estos dos para el gestor (RF-17): no se muestran
+    esGestor ? null : filtroDe('gestor', 'Gestor', opciones.gestores),
+    !esGestor && validos.bajas === 'true'
+      ? { clave: 'bajas', etiqueta: 'Incluye', valor: 'dados de baja' }
+      : null,
+  ].filter((f): f is FiltroActivo => f !== null)
+
+  // También vacía el campo: si había una búsqueda a medio escribir, su espera se cancela y no vuelve a aplicarse
+  function quitarFiltro(clave: string) {
+    if (clave === 'q') setBusqueda('')
+    cambiar({ [clave]: null })
+  }
+  function quitarTodos() {
+    setBusqueda('')
+    cambiar(Object.fromEntries(FILTROS.map((clave) => [clave, null])))
+  }
 
   return (
     <>
@@ -240,11 +249,7 @@ export function SiniestrosPage() {
         etiquetaBajas="Mostrar dados de baja"
       />
 
-      <FiltrosActivos
-        filtros={activos}
-        onQuitar={(clave) => cambiar({ [clave]: null })}
-        onQuitarTodos={quitarTodos}
-      />
+      <FiltrosActivos filtros={activos} onQuitar={quitarFiltro} onQuitarTodos={quitarTodos} />
 
       <ListadoAbm
         tituloRef={titulo}
@@ -275,9 +280,7 @@ export function SiniestrosPage() {
               esGestor={esGestor}
               filtros={activos}
               // El resumen cuenta los dados de baja que coinciden aunque no se muestren
-              bajasQueCoinciden={
-                esGestor || params.get('bajas') === 'true' ? 0 : pagina.resumen.bajas
-              }
+              bajasQueCoinciden={esGestor || validos.bajas === 'true' ? 0 : pagina.resumen.bajas}
               onMostrarBajas={() => cambiar({ bajas: 'true' })}
               onQuitarTodos={quitarTodos}
             />

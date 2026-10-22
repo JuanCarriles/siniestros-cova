@@ -47,6 +47,8 @@ export function BarraAbm({
           autoComplete="off"
           placeholder={placeholderBusqueda}
           value={busqueda}
+          // Mismo límite que aceptan los listados: una búsqueda más larga no se podría aplicar
+          maxLength={100}
           onChange={(e) => onBusqueda(e.target.value)}
           className="h-13 pl-12 shadow-card"
         />
