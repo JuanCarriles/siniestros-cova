@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import {
   bloqueoBajaUsuarioSchema,
-  tiposUsuarioAdministrables,
+  motivoRestriccionUsuario,
   type UsuarioListado,
 } from '@cova/shared/schemas/usuarios-abm'
 import type { TipoUsuario } from '@cova/shared/schemas/enums'
@@ -43,9 +43,8 @@ export function EstadoUsuarioDialog({
   const principal = useRef<HTMLButtonElement>(null)
   const usuario = cambio?.usuario
   const nombre = usuario ? `${usuario.nombres} ${usuario.apellidos}` : ''
-  const sinPermiso = usuario
-    ? !tiposUsuarioAdministrables(rol).includes(usuario.tipoUsuario)
-    : false
+  const motivo = usuario ? motivoRestriccionUsuario(rol, usuario.tipoUsuario) : null
+  const sinPermiso = motivo !== null
   const casos = casosServidor ?? usuario?.casosActivos ?? 0
   const conCasos = cambio?.tipo === 'baja' && casos > 0
   const bloqueada = sinPermiso || conCasos
@@ -105,7 +104,7 @@ export function EstadoUsuarioDialog({
           </DialogTitle>
           <DialogDescription>
             {sinPermiso ? (
-              'Solo podés administrar usuarios de una jerarquía inferior a la tuya.'
+              motivo
             ) : conCasos ? (
               <>
                 {nombre} tiene{' '}
