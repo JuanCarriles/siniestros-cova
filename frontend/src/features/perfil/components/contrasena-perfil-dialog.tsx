@@ -1,7 +1,11 @@
 import { useId } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { nuevaContrasenaSchema, type NuevaContrasenaData } from '@cova/shared/schemas/auth'
+import {
+  perfilContrasenaSchema,
+  type PerfilContrasenaData,
+  type PerfilContrasenaRespuesta,
+} from '@cova/shared/schemas/perfil'
 import { ReglasContrasena } from '@/components/reglas-contrasena'
 import { PasswordField } from '@/components/password-field'
 import { Aviso } from '@/components/aviso'
@@ -21,12 +25,10 @@ import { cambiarContrasenaPerfil } from '../api/perfil.api'
 export function ContrasenaPerfilDialog({
   onCerrar,
   onGuardado,
-  contrasenaActual,
   elementoAlCerrar,
 }: {
   onCerrar: () => void
-  onGuardado: () => void
-  contrasenaActual: string
+  onGuardado: (resultado: PerfilContrasenaRespuesta) => void
   elementoAlCerrar: () => HTMLElement | null
 }) {
   const reglasId = useId()
@@ -38,16 +40,16 @@ export function ContrasenaPerfilDialog({
     setError,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<NuevaContrasenaData>({
-    resolver: zodResolver(nuevaContrasenaSchema),
-    defaultValues: { contrasena: '', confirmarContrasena: '' },
+  } = useForm<PerfilContrasenaData>({
+    resolver: zodResolver(perfilContrasenaSchema),
+    defaultValues: { contrasenaActual: '', contrasena: '', confirmarContrasena: '' },
   })
   const contrasena = useWatch({ control, name: 'contrasena' })
   const guardar = handleSubmit(async (datos) => {
     try {
-      await cambiarContrasenaPerfil({ ...datos, contrasenaActual })
+      const resultado = await cambiarContrasenaPerfil(datos)
       reset()
-      onGuardado()
+      onGuardado(resultado)
     } catch (err) {
       setError('root', {
         message: err instanceof ApiError ? err.message : 'No se pudo cambiar. Probá de nuevo.',
@@ -72,13 +74,14 @@ export function ContrasenaPerfilDialog({
         }}
         onOpenAutoFocus={(e) => {
           e.preventDefault()
-          setFocus('contrasena')
+          setFocus('contrasenaActual')
         }}
       >
         <DialogHeader>
           <DialogTitle>Cambiar contraseña</DialogTitle>
           <DialogDescription>
-            Escribí la nueva contraseña dos veces. Se cerrarán tus otras sesiones.
+            Ingresá tu contraseña actual y la nueva dos veces. Al guardar se cerrarán todas tus
+            sesiones, incluida esta, y te enviaremos un aviso por correo.
           </DialogDescription>
         </DialogHeader>
         <form noValidate onSubmit={(e) => void guardar(e)} className="grid gap-4">
@@ -87,6 +90,14 @@ export function ContrasenaPerfilDialog({
               {errors.root.message}
             </Aviso>
           )}
+          <PasswordField
+            label="Contraseña actual"
+            required
+            autoComplete="current-password"
+            maxLength={128}
+            error={errors.contrasenaActual?.message}
+            {...register('contrasenaActual')}
+          />
           <PasswordField
             id="perfil-nueva-contrasena"
             label="Nueva contraseña"
@@ -113,7 +124,7 @@ export function ContrasenaPerfilDialog({
               </Button>
             </DialogClose>
             <Button type="submit" loading={isSubmitting}>
-              Guardar contraseña
+              Cambiar contraseña y salir
             </Button>
           </DialogFooter>
         </form>

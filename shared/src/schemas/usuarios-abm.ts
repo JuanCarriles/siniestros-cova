@@ -11,6 +11,31 @@ export function tiposUsuarioAdministrables(tipo: TipoUsuario): TipoUsuario[] {
   return []
 }
 
+export type AccionJerarquiaUsuario = 'crear' | 'asignar' | 'administrar'
+
+// Misma política y explicación en el formulario y en el servidor. null significa permitido.
+export function motivoRestriccionUsuario(
+  actor: TipoUsuario,
+  destino: TipoUsuario,
+  accion: AccionJerarquiaUsuario = 'administrar',
+): string | null {
+  if (tiposUsuarioAdministrables(actor).includes(destino)) return null
+  if (actor === 'GESTOR') return 'Los gestores no pueden crear ni administrar usuarios.'
+  if (accion === 'crear') {
+    return destino === 'SUPER_ADMINISTRADOR'
+      ? 'No se pueden crear superadministradores desde esta pantalla.'
+      : 'Solo el superadministrador puede crear administradores.'
+  }
+  if (accion === 'asignar') {
+    return destino === 'SUPER_ADMINISTRADOR'
+      ? 'No se puede asignar el rol de superadministrador desde esta pantalla.'
+      : 'Solo el superadministrador puede asignar el rol de administrador.'
+  }
+  return actor === 'ADMINISTRADOR'
+    ? 'Como administrador, solo podés modificar, dar de baja o reactivar gestores. Los administradores los gestiona el superadministrador.'
+    : 'No podés administrar usuarios superadministradores desde esta pantalla. Para modificar tus propios datos, usá Mi perfil.'
+}
+
 const datosUsuarioSchema = z.strictObject({
   nombres: textoSchema.max(60),
   apellidos: textoSchema.max(60),

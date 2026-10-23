@@ -5,6 +5,7 @@ import {
   perfilVerificarSchema,
 } from '@cova/shared/schemas/perfil'
 import { tokenDeSesion, usuarioDeSesion } from '../../middlewares/autenticar.ts'
+import { borrarCookieSesion } from '../../config/cookies.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import type { crearServicioPerfil } from './perfil.service.ts'
 
@@ -45,8 +46,9 @@ export function crearPerfilRouter({
   router.patch('/contrasena', async (req, res) => {
     const { id, token } = contexto(req)
     const datos = perfilContrasenaSchema.parse(req.body)
-    await servicio.cambiarContrasena(id, token, datos, req.ip)
-    res.status(204).end()
+    const resultado = await servicio.cambiarContrasena(id, token, datos, req.ip)
+    borrarCookieSesion(res)
+    res.json(resultado)
   })
   return router
 }

@@ -3,6 +3,8 @@ import type {
   PerfilContrasenaData,
   PerfilVerificarData,
 } from '@cova/shared/schemas/perfil'
+import { DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
+import { motivoFalloCorreo } from '../../lib/correo-resend.ts'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import type { BaseUsuarios } from '../usuarios/usuarios.service.ts'
 import { crearServicioUsuarios } from '../usuarios/usuarios.service.ts'
@@ -51,9 +53,11 @@ type Tx = Parameters<Parameters<BaseUsuarios['transaccion']>[0]>[0]
 // vigente dentro de la transacción, sin permisos guardados en memoria ni vigencias adicionales.
 export function crearServicioPerfil({
   base,
+  enviarAvisoCambio,
   ahora = Date.now,
 }: {
   base: BaseUsuarios
+  enviarAvisoCambio: (email: string) => Promise<void>
   ahora?: () => number
 }) {
   const limites = crearLimiteIntentos({ maximo: 5, ventanaMs: 600_000, bloqueoMs: 600_000, ahora })
@@ -116,13 +120,13 @@ export function crearServicioPerfil({
   return {
     async obtener(id: number) {
       const t = ahora()
-      const limite = new Date(t - 72 * 3_600_000)
-      // RF-19: más de 72 h sin movimiento; la bandera almacenada puede haber quedado desactualizada.
+      const limite = new Date(t - DIAS_DEMORADO * 86_400_000)
+      // RF-19: mismo umbral inclusivo que el listado; la bandera almacenada puede estar desactualizada.
       const demorado = {
         ...activo,
         OR: [
-          { fechaUltimoMovimiento: { lt: limite } },
-          { fechaUltimoMovimiento: null, fechaAsignacion: { lt: limite } },
+          { fechaUltimoMovimiento: { lte: limite } },
+          { fechaUltimoMovimiento: null, fechaAsignacion: { lte: limite } },
         ],
       } satisfies Prisma.SiniestroWhereInput
       const usuario = await base.usuario.findUnique({
@@ -180,14 +184,30 @@ export function crearServicioPerfil({
       })
     },
     async cambiarContrasena(id: number, token: string, datos: PerfilContrasenaData, ip = '') {
-      await conContrasena(id, token, datos.contrasenaActual, ip, async (tx) => {
-        const hash = await hashPassword(datos.contrasena)
-        await tx.usuario.update({ where: { id }, data: { contrasena: hash } })
-        await tx.sesion.deleteMany({
-          where: { idUsuario: id, tokenHash: { not: hashToken(token) } },
-        })
-        await tx.recuperacionContrasena.deleteMany({ where: { idUsuario: id } })
-      })
+      const email = await conContrasena(
+        id,
+        token,
+        datos.contrasenaActual,
+        ip,
+        async (tx, usuario) => {
+          const hash = await hashPassword(datos.contrasena)
+          await tx.usuario.update({ where: { id }, data: { contrasena: hash } })
+          // El cambio, las recuperaciones y TODAS las sesiones se invalidan juntos, incluida la actual.
+          await tx.sesion.deleteMany({ where: { idUsuario: id } })
+          await tx.recuperacionContrasena.deleteMany({ where: { idUsuario: id } })
+          return usuario.email
+        },
+      )
+      // Solo después del commit: un correo fallido no debe deshacer el cambio ni conservar sesiones.
+      try {
+        await enviarAvisoCambio(email)
+        return { correoEnviado: true }
+      } catch (error) {
+        console.error(
+          `No se pudo enviar el aviso de cambio de contraseña: ${motivoFalloCorreo(error)}`,
+        )
+        return { correoEnviado: false }
+      }
     },
   }
 }

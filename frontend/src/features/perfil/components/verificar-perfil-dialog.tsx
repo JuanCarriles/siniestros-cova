@@ -2,11 +2,7 @@ import { useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { LockKeyhole } from 'lucide-react'
-import {
-  perfilVerificarSchema,
-  type AlcancePerfil,
-  type PerfilVerificarData,
-} from '@cova/shared/schemas/perfil'
+import { perfilVerificarSchema, type PerfilVerificarData } from '@cova/shared/schemas/perfil'
 import { PasswordField } from '@/components/password-field'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
@@ -26,13 +22,11 @@ const esquema = perfilVerificarSchema
 type DatosVerificacion = PerfilVerificarData
 
 export function VerificarPerfilDialog({
-  alcance,
   onCerrar,
   onVerificado,
 }: {
-  alcance: AlcancePerfil | null
   onCerrar: () => void
-  onVerificado: (alcance: AlcancePerfil, contrasenaActual: string) => void
+  onVerificado: (contrasenaActual: string) => void
 }) {
   const completada = useRef(false)
   const {
@@ -47,12 +41,11 @@ export function VerificarPerfilDialog({
     defaultValues: { contrasena: '' },
   })
   async function verificar(datos: DatosVerificacion) {
-    if (!alcance) return
     try {
       await verificarPerfil(datos)
       completada.current = true
       reset()
-      onVerificado(alcance, datos.contrasena)
+      onVerificado(datos.contrasena)
     } catch (err) {
       setError('root', {
         message: err instanceof ApiError ? err.message : 'No se pudo verificar. Probá de nuevo.',
@@ -61,7 +54,7 @@ export function VerificarPerfilDialog({
   }
   return (
     <Dialog
-      open={alcance !== null}
+      open
       onOpenChange={(abrir) => {
         if (!abrir && !isSubmitting) onCerrar()
       }}
@@ -76,11 +69,7 @@ export function VerificarPerfilDialog({
         onCloseAutoFocus={(e) => {
           if (completada.current) {
             e.preventDefault()
-            document
-              .getElementById(
-                alcance === 'contrasena' ? 'perfil-nueva-contrasena' : 'perfil-nombres',
-              )
-              ?.focus()
+            document.getElementById('perfil-nombres')?.focus()
           }
         }}
       >
@@ -90,11 +79,7 @@ export function VerificarPerfilDialog({
           </span>
           <DialogTitle>Confirmá que sos vos</DialogTitle>
           <DialogDescription>
-            Ingresá tu contraseña actual para{' '}
-            {alcance === 'contrasena'
-              ? 'cambiar la contraseña de tu cuenta'
-              : 'habilitar la edición de tus datos personales'}
-            .
+            Ingresá tu contraseña actual para habilitar la edición de tus datos personales.
           </DialogDescription>
         </DialogHeader>
         <form noValidate onSubmit={(e) => void handleSubmit(verificar)(e)} className="grid gap-5">
