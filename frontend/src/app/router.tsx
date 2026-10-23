@@ -24,6 +24,8 @@ import { cargarUsuarios } from '@/features/usuarios/loader'
 import { UsuariosPage } from '@/features/usuarios/pages/usuarios-page'
 import { cargarPerfil } from '@/features/perfil/loader'
 import { PerfilPage } from '@/features/perfil/pages/perfil-page'
+import { cargarPlantillas } from '@/features/plantillas/loader'
+import { PlantillasPage } from '@/features/plantillas/pages/plantillas-page'
 import { ErrorPagina } from '@/pages/error-pagina'
 import { Panel } from './panel'
 import { Raiz } from './raiz'
@@ -49,7 +51,7 @@ const developmentRoutes: RouteObject[] = import.meta.env.DEV
 const secciones: Record<PanelSection, ComponentType> = {
   dashboard: DashboardPage,
   siniestros: SiniestrosPage,
-  plantillas: () => <SeccionPendiente section="plantillas" />,
+  plantillas: PlantillasPage,
   aseguradoras: AseguradorasPage,
   ajustadores: AjustadoresPage,
   usuarios: UsuariosPage,
@@ -64,6 +66,7 @@ const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
   ajustadores: cargarAjustadores,
   usuarios: cargarUsuarios,
   perfil: cargarPerfil,
+  plantillas: cargarPlantillas,
 }
 
 export const router = createBrowserRouter([
