@@ -6,6 +6,8 @@ import {
   type UsuarioListado,
 } from '@cova/shared/schemas/usuarios-abm'
 import type { TipoUsuario } from '@cova/shared/schemas/enums'
+import { SiniestrosActivosBaja } from '@/components/abm/siniestros-activos-baja'
+import { useSiniestrosActivosBaja } from '@/components/abm/use-siniestros-activos-baja'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
 import {
@@ -45,11 +47,17 @@ export function EstadoUsuarioDialog({
   const nombre = usuario ? `${usuario.nombres} ${usuario.apellidos}` : ''
   const motivo = usuario ? motivoRestriccionUsuario(rol, usuario.tipoUsuario) : null
   const sinPermiso = motivo !== null
-  const casos = casosServidor ?? usuario?.casosActivos ?? 0
+  const consulta = useSiniestrosActivosBaja({
+    tipo: 'usuario',
+    id: usuario?.id,
+    habilitado: cambio?.tipo === 'baja' && !sinPermiso,
+  })
+  const casos = consulta.datos?.casosActivos ?? casosServidor ?? usuario?.casosActivos ?? 0
   const conCasos = cambio?.tipo === 'baja' && casos > 0
+  const pendienteConsulta = cambio?.tipo === 'baja' && !sinPermiso && !consulta.verificada
   const bloqueada = sinPermiso || conCasos
   async function confirmar() {
-    if (!cambio || enviando || bloqueada) return
+    if (!cambio || enviando || bloqueada || pendienteConsulta) return
     setEnviando(true)
     setError(null)
     try {
@@ -61,6 +69,7 @@ export function EstadoUsuarioDialog({
       )
       if (bloqueo.success) {
         setCasosServidor(bloqueo.data.casosActivos)
+        consulta.actualizar()
         onDesactualizado()
       } else
         setError(err instanceof ApiError ? err.message : 'No se pudo completar. Probá de nuevo.')
@@ -125,6 +134,9 @@ export function EstadoUsuarioDialog({
             {error}
           </Aviso>
         )}
+        {cambio?.tipo === 'baja' && !sinPermiso && (
+          <SiniestrosActivosBaja consulta={consulta} onAbrir={onCerrar} />
+        )}
         <DialogFooter>
           <DialogClose asChild>
             <Button ref={principal} variant={bloqueada ? 'default' : 'outline'} disabled={enviando}>
@@ -135,6 +147,7 @@ export function EstadoUsuarioDialog({
             <Button
               variant={cambio?.tipo === 'baja' ? 'destructive' : 'default'}
               loading={enviando}
+              disabled={pendienteConsulta}
               onClick={() => void confirmar()}
             >
               {cambio?.tipo === 'baja' ? 'Dar de baja' : 'Reactivar'}
