@@ -205,3 +205,35 @@ test('servicio: un usuario sin permiso de descarga nunca obtiene una firma', asy
   )
   assert.ok(!llamadas.some((llamada) => llamada.startsWith('firmar:')))
 })
+
+test('existencia: HEAD usa la clave de la base; ausencia 404 y errores de acceso o bucket 503', async () => {
+  const { almacenamiento, cliente, comandos } = almacenamientoPrueba()
+  await almacenamiento.comprobarExistencia('plantillas/modelo.pdf')
+  assert.equal(comandos[0].constructor.name, 'HeadObjectCommand')
+  assert.equal(comandos[0].input.Key, 'plantillas/modelo.pdf')
+  assert.equal(comandos[0].input.Bucket, variables.R2_BUCKET)
+  for (const name of ['NotFound', 'NoSuchKey', 'AccessDenied', 'NoSuchBucket', 'TimeoutError']) {
+    cliente.send = async (comando) => {
+      if (comando.constructor.name === 'HeadBucketCommand') return {}
+      throw Object.assign(new Error('No exponer detalle'), { name })
+    }
+    await assert.rejects(almacenamiento.comprobarExistencia('plantillas/modelo.pdf'), (error) => {
+      assert.equal(error.status, ['NotFound', 'NoSuchKey'].includes(name) ? 404 : 503)
+      assert.equal(error.message.includes('No exponer detalle'), false)
+      return true
+    })
+  }
+  // Un HEAD 404 ambiguo con bucket ausente o inaccesible nunca habilita borrar metadatos.
+  for (const name of ['NotFound', 'NoSuchBucket', 'AccessDenied', 'TimeoutError']) {
+    cliente.send = async (comando) => {
+      throw Object.assign(new Error('No exponer detalle'), {
+        name: comando.constructor.name === 'HeadObjectCommand' ? 'NotFound' : name,
+      })
+    }
+    await assert.rejects(almacenamiento.comprobarExistencia('plantillas/modelo.pdf'), {
+      status: 503,
+    })
+  }
+  await assert.rejects(almacenamiento.comprobarExistencia('https://otro.example/archivo.pdf'))
+  almacenamiento.cerrar()
+})

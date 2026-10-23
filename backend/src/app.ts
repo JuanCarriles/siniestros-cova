@@ -7,6 +7,7 @@ import { aseguradorasRouter } from './modules/aseguradoras/aseguradoras.module.t
 import { authRouter } from './modules/auth/auth.module.ts'
 import { usuariosRouter } from './modules/usuarios/usuarios.module.ts'
 import { perfilRouter } from './modules/perfil/perfil.module.ts'
+import { plantillasRouter } from './modules/plantillas/plantillas.module.ts'
 import { healthRouter } from './modules/health/health.routes.ts'
 import { siniestrosRouter } from './modules/siniestros/siniestros.module.ts'
 
@@ -29,6 +30,7 @@ api.use('/ajustadores', ajustadoresRouter)
 api.use('/usuarios', usuariosRouter)
 api.use('/perfil', perfilRouter)
 api.use('/siniestros', siniestrosRouter)
+api.use('/plantillas', plantillasRouter)
 
 // Los routers de cada módulo se montan acá. Las rutas protegidas usan requerirSesion y requerirRol
 // (ver modules/auth/auth.module.ts).
