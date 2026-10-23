@@ -3,6 +3,8 @@ import type {
   PerfilContrasenaData,
   PerfilVerificarData,
 } from '@cova/shared/schemas/perfil'
+import { DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
+import { motivoFalloCorreo } from '../../lib/correo-resend.ts'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import type { BaseUsuarios } from '../usuarios/usuarios.service.ts'
 import { crearServicioUsuarios } from '../usuarios/usuarios.service.ts'
@@ -118,13 +120,13 @@ export function crearServicioPerfil({
   return {
     async obtener(id: number) {
       const t = ahora()
-      const limite = new Date(t - 72 * 3_600_000)
-      // RF-19: más de 72 h sin movimiento; la bandera almacenada puede haber quedado desactualizada.
+      const limite = new Date(t - DIAS_DEMORADO * 86_400_000)
+      // RF-19: mismo umbral inclusivo que el listado; la bandera almacenada puede estar desactualizada.
       const demorado = {
         ...activo,
         OR: [
-          { fechaUltimoMovimiento: { lt: limite } },
-          { fechaUltimoMovimiento: null, fechaAsignacion: { lt: limite } },
+          { fechaUltimoMovimiento: { lte: limite } },
+          { fechaUltimoMovimiento: null, fechaAsignacion: { lte: limite } },
         ],
       } satisfies Prisma.SiniestroWhereInput
       const usuario = await base.usuario.findUnique({
@@ -200,8 +202,10 @@ export function crearServicioPerfil({
       try {
         await enviarAvisoCambio(email)
         return { correoEnviado: true }
-      } catch {
-        console.error('No se pudo enviar el aviso de cambio de contraseña.')
+      } catch (error) {
+        console.error(
+          `No se pudo enviar el aviso de cambio de contraseña: ${motivoFalloCorreo(error)}`,
+        )
         return { correoEnviado: false }
       }
     },

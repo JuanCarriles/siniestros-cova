@@ -24,7 +24,6 @@ export type PerfilContrasenaRespuesta = z.output<typeof perfilContrasenaRespuest
 export type PerfilDatosInput = z.input<typeof perfilDatosSchema>
 export type PerfilDatosData = z.output<typeof perfilDatosSchema>
 export type PerfilVerificarData = z.output<typeof perfilVerificarSchema>
-export type AlcancePerfil = 'datos' | 'contrasena'
 
 export const perfilSchema = usuarioListadoSchema.extend({
   ultimaConexion: z.iso.datetime({ offset: true }).nullable(),

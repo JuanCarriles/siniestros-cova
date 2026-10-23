@@ -93,8 +93,7 @@ export function ContrasenaPerfilDialog({
           <PasswordField
             label="Contraseña actual"
             required
-            entradaManual
-            autoComplete="off"
+            autoComplete="current-password"
             maxLength={128}
             error={errors.contrasenaActual?.message}
             {...register('contrasenaActual')}

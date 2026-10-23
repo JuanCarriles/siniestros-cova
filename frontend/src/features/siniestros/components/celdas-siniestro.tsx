@@ -262,7 +262,7 @@ export function DiasSinMovimiento({
     tono === 'alerta'
       ? `, demorado hace ${DIAS_ALERTA} días o más`
       : tono === 'demorado'
-        ? `, demorado (más de ${DIAS_DEMORADO * 24} horas)`
+        ? `, demorado (${DIAS_DEMORADO * 24} horas o más)`
         : ''
   return (
     <span

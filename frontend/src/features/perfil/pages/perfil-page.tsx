@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLoaderData, useRevalidator } from 'react-router'
 import { Check, KeyRound, LockKeyhole, Pencil, UserRound, Clock3 } from 'lucide-react'
-import type { AlcancePerfil } from '@cova/shared/schemas/perfil'
+import { DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
 import { roleLabels } from '@/components/layout/panel-navigation'
 import { SectionHeading } from '@/components/layout/section-heading'
 import { EstadoRegistro } from '@/components/abm/estado-registro'
@@ -26,13 +26,10 @@ export function PerfilPage() {
   const { perfil, catalogos } = useLoaderData<typeof cargarPerfil>()
   const revalidator = useRevalidator()
   const [cambiandoContrasena, setCambiandoContrasena] = useState(false)
-  const [verificacion, setVerificacion] = useState<AlcancePerfil | null>(null)
+  const [verificando, setVerificando] = useState(false)
   // Solo vive mientras el formulario está montado; nunca se persiste en almacenamiento del navegador.
-  const [edicion, setEdicion] = useState<{
-    alcance: AlcancePerfil
-    contrasenaActual: string
-  } | null>(null)
-  const editando = edicion?.alcance === 'datos'
+  const [contrasenaActual, setContrasenaActual] = useState<string | null>(null)
+  const editando = contrasenaActual !== null
   const [mensaje, setMensaje] = useState<string | null>(null)
   const modificar = useRef<HTMLButtonElement>(null)
   const cambiar = useRef<HTMLButtonElement>(null)
@@ -45,16 +42,16 @@ export function PerfilPage() {
   }, [editando])
   function cerrarDatos() {
     devolverFocoDatos.current = true
-    setEdicion(null)
+    setContrasenaActual(null)
   }
   const nombre = `${perfil.nombres} ${perfil.apellidos}`
-  function solicitar(alcance: AlcancePerfil) {
+  function solicitar() {
     setMensaje(null)
-    setVerificacion(alcance)
+    setVerificando(true)
   }
-  function habilitar(alcance: AlcancePerfil, contrasenaActual: string) {
-    setVerificacion(null)
-    setEdicion({ alcance, contrasenaActual })
+  function habilitar(contrasena: string) {
+    setVerificando(false)
+    setContrasenaActual(contrasena)
   }
   function cancelarContrasena() {
     setCambiandoContrasena(false)
@@ -88,7 +85,7 @@ export function PerfilPage() {
                   Edición habilitada
                 </Badge>
               ) : (
-                <Button ref={modificar} variant="outline" onClick={() => solicitar('datos')}>
+                <Button ref={modificar} variant="outline" onClick={solicitar}>
                   <Pencil aria-hidden="true" />
                   Modificar mis datos
                 </Button>
@@ -99,7 +96,7 @@ export function PerfilPage() {
                 <PerfilDatosForm
                   perfil={perfil}
                   catalogos={catalogos}
-                  contrasenaActual={edicion.contrasenaActual}
+                  contrasenaActual={contrasenaActual}
                   onCancelar={cerrarDatos}
                   onGuardado={() => {
                     cerrarDatos()
@@ -171,7 +168,7 @@ export function PerfilPage() {
                 Mis casos demorados
               </h2>
               <p className="mt-1 text-base text-muted-foreground">
-                Casos activos con más de 72 horas sin movimiento.
+                Casos activos con {DIAS_DEMORADO * 24} horas o más sin movimiento.
               </p>
             </div>
             {perfil.demorados.length ? (
@@ -260,18 +257,15 @@ export function PerfilPage() {
           </p>
         </aside>
       </div>
-      <VerificarPerfilDialog
-        key={verificacion ?? 'cerrado'}
-        alcance={verificacion}
-        onCerrar={() => setVerificacion(null)}
-        onVerificado={habilitar}
-      />
+      {verificando && (
+        <VerificarPerfilDialog onCerrar={() => setVerificando(false)} onVerificado={habilitar} />
+      )}
       {cambiandoContrasena && (
         <ContrasenaPerfilDialog
           elementoAlCerrar={() => cambiar.current}
           onCerrar={cancelarContrasena}
           onGuardado={({ correoEnviado }) => {
-            setEdicion(null)
+            setContrasenaActual(null)
             setCambiandoContrasena(false)
             // Recargar elimina los datos de sesión y contraseñas que vivían en memoria del panel.
             window.location.replace(

@@ -1,5 +1,5 @@
 import type { TipoUsuario } from '@cova/shared/schemas/enums'
-import { tiposUsuarioAdministrables } from '@cova/shared/schemas/usuarios-abm'
+import { motivoRestriccionUsuario } from '@cova/shared/schemas/usuarios-abm'
 import { roleLabels } from '@/components/layout/panel-navigation'
 import { cn } from '@/lib/utils'
 
@@ -9,10 +9,6 @@ const tipos = [
     tipo: 'ADMINISTRADOR',
     descripcion: 'Administra casos y gestores.',
   },
-  {
-    tipo: 'SUPER_ADMINISTRADOR',
-    descripcion: 'Acceso total al sistema.',
-  },
 ] as const
 
 export function TipoUsuarioSelector({
@@ -20,21 +16,23 @@ export function TipoUsuarioSelector({
   valor,
   onCambio,
   error,
+  modo = 'alta',
 }: {
   rol: TipoUsuario
   valor: TipoUsuario
   onCambio: (tipo: TipoUsuario) => void
   error?: string
+  modo?: 'alta' | 'edicion'
 }) {
-  const permitidos = tiposUsuarioAdministrables(rol)
   return (
     <fieldset className="grid gap-2">
       <legend className="mb-2 font-semibold">
         Tipo de usuario <span className="font-normal text-muted-foreground">(obligatorio)</span>
       </legend>
-      <div className="grid gap-2 md:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2">
         {tipos.map(({ tipo, descripcion }) => {
-          const permitido = permitidos.includes(tipo)
+          const motivo = motivoRestriccionUsuario(rol, tipo, modo === 'alta' ? 'crear' : 'asignar')
+          const permitido = motivo === null
           return (
             <label
               key={tipo}
@@ -60,10 +58,7 @@ export function TipoUsuarioSelector({
                 />
               </div>
               <span id={`tipo-${tipo}-ayuda`} className="text-base leading-snug">
-                {descripcion}
-                {!permitido && (
-                  <span className="mt-1 block font-semibold">Requiere rol superior.</span>
-                )}
+                {motivo ?? descripcion}
               </span>
             </label>
           )

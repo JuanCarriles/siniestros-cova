@@ -4,6 +4,9 @@ import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
 import { hashPassword, verifyPassword } from '../src/lib/password.ts'
 import { crearServicioSesiones, hashToken } from '../src/modules/auth/sesiones.service.ts'
 import { crearServicioPerfil } from '../src/modules/perfil/perfil.service.ts'
+import { DIAS_DEMORADO, filtrosSiniestrosSchema } from '@cova/shared/schemas/siniestros'
+import { crearServicioSiniestros } from '../src/modules/siniestros/siniestros.service.ts'
+import { ErrorCorreoResend } from '../src/lib/correo-resend.ts'
 import { perfilDatosSchema } from '@cova/shared/schemas/perfil'
 
 const status = (numero) => (error) => error.status === numero
@@ -119,7 +122,7 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
             (await tx.direccion.findUnique({ where: { id: propio.idDireccion } })).localidad,
             'Rosario',
           )
-          // Demorados: >72 h, sin contar cerrados, eliminados ni los de otro usuario; fallback a asignación.
+          // Demorados: límite inclusivo compartido, sin contar cerrados, bajas ni otros usuarios.
           const aseguradora = await tx.aseguradora.create({ data: { nombre: marca } })
           const abierto = await tx.estadoSiniestro.create({
             data: { nombre: `${marca}-abierto`, descripcion: '-' },
@@ -127,12 +130,14 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
           const cerrado = await tx.estadoSiniestro.create({
             data: { nombre: `${marca}-cerrado`, descripcion: '-', esCierre: true },
           })
+          const horasLimite = DIAS_DEMORADO * 24
+          const limite = tiempo - horasLimite * 3_600_000
           const caso = (horas, extra = {}) =>
             tx.siniestro.create({
               data: {
                 numeroSiniestro: marca,
                 numeroPoliza: marca,
-                fechaAsignacion: new Date(tiempo - 120 * 3_600_000),
+                fechaAsignacion: new Date(tiempo - (horasLimite + 48) * 3_600_000),
                 fechaUltimoMovimiento: horas === null ? null : new Date(tiempo - horas * 3_600_000),
                 demorado: false,
                 menorEdadInvolucrado: false,
@@ -142,17 +147,41 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
                 ...extra,
               },
             })
-          await caso(24)
-          await caso(96)
+          await caso(horasLimite / 2)
+          await caso(horasLimite + 24)
           await caso(null)
-          await caso(72)
+          const exacto = await caso(horasLimite)
+          const antes = await caso(horasLimite, { fechaUltimoMovimiento: new Date(limite + 1) })
+          const despues = await caso(horasLimite, { fechaUltimoMovimiento: new Date(limite - 1) })
+          const sinMovimientoExacto = await caso(null, { fechaAsignacion: new Date(limite) })
           await caso(200, { idEstadoSiniestro: cerrado.id })
           await caso(200, { eliminado: true, fechaBaja: new Date(tiempo) })
           await caso(300, { idUsuario: otro.id })
           const perfil = await servicio.obtener(propio.id)
-          assert.equal(perfil.casosActivos, 4)
-          assert.equal(perfil.casosDemorados, 2)
-          assert.equal(perfil.demorados.length, 2)
+          assert.equal(perfil.casosActivos, 7)
+          assert.equal(perfil.casosDemorados, 5)
+          assert.equal(perfil.demorados.length, 5)
+          const idsDemorados = perfil.demorados.map((caso) => caso.id)
+          assert.equal(
+            idsDemorados.includes(antes.id),
+            false,
+            'un milisegundo antes no está demorado',
+          )
+          for (const caso of [exacto, despues, sinMovimientoExacto]) {
+            assert.ok(
+              idsDemorados.includes(caso.id),
+              'el límite es inclusivo con y sin movimientos',
+            )
+          }
+          const listado = await crearServicioSiniestros(tx, () => new Date(tiempo)).listar(
+            propio,
+            filtrosSiniestrosSchema.parse({}),
+          )
+          assert.equal(
+            listado.resumen.demorados,
+            perfil.casosDemorados,
+            'perfil y listado coinciden',
+          )
           assert.equal(Object.hasOwn(perfil, 'contrasena'), false)
           // Si la contraseña cambia después de confirmar, la antigua ya no sirve.
           await servicio.verificar(propio.id, token, { contrasena: 'Inicial.2026' })
@@ -265,7 +294,7 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
               base,
               ahora: () => tiempo,
               enviarAvisoCambio: async () => {
-                throw new Error('datos privados del proveedor')
+                throw new ErrorCorreoResend('rechazo', 503)
               },
             })
             assert.deepEqual(
@@ -283,7 +312,9 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
             ),
             true,
           )
-          assert.deepEqual(errores, ['No se pudo enviar el aviso de cambio de contraseña.'])
+          assert.deepEqual(errores, [
+            'No se pudo enviar el aviso de cambio de contraseña: Resend rechazó el envío (503)',
+          ])
           // El límite de cinco fallos se comparte entre verificar y los dos PATCH.
           const limitado = crearServicioPerfil({ base, enviarAvisoCambio, ahora: () => tiempo })
           const otros = { ...datos, email: otro.email, contrasenaActual: 'Incorrecta' }

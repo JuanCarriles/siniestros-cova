@@ -4,6 +4,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import { perfilDatosSchema, perfilActualizacionSchema } from '@cova/shared/schemas/perfil'
 import { crearServicioPerfil } from '../src/modules/perfil/perfil.service.ts'
+import { ErrorCorreoResend, motivoFalloCorreo } from '../src/lib/correo-resend.ts'
 import { crearCorreoCambioContrasena } from '../src/lib/correo-cambio-contrasena.ts'
 import { crearPerfilRouter } from '../src/modules/perfil/perfil.routes.ts'
 import { errorHandler } from '../src/middlewares/errorHandler.ts'
@@ -208,5 +209,49 @@ test('Resend: aviso al correo de la cuenta, HTML y texto, sin contraseñas ni da
     {
       message: 'RESEND_API_KEY no configurada',
     },
+  )
+})
+
+test('Resend: distingue red y tiempo agotado y solo registra motivos controlados', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  const enviar = crearCorreoCambioContrasena({
+    apiKey: 'clave-privada-de-prueba',
+    remitente: 'Estudio Cova <seguridad@example.test>',
+  })
+  for (const [error, motivo] of [
+    [
+      new TypeError('datos privados, destinatario, cabeceras y credenciales'),
+      'No se pudo conectar con Resend',
+    ],
+    [
+      new DOMException('información privada', 'TimeoutError'),
+      'Se agotó el tiempo de espera de Resend',
+    ],
+    [
+      new DOMException('información privada', 'AbortError'),
+      'Se agotó el tiempo de espera de Resend',
+    ],
+  ]) {
+    fetchMock.mock.mockImplementation(async () => {
+      throw error
+    })
+    await assert.rejects(enviar('usuario@example.test'), (resultado) => {
+      assert.ok(resultado instanceof ErrorCorreoResend)
+      assert.equal(motivoFalloCorreo(resultado), motivo)
+      assert.equal(resultado.message.includes('privada'), false)
+      return true
+    })
+  }
+  assert.equal(
+    motivoFalloCorreo(new Error('clave privada y destinatario')),
+    'Error desconocido del proveedor de correo',
+  )
+  assert.equal(
+    motivoFalloCorreo(new ErrorCorreoResend('configuracion')),
+    'RESEND_API_KEY no configurada',
+  )
+  assert.equal(
+    motivoFalloCorreo(new ErrorCorreoResend('rechazo', 429)),
+    'Resend rechazó el envío (429)',
   )
 })
