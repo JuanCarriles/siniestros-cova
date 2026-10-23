@@ -121,12 +121,6 @@ const ABOGADOS = [
 
 type NombreAbogado = (typeof ABOGADOS)[number]['nombreCompleto']
 
-const PLANTILLAS = [
-  { nombre: 'Modelo de denuncia administrativa.docx', subidaHaceDias: 120 },
-  { nombre: 'Planilla de daños.xlsx', subidaHaceDias: 95 },
-  { nombre: 'Formulario de cierre.pdf', subidaHaceDias: 30 },
-] as const
-
 // ------------------------------------------------------------------------------------ Siniestros
 
 interface DireccionDev {
@@ -1067,7 +1061,6 @@ export async function seedDesarrollo(
     })
     usuarios.set(u.email, creado)
   }
-  const idAdmin = obtener(usuarios, 'admin@cova.test', 'el usuario').id
 
   // Aseguradoras y ajustadores
   const aseguradoras = new Map<string, number>()
@@ -1105,19 +1098,7 @@ export async function seedDesarrollo(
     abogados.set(ab.nombreCompleto, (await tx.abogado.create({ data: { ...ab } })).id)
   }
 
-  // Plantillas de documentos (CU05/CU06), cargadas por el administrador
-  for (const p of PLANTILLAS) {
-    const { urlArchivoSinDominio, nombreOriginal, tipoExtension } = archivo(p.nombre, 'plantillas')
-    await tx.documentoPlantilla.create({
-      data: {
-        nombreOriginal,
-        tipoExtension,
-        urlArchivo: urlArchivoSinDominio,
-        fechaCarga: haceDias(p.subidaHaceDias),
-        idUsuario: idAdmin,
-      },
-    })
-  }
+  // Las plantillas se crean únicamente al cargar archivos reales desde la aplicación.
 
   // Siniestros con todo su expediente
   for (const s of SINIESTROS) {

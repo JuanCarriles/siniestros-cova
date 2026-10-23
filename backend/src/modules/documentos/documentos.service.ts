@@ -75,7 +75,13 @@ export function crearServicioDocumentos(deps: {
           tipoExtension: archivo.tipoExtension,
           idUsuario,
         })
-        return await prisma.documentoPlantilla.create({ data })
+        return await prisma.documentoPlantilla.create({
+          data: {
+            ...data,
+            encabezado: data.encabezado ?? archivo.nombreOriginal,
+            tamanoBytes: archivo.tamanoBytes,
+          },
+        })
       } catch {
         try {
           await almacenamiento.eliminar(archivo.clave)

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -134,6 +136,31 @@ export function crearAlmacenamientoR2(
       }
     },
 
+    // Una firma se genera localmente: no demuestra que el objeto exista en R2.
+    // Comprobar solo después de autorizar y resolver la clave desde la base.
+    async comprobarExistencia(clave: string) {
+      const key = claveArchivoSchema.parse(clave)
+      try {
+        await s3.send(new HeadObjectCommand({ Bucket: config.R2_BUCKET, Key: key }))
+      } catch (error) {
+        const nombre = (error as { name?: unknown } | null)?.name
+        if (nombre === 'NotFound' || nombre === 'NoSuchKey') {
+          // HEAD puede devolver un 404 genérico también si falta el bucket.
+          // Solo confirmar ausencia del archivo si el bucket sigue accesible.
+          try {
+            await s3.send(new HeadBucketCommand({ Bucket: config.R2_BUCKET }))
+          } catch (errorBucket) {
+            throw errorR2('No se pudo comprobar la disponibilidad del bucket de R2', errorBucket)
+          }
+          throw new HttpError(
+            404,
+            'El archivo de esta plantilla no está disponible en el almacenamiento. Pedile a un administrador que vuelva a cargarlo.',
+          )
+        }
+        throw errorR2('No se pudo comprobar la disponibilidad del archivo en R2', error)
+      }
+    },
+
     // Sólo llamar después de autorizar al usuario y obtener la clave de la base.
     async firmarDescarga(clave: string, nombreOriginal: string) {
       const key = claveArchivoSchema.parse(clave)
@@ -162,7 +189,7 @@ export function crearAlmacenamientoR2(
       }
     },
 
-    // Compensación de altas fallidas y limpieza de pruebas; no usar para bajas lógicas.
+    // Borrado físico de plantillas autorizadas, compensación de altas y pruebas; no usar para bajas lógicas.
     async eliminar(clave: string) {
       const key = claveArchivoSchema.parse(clave)
       try {

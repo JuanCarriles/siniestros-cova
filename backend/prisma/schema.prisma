@@ -152,6 +152,9 @@ model Sesion {
 }
 
 model DocumentoPlantilla {
+  encabezado     String
+  descripcion    String    @default("")
+  tamanoBytes    BigInt?
   id             Int       @id @default(autoincrement())
   nombreOriginal String
   /// Clave relativa de R2 (plantillas/uuid.ext), nunca una URL completa.
