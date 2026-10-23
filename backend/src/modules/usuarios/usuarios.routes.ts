@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from 'express'
 import { usuarioAltaSchema, usuarioModificacionSchema } from '@cova/shared/schemas/usuarios-abm'
+import { consultaSiniestrosAsociadosSchema } from '@cova/shared/schemas/siniestros-asociados'
 import { idSchema } from '@cova/shared/schemas/comunes'
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import { HttpError } from '../../utils/httpError.ts'
@@ -23,6 +24,14 @@ export function crearUsuariosRouter({
   router.get('/catalogos', async (_req, res) => {
     res.json(await servicio.catalogos())
   })
+  router.get('/:id/siniestros-activos', async (req, res) => {
+    const { pagina } = consultaSiniestrosAsociadosSchema.parse(req.query)
+    res.set('Cache-Control', 'no-store')
+    res.json(
+      await servicio.siniestrosActivos(usuarioDeSesion(req), idSchema.parse(req.params.id), pagina),
+    )
+  })
+
   router.post('/', async (req, res) => {
     res
       .status(201)

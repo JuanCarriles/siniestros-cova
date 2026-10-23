@@ -1,3 +1,8 @@
+import {
+  siniestroActivoAsociado as siniestroActivo,
+  seleccionSiniestrosActivos,
+  paginaSiniestrosActivos,
+} from '../siniestros/siniestros-asociados.ts'
 import type {
   AjustadorData,
   AjustadorUpdateData,
@@ -9,10 +14,6 @@ import { HttpError } from '../../utils/httpError.ts'
 type BaseAjustadores = Pick<Prisma.TransactionClient, 'ajustador' | 'aseguradora'>
 
 // Siniestro activo: no eliminado y en un estado que no es el de cierre (la regla usa la bandera, no el nombre)
-const siniestroActivo = {
-  eliminado: false,
-  estadoSiniestro: { esCierre: false },
-} satisfies Prisma.SiniestroWhereInput
 
 const sinSiniestrosActivos = {
   siniestros: { none: siniestroActivo },
@@ -133,6 +134,15 @@ export function crearServicioAjustadores(prisma: BaseAjustadores) {
         throw bloqueoCambioAseguradora(ahora)
       }
       return aListado(await buscar(id))
+    },
+
+    async siniestrosActivos(id: number, pagina: number) {
+      const fila = await prisma.ajustador.findUnique({
+        where: { id },
+        select: seleccionSiniestrosActivos(pagina),
+      })
+      if (!fila) throw new HttpError(404, 'El ajustador no existe.')
+      return paginaSiniestrosActivos(fila, pagina)
     },
 
     // CU-03 3.a. El predicado y la baja se ejecutan en una sola sentencia: no confiar en un conteo previo.
