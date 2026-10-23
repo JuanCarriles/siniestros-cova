@@ -63,7 +63,7 @@ un adaptador simulado y no suben a R2. Las fixtures de los cinco formatos son fi
 Para probar manualmente, cargar un documento, verificar autor y fecha, y descargarlo.
 Intentar un archivo mayor a 10 MB y uno de texto renombrado a PDF: ambos deben rechazarse.
 Un gestor debe poder descargar sin ver el botón de carga, y un POST directo suyo debe
-responder 403. La eliminación manual desde la interfaz y la edición de plantillas no forman parte de esta historia.
+responder 403. La edición de plantillas no forma parte de esta historia.
 
 ## Registros ficticios de la seed
 
@@ -96,3 +96,17 @@ de acceso como una eliminación. Un listado vacío no necesita conectarse con R2
 La consulta se ejecuta al entrar, recargar o volver a la ventana/pestaña de Plantillas.
 No hay una notificación push de Cloudflare ni un proceso que corra en segundo plano
 cuando nadie usa el sistema.
+
+## Eliminación definitiva desde el sistema
+
+Administradores y superadministradores pueden usar **Eliminar** en el listado. El modal
+identifica la plantilla y el archivo, advierte que el borrado es definitivo y aclara
+que los documentos ya generados no se modifican ni se eliminan. El foco inicial queda
+en **Cancelar**. Los gestores no ven la acción y el servidor rechaza su DELETE con 403.
+
+`DELETE /api/plantillas/:id` valida id, sesión y rol vigente. El servidor toma la clave
+de la base, elimina el objeto en R2 y recién después elimina físicamente el registro.
+Si R2 falla, conserva la fila para reintentar. Si la base falla después del borrado en
+R2, un reintento o la conciliación completa la limpieza. La operación es idempotente:
+un objeto o registro ya ausente no impide volver a confirmar. No se recorren ni borran
+documentos de siniestros, que tienen claves y registros independientes.

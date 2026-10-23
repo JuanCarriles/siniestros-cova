@@ -43,6 +43,8 @@ function preparar({
   rolActual,
   archivoAusente = false,
   fallaConsultaR2 = false,
+  fallaEliminarR2 = false,
+  fallaBajaBase = false,
 } = {}) {
   const llamadas = []
   let fila
@@ -71,8 +73,14 @@ function preparar({
       },
       deleteMany: async ({ where }) => {
         llamadas.push(['retirar', where])
-        assert.equal(where.eliminado, false)
-        assert.deepEqual(where.OR, [{ id: 8, urlArchivo: 'plantillas/uuid.pdf' }])
+        if (where.OR) assert.equal(where.eliminado, false)
+        assert.deepEqual(where.OR ?? [{ id: where.id, urlArchivo: where.urlArchivo }], [
+          { id: 8, urlArchivo: 'plantillas/uuid.pdf' },
+        ])
+        if (fallaBajaBase) {
+          fallaBajaBase = false
+          throw new Error('Falla transitoria de la base')
+        }
         const count = fila ? 1 : 0
         fila = undefined
         return { count }
@@ -103,7 +111,10 @@ function preparar({
         )
       if (fallaConsultaR2) throw new HttpError(503, 'No se pudo consultar R2')
     },
-    eliminar: async (clave) => llamadas.push(['eliminar', clave]),
+    eliminar: async (clave) => {
+      llamadas.push(['eliminar', clave])
+      if (fallaEliminarR2) throw new HttpError(503, 'No se pudo eliminar de R2')
+    },
     firmarDescarga: async (clave) => {
       llamadas.push(['firmar', clave])
       return { url: 'https://r2.example.invalid/firmada', venceEnSegundos: 60 }
@@ -377,4 +388,67 @@ test('sincronización: máximo cinco consultas simultáneas; un error cancela to
   assert.equal(listado[0].urlArchivo, undefined)
   assert.ok(maximo <= 5)
   assert.equal(bajas, 1)
+})
+
+test('eliminar HTTP: solo admin y superadmin; id válido; clave tomada de la base y borrado idempotente', async (t) => {
+  const api = await servidor()
+  t.after(api.cerrar)
+  assert.equal((await api.pedir('admin', '', await formulario())).status, 201)
+  const inicio = api.llamadas.length
+  for (const [quien, esperado] of [
+    [null, 401],
+    ['inventada', 401],
+    ['gestor', 403],
+  ]) {
+    assert.equal((await api.pedir(quien, '/8', { method: 'DELETE' })).status, esperado)
+  }
+  assert.equal((await api.pedir('admin', '/abc', { method: 'DELETE' })).status, 400)
+  assert.equal(api.llamadas.length, inicio)
+  assert.equal(
+    (
+      await api.pedir('admin', '/8', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urlArchivo: 'siniestros/1/otro.pdf' }),
+      })
+    ).status,
+    204,
+  )
+  assert.deepEqual(api.llamadas.slice(inicio), [
+    ['eliminar', 'plantillas/uuid.pdf'],
+    ['retirar', { id: 8, urlArchivo: 'plantillas/uuid.pdf' }],
+  ])
+  assert.deepEqual(await (await api.pedir('gestor')).json(), [])
+  assert.equal((await api.pedir('super', '/8', { method: 'DELETE' })).status, 204)
+  assert.equal(api.llamadas.filter(([accion]) => accion === 'eliminar').length, 1)
+  assert.equal((await api.pedir('super', '', await formulario())).status, 201)
+  assert.equal((await api.pedir('super', '/8', { method: 'DELETE' })).status, 204)
+})
+
+test('eliminar: una degradación de rol antes del pedido bloquea el borrado en el servicio', async () => {
+  const api = preparar({ rolActual: 'GESTOR' })
+  await assert.rejects(
+    api.servicio.eliminar(4, 8),
+    (error) => error.status === 403 && /eliminar/.test(error.message),
+  )
+  await assert.rejects(api.servicio.eliminar(999, 8), { status: 401 })
+  assert.equal(api.llamadas.length, 0)
+})
+
+test('eliminar: si falla R2 se conserva el registro; si falla la base se puede reintentar', async (t) => {
+  const sinR2 = await servidor({ fallaEliminarR2: true })
+  t.after(sinR2.cerrar)
+  await sinR2.pedir('admin', '', await formulario())
+  assert.equal((await sinR2.pedir('admin', '/8', { method: 'DELETE' })).status, 503)
+  assert.equal(
+    sinR2.llamadas.some(([accion]) => accion === 'retirar'),
+    false,
+  )
+  assert.equal((await (await sinR2.pedir('admin')).json()).length, 1)
+  const sinBase = await servidor({ fallaBajaBase: true })
+  t.after(sinBase.cerrar)
+  await sinBase.pedir('admin', '', await formulario())
+  assert.equal((await sinBase.pedir('admin', '/8', { method: 'DELETE' })).status, 503)
+  assert.equal((await sinBase.pedir('admin', '/8', { method: 'DELETE' })).status, 204)
+  assert.deepEqual(await (await sinBase.pedir('admin')).json(), [])
 })
