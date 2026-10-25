@@ -78,6 +78,11 @@ export function CeldaSiniestro({ siniestro, href }: { siniestro: SiniestroListad
       <span className="text-sm text-muted-foreground">
         Póliza <span className="dato">{siniestro.numeroPoliza}</span>
       </span>
+      {siniestro.eliminacionEnCurso && (
+        <span className="mt-1 w-fit rounded border-2 border-warning-ink bg-warning-bg px-2 text-sm font-bold text-warning-ink">
+          Eliminación pendiente
+        </span>
+      )}
       {siniestro.eliminado && (
         // En rojo y con ícono: tiene que llamar la atención aunque no se distinga bien el color
         <span className="mt-1 inline-flex w-fit items-center gap-1 rounded border-2 border-destructive bg-danger-bg px-1.5 text-sm font-bold text-danger-ink">

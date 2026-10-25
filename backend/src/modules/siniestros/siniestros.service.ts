@@ -36,6 +36,7 @@ const detalleListado = {
   numeroPoliza: true,
   eliminado: true,
   fechaBaja: true,
+  eliminacionEnCurso: true,
   fechaAsignacion: true,
   fechaUltimoMovimiento: true,
   aseguradora: { select: { id: true, nombre: true } },
@@ -81,6 +82,7 @@ function aListado(fila: FilaListado, ahora: Date): SiniestroListado {
     numeroSiniestro: fila.numeroSiniestro,
     numeroPoliza: fila.numeroPoliza,
     eliminado: fila.eliminado,
+    eliminacionEnCurso: fila.eliminacionEnCurso,
     fechaBaja: fila.fechaBaja?.toISOString() ?? null,
     asegurado: asegurado && { id: asegurado.id, nombre: nombrePersona(asegurado) },
     terceros: fila.personasInvolucradas
@@ -132,9 +134,14 @@ export function crearServicioSiniestros(
   async function exigirAcceso(usuario: SesionUsuario, id: number) {
     const fila = await prisma.siniestro.findUnique({
       where: { id },
-      select: { idUsuario: true, eliminado: true },
+      select: { idUsuario: true, eliminado: true, eliminacionEnCurso: true },
     })
     if (!fila) throw new HttpError(404, 'El siniestro no existe.')
+    if (fila.eliminacionEnCurso)
+      throw new HttpError(
+        403,
+        'Este siniestro tiene una eliminación definitiva pendiente. Un administrador puede reintentarla desde el listado.',
+      )
     if (!esGestor(usuario)) return
     if (fila.idUsuario !== usuario.id) {
       throw new HttpError(403, 'Este siniestro no está asignado a vos.')
@@ -148,7 +155,7 @@ export function crearServicioSiniestros(
       const ids = filtros.q ? await idsQueCoinciden(prisma, filtros.q) : null
       const base: Prisma.SiniestroWhereInput = {
         ...(esGestor(usuario)
-          ? { idUsuario: usuario.id }
+          ? { idUsuario: usuario.id, eliminacionEnCurso: false }
           : filtros.gestor
             ? { idUsuario: filtros.gestor }
             : {}),

@@ -35,7 +35,7 @@ export function crearServicioDocumentos(deps: {
     await autorizar(acceso)
     if (acceso.destino.tipo === 'siniestro') {
       const siniestro = await prisma.siniestro.findFirst({
-        where: { id: acceso.destino.idSiniestro, eliminado: false },
+        where: { id: acceso.destino.idSiniestro, eliminado: false, eliminacionEnCurso: false },
         select: { id: true },
       })
       if (!siniestro) throw new HttpError(404, 'Siniestro no disponible')
@@ -55,6 +55,7 @@ export function crearServicioDocumentos(deps: {
       const archivo = await almacenamiento.subir(entrada.archivo, carpeta)
       try {
         if (destino.tipo === 'siniestro') {
+          await comprobarAcceso({ idUsuario, accion: 'subir', destino })
           const data = documentoSiniestroSchema.parse({
             nombreOriginal: archivo.nombreOriginal,
             urlArchivoSinDominio: archivo.clave,

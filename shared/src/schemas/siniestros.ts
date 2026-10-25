@@ -112,6 +112,7 @@ export type ParteResumen = { id: number; nombre: string }
 
 /** Fila del listado (GET /api/siniestros). Las partes se resumen; sus datos de contacto van aparte. */
 export type SiniestroListado = {
+  eliminacionEnCurso: boolean
   id: number
   numeroSiniestro: string
   numeroPoliza: string
@@ -200,4 +201,14 @@ export type PartesSiniestro = {
     abogado: string | null
     lesion: { tipo: TipoLesion; descripcion: string | null } | null
   }[]
+}
+
+// El número se confirma en el servidor contra el registro vigente, nunca contra datos del navegador.
+export const confirmarSiniestroSchema = z.strictObject({
+  numeroSiniestro: z.string().trim().min(1, 'Escribí el número del siniestro').max(255),
+})
+export type ConfirmarSiniestro = z.output<typeof confirmarSiniestroSchema>
+
+export function esCierreEnviado(estado: { nombre: string; esCierre: boolean }): boolean {
+  return estado.esCierre && estado.nombre === 'Cierre enviado'
 }

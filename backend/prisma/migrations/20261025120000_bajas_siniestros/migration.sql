@@ -1,0 +1,2 @@
+ALTER TYPE "TipoEventoHistorial" ADD VALUE 'BAJA_SINIESTRO';
+ALTER TABLE "Siniestro" ADD COLUMN "eliminacionEnCurso" BOOLEAN NOT NULL DEFAULT false;
