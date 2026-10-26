@@ -31,7 +31,7 @@ export function TextareaField({
       .join(' ') || undefined
 
   return (
-    <div className={cn('grid gap-1.5', containerClassName)}>
+    <div className={cn('grid content-start gap-1.5', containerClassName)}>
       <Label htmlFor={fieldId}>
         {label}
         {required && (

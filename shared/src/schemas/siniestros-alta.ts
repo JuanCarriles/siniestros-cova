@@ -1,5 +1,13 @@
 import { z } from 'zod'
-import { booleanoSchema, fechaSchema, horaSchema, idSchema, opcional } from './comunes.ts'
+import {
+  booleanoSchema,
+  enteroPequenoSchema,
+  fechaSchema,
+  horaSchema,
+  idSchema,
+  opcional,
+} from './comunes.ts'
+import { rolAccidenteSchema, usoVehiculoSchema, type RolAccidente } from './enums.ts'
 
 // ------------------------------------------------------------------ Alta de siniestro (CU-09 pasos 4-5, E4-04)
 
@@ -68,3 +76,61 @@ export type OpcionesAltaSiniestro = {
   paises: { id: number; nombre: string }[]
   provincias: { id: number; nombre: string; idPais: number }[]
 }
+
+// ------------------------------------------------------------------ Paso 2: vehículos (CU-09 pasos 6-10, E4-05)
+
+export const ANIO_VEHICULO_MINIMO = 1900
+
+/** Para comparar dominios: "ae 123-cd" y "AE123CD" son el mismo vehículo (CU-09 9.a). */
+export function normalizarDominio(dominio: string): string {
+  return dominio.replace(/[\s-]/g, '').toUpperCase()
+}
+
+export const ROLES_ACCIDENTE: Record<RolAccidente, string> = {
+  ASEGURADO: 'Asegurado',
+  TERCERO: 'Tercero',
+}
+
+export const USOS_VEHICULO = {
+  PARTICULAR: 'Particular',
+  COMERCIAL: 'Uso comercial',
+  TRANSPORTE_PASAJEROS: 'Transporte de pasajeros',
+} as const
+
+// Solo el dominio y el rol son obligatorios: sin rol, el listado no sabe cuál es el vehículo asegurado. Sin
+// aseguradora significa "sin seguro o no se sabe". Que el dominio no se repita en el siniestro se controla contra
+// los demás vehículos del alta.
+export const vehiculoAltaSchema = z.strictObject({
+  rolAccidente: z
+    // '' (o null, si no se marcó ningún botón) tiene el mismo mensaje que un valor inválido
+    .enum(['', ...rolAccidenteSchema.options], {
+      error: 'Elegí si el vehículo es del asegurado o de un tercero',
+    })
+    .refine((rol) => rol !== '', 'Elegí si el vehículo es del asegurado o de un tercero'),
+  marca: libre(60),
+  modelo: libre(60),
+  version: libre(100),
+  dominio: obligatorio('Ingresá el dominio', 15).transform((dominio) => dominio.toUpperCase()),
+  numeroChasis: libre(40).transform((valor) => valor?.toUpperCase() ?? valor),
+  numeroMotor: libre(40).transform((valor) => valor?.toUpperCase() ?? valor),
+  anio: opcional(
+    enteroPequenoSchema.pipe(
+      z
+        .number()
+        .min(ANIO_VEHICULO_MINIMO, `Ingresá un año desde ${ANIO_VEHICULO_MINIMO}`)
+        .refine(
+          (anio) => anio <= new Date().getFullYear() + 1,
+          'El año no puede ser posterior al año que viene',
+        ),
+    ),
+  ),
+  uso: opcional(usoVehiculoSchema),
+  tipo: libre(60),
+  color: libre(40),
+  idAseguradora: opcional(idSchema),
+  acreedorPrendario: libre(100),
+  descripcionDanos: libre(2000),
+})
+
+export type VehiculoAltaInput = z.input<typeof vehiculoAltaSchema>
+export type VehiculoAltaData = z.output<typeof vehiculoAltaSchema>
