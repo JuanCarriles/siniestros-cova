@@ -1,6 +1,7 @@
 import { crearAlmacenamientoR2, type AlmacenamientoR2 } from '../../lib/r2.ts'
 import { getPrisma } from '../../lib/prisma.ts'
 import { requerirSesion } from '../auth/auth.module.ts'
+import { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import { crearSiniestrosRouter } from './siniestros.routes.ts'
 import { crearServicioSiniestros } from './siniestros.service.ts'
@@ -19,6 +20,15 @@ const db = {
   get usuario() {
     return getPrisma().usuario
   },
+  get ajustador() {
+    return getPrisma().ajustador
+  },
+  get pais() {
+    return getPrisma().pais
+  },
+  get provincia() {
+    return getPrisma().provincia
+  },
   get $queryRaw() {
     const prisma = getPrisma()
     return prisma.$queryRaw.bind(prisma)
@@ -35,6 +45,7 @@ const operaciones = crearServicioBajasSiniestros({
 
 export const siniestrosRouter = crearSiniestrosRouter({
   servicio: crearServicioSiniestros(db),
+  alta: crearServicioAltaSiniestros(db),
   operaciones,
   requerirSesion,
 })

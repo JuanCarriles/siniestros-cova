@@ -5,6 +5,7 @@ import {
   useNavigate,
   useNavigation,
   useRevalidator,
+  useRouteLoaderData,
   useSearchParams,
 } from 'react-router'
 import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, Trash2 } from 'lucide-react'
@@ -41,6 +42,8 @@ import { SelectorColumnas } from '../components/selector-columnas'
 import { TablaSiniestros } from '../components/tabla-siniestros'
 import { TarjetaSiniestro } from '../components/tarjeta-siniestro'
 import { useColumnasVisibles } from '../hooks/use-columnas-visibles'
+import { leerBorrador } from '../borrador-alta'
+import type { cargarPanel } from '@/features/auth/sesion'
 import type { cargarSiniestros } from '../loader'
 
 const FILTROS = ['q', 'estado', 'aseguradora', 'gestor', 'bajas'] as const
@@ -54,6 +57,9 @@ export function SiniestrosPage() {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
+  // Un alta a medio cargar en este navegador (E4-04): el botón ofrece retomarla
+  const sesion = useRouteLoaderData<typeof cargarPanel>('panel')
+  const altaEnCurso = !esGestor && !!sesion?.usuario && !!leerBorrador(sesion.usuario.id)
   const navigation = useNavigation()
   const cargando =
     navigation.state === 'loading' && navigation.location.pathname === location.pathname
@@ -268,6 +274,10 @@ export function SiniestrosPage() {
           esGestor ? undefined : (mostrar) => cambiar({ bajas: mostrar ? 'true' : null })
         }
         etiquetaBajas="Mostrar dados de baja"
+        etiquetaAlta={
+          esGestor ? undefined : altaEnCurso ? 'Retomar alta de siniestro' : 'Nuevo siniestro'
+        }
+        onAlta={() => void navigate(`${basePath}/siniestros/nuevo`)}
       />
 
       <FiltrosActivos filtros={activos} onQuitar={quitarFiltro} onQuitarTodos={quitarTodos} />

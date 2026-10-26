@@ -12,6 +12,9 @@ import { cn } from '@/lib/utils'
 
 export type OpcionSelect = { valor: string; etiqueta: string }
 
+// Radix no admite una opción con valor vacío: la de "volver a dejarlo vacío" usa esta clave y manda ''
+const VACIO = '__vacio__'
+
 // Lista desplegable con etiqueta, ayuda y error, igual que TextField. Con react-hook-form se usa desde un
 // Controller: ref va al botón, así el foco llega acá cuando el campo tiene un error.
 export function SelectField({
@@ -22,6 +25,7 @@ export function SelectField({
   disabled,
   placeholder,
   opciones,
+  opcionVacia,
   value,
   onChange,
   onBlur,
@@ -36,6 +40,8 @@ export function SelectField({
   disabled?: boolean
   placeholder: string
   opciones: OpcionSelect[]
+  /** Campos opcionales: primera opción para volver a dejarlo sin elegir (por ejemplo «Sin especificar») */
+  opcionVacia?: string
   /** '' muestra el placeholder */
   value: string
   onChange: (valor: string) => void
@@ -63,7 +69,7 @@ export function SelectField({
       <Select
         name={name}
         value={value}
-        onValueChange={onChange}
+        onValueChange={(valor) => onChange(valor === VACIO ? '' : valor)}
         disabled={disabled}
         required={required}
       >
@@ -78,6 +84,7 @@ export function SelectField({
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
+          {opcionVacia && <SelectItem value={VACIO}>{opcionVacia}</SelectItem>}
           {opciones.map((opcion) => (
             <SelectItem key={opcion.valor} value={opcion.valor}>
               {opcion.etiqueta}

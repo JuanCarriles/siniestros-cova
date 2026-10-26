@@ -5,7 +5,9 @@ import {
   confirmarSiniestroSchema,
   filtrosSiniestrosSchema,
 } from '@cova/shared/schemas/siniestros'
+import { datosCasoSchema } from '@cova/shared/schemas/siniestros-alta'
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
+import type { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import type { crearServicioSiniestros } from './siniestros.service.ts'
 
@@ -14,14 +16,27 @@ import type { crearServicioSiniestros } from './siniestros.service.ts'
 // GET /api/siniestros/opciones
 // GET /api/siniestros/:id
 // GET /api/siniestros/:id/partes
+// Alta (solo administrador y superadministrador):
+// GET  /api/siniestros/alta/opciones
+// POST /api/siniestros/alta/datos-caso   valida el paso 1 (204 o el error con su campo)
 export function crearSiniestrosRouter(deps: {
   operaciones: ReturnType<typeof crearServicioBajasSiniestros>
   servicio: ReturnType<typeof crearServicioSiniestros>
+  alta: ReturnType<typeof crearServicioAltaSiniestros>
   requerirSesion: RequestHandler
 }) {
-  const { servicio, operaciones, requerirSesion } = deps
+  const { servicio, alta, operaciones, requerirSesion } = deps
   const router = Router()
   router.use(requerirSesion, requerirRol('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'))
+
+  const soloAdministracion = requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR')
+  router.get('/alta/opciones', soloAdministracion, async (_req, res) => {
+    res.json(await alta.opciones())
+  })
+  router.post('/alta/datos-caso', soloAdministracion, async (req, res) => {
+    await alta.validarDatosCaso(datosCasoSchema.parse(req.body))
+    res.status(204).end()
+  })
 
   router.get('/', async (req, res) => {
     res.json(await servicio.listar(usuarioDeSesion(req), filtrosSiniestrosSchema.parse(req.query)))

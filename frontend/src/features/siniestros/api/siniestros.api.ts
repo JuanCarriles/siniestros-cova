@@ -6,6 +6,7 @@ import {
   type PartesSiniestro,
   type SiniestroResumen,
 } from '@cova/shared/schemas/siniestros'
+import type { DatosCasoData, OpcionesAltaSiniestro } from '@cova/shared/schemas/siniestros-alta'
 import { api } from '@/lib/api'
 
 export function listarSiniestros(params: URLSearchParams): Promise<PaginaSiniestros> {
@@ -30,4 +31,15 @@ export function darDeBajaSiniestro(id: number): Promise<void> {
 }
 export function eliminarSiniestro(id: number, confirmacion: ConfirmarSiniestro): Promise<void> {
   return api(`/siniestros/${id}`, { method: 'DELETE', body: confirmacion })
+}
+
+// ------------------------------------------------------------------ Alta (E4-04)
+
+export function opcionesAlta(): Promise<OpcionesAltaSiniestro> {
+  return api('/siniestros/alta/opciones')
+}
+
+/** Paso 1: el servidor controla lo que depende de la base (número duplicado, ajustador de la aseguradora…). */
+export function validarDatosCaso(datos: DatosCasoData): Promise<void> {
+  return api('/siniestros/alta/datos-caso', { method: 'POST', body: datos })
 }
