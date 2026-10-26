@@ -65,34 +65,52 @@ Intentar un archivo mayor a 10 MB y uno de texto renombrado a PDF: ambos deben r
 Un gestor debe poder descargar sin ver el botón de carga, y un POST directo suyo debe
 responder 403. La eliminación manual desde la interfaz y la edición de plantillas no forman parte de esta historia.
 
-## Registros ficticios de la seed
+## Listado y archivos ausentes
 
-La seed de desarrollo ya no crea plantillas ficticias. La migración
-`20261023140000_quitar_plantillas_ficticias` retira solo las tres filas antiguas,
-identificadas por su nombre, clave fija y tamaño sin registrar. Las cargas reales
-con claves UUID se conservan. La sección empieza vacía hasta cargar un archivo real.
+El listado consulta únicamente PostgreSQL: no inicializa el cliente de R2, no hace
+pedidos por cada archivo y no crea, modifica ni elimina registros. Volver a la pestaña
+no dispara una recarga automática. Después de cargar una plantilla se actualiza el listado.
+
+Antes de emitir la URL firmada, la descarga comprueba el objeto con `HeadObject`.
+Si no existe, responde 404 y muestra un aviso en la aplicación para solicitar a un
+administrador que vuelva a cargar el documento. No navega a un XML de R2 y conserva
+el registro. Los problemas de conexión, permisos o acceso al bucket responden 503;
+no se interpretan como ausencia del archivo ni provocan borrados.
+
+Borrar un objeto desde el panel de Cloudflare no elimina su registro en el sistema.
+La eliminación de plantillas debe hacerse mediante la funcionalidad correspondiente
+de la aplicación (E3-02); esa operación no forma parte de esta rama de carga.
 
 El listado y el selector muestran un ícono de formato: PDF, Excel, Word o imagen,
 con nombre accesible para lectores de pantalla y colores de los tokens del sistema.
+El botón **Elegir archivo** anuncia formatos y límite con `aria-describedby`.
 
-Antes de emitir la URL firmada, la descarga comprueba el objeto con `HeadObject`.
-Si no existe, responde 404 y el frontend muestra un aviso en el listado; no navega
-a un XML de R2. Los problemas de acceso o conexión responden 503 y no se confunden
-con la ausencia del archivo. La comprobación de descarga no modifica registros; el listado realiza la conciliación que se describe debajo.
+## Servicio único y validación
 
-## Eliminaciones realizadas desde Cloudflare
+El alta y la descarga de plantillas pasan por `plantillas.service.ts`, también desde
+el script de comprobación `probar-r2.ts`. El servicio `documentos.service.ts` queda
+dedicado a documentos de siniestros. El formulario público usa `altaPlantillaSchema`;
+`documentoPlantillaSchema` se conserva como contrato de metadatos exportado por
+`shared`, sin intervenir en la carga HTTP ni aceptar datos de autor desde el cliente.
 
-Al consultar el listado, el servidor comprueba la existencia de las plantillas en R2
-en grupos de hasta cinco pedidos simultáneos. Los registros de archivos que R2 confirma
-como ausentes (404) se eliminan físicamente de `DocumentoPlantilla`. Se compara tanto
-el id como la clave almacenada para no retirar una fila cuyo archivo haya cambiado.
-Solo se revisan las plantillas activas; no se modifican documentos de siniestros.
+La validación de plantillas tiene un límite fijo de 10 MiB (`PLANTILLA_MAX_BYTES`).
+El adaptador R2 mantiene su propio límite global `UPLOAD_MAX_MB`: dejarlo en 10 para
+admitir ese máximo. Un valor menor restringe también las cargas válidas del formulario.
+Si cambia el máximo de la historia, revisar ambos límites y el cuerpo multipart de Nginx.
 
-Si alguna consulta falla por red, credenciales, permisos o disponibilidad del bucket,
-se interrumpe la conciliación sin eliminar ningún registro. Ante un 404 del archivo,
-también se verifica que el bucket siga accesible para descartar un 404 genérico del bucket. No se interpreta un error
-de acceso como una eliminación. Un listado vacío no necesita conectarse con R2.
+## Datos ficticios e historial local
 
-La consulta se ejecuta al entrar, recargar o volver a la ventana/pestaña de Plantillas.
-No hay una notificación push de Cloudflare ni un proceso que corra en segundo plano
-cuando nadie usa el sistema.
+La seed de desarrollo no crea plantillas ficticias. No se distribuye una migración
+de producción para limpiar ejemplos de desarrollo: se retira del repositorio
+`20261023140000_quitar_plantillas_ficticias`, cuyo SQL solo borraba esas filas y no
+modificaba el esquema. Se conserva `20261023120000_datos_plantillas`, que sí agrega
+los campos necesarios para la funcionalidad.
+
+Si una base local ya ejecutó la migración retirada, su aplicación previa sigue en
+`_prisma_migrations`. Esta corrección no altera ese historial ni restaura o elimina
+filas; tampoco ejecuta un reset. Antes de usar `migrate dev` en esa base, revisar y
+reconciliar el historial local con el equipo, preservando los datos. Una base nueva
+o un VPS donde esa limpieza nunca se aplicó no debe ejecutarla.
+
+Para retirar ejemplos antiguos de una base de desarrollo, identificar y revisar sus
+registros específicos con el equipo. No resetear una base con datos para limpiar fixtures.

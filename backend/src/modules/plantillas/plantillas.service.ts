@@ -58,39 +58,10 @@ export function crearServicioPlantillas(deps: {
       await autorizar(idUsuario)
       const filas = await prisma.documentoPlantilla.findMany({
         where: { eliminado: false },
-        select: { ...seleccion, urlArchivo: true },
+        select: seleccion,
         orderBy: [{ fechaCarga: 'desc' }, { id: 'desc' }],
       })
-      if (filas.length === 0) return []
-      const r2 = almacenamiento()
-      const ausentes: typeof filas = []
-      // Acotar pedidos simultáneos. Solo un 404 confirmado permite retirar el registro.
-      // Si cualquier consulta falla por otro motivo, no se borra ningún registro del listado.
-      for (let inicio = 0; inicio < filas.length; inicio += 5) {
-        const comprobadas = await Promise.all(
-          filas.slice(inicio, inicio + 5).map(async (fila) => {
-            try {
-              await r2.comprobarExistencia(fila.urlArchivo)
-              return null
-            } catch (error) {
-              if (error instanceof HttpError && error.status === 404) return fila
-              throw error
-            }
-          }),
-        )
-        for (const fila of comprobadas) if (fila) ausentes.push(fila)
-      }
-      if (ausentes.length > 0) {
-        // La clave también debe coincidir: no retirar una fila cuyo archivo haya cambiado.
-        await prisma.documentoPlantilla.deleteMany({
-          where: {
-            eliminado: false,
-            OR: ausentes.map(({ id, urlArchivo }) => ({ id, urlArchivo })),
-          },
-        })
-      }
-      const idsAusentes = new Set(ausentes.map((fila) => fila.id))
-      return filas.filter((fila) => !idsAusentes.has(fila.id)).map(presentar)
+      return filas.map(presentar)
     },
     async subir(idUsuario: number, entrada: AltaPlantillaInput, archivo: ArchivoEntrada) {
       await autorizar(idUsuario, true)

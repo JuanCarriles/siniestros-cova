@@ -69,14 +69,7 @@ function preparar({
         assert.equal(where.eliminado, false)
         return fila ? [fila] : []
       },
-      deleteMany: async ({ where }) => {
-        llamadas.push(['retirar', where])
-        assert.equal(where.eliminado, false)
-        assert.deepEqual(where.OR, [{ id: 8, urlArchivo: 'plantillas/uuid.pdf' }])
-        const count = fila ? 1 : 0
-        fila = undefined
-        return { count }
-      },
+      deleteMany: async () => assert.fail('Listar o descargar nunca debe borrar registros'),
       findFirst: async ({ where }) => {
         assert.equal(where.eliminado, false)
         return where.id === 8 ? fila : null
@@ -300,34 +293,37 @@ test('descarga: falla de R2 no se confunde con archivo ausente ni permite firmar
   )
 })
 
-test('sincronización HTTP: un archivo eliminado en R2 desaparece del listado y de la base', async (t) => {
+test('listado HTTP: conserva las plantillas con archivo ausente; la descarga avisa sin borrar ni firmar', async (t) => {
   const api = await servidor({ archivoAusente: true })
   t.after(api.cerrar)
   assert.equal((await api.pedir('admin', '', await formulario())).status, 201)
-  const respuesta = await api.pedir('gestor')
-  assert.equal(respuesta.status, 200)
-  assert.deepEqual(await respuesta.json(), [])
-  assert.equal(api.llamadas.filter(([accion]) => accion === 'retirar').length, 1)
-  assert.equal((await api.pedir('admin', '/8/descarga')).status, 404)
-  assert.deepEqual(await (await api.pedir('admin')).json(), [])
+  api.llamadas.length = 0
+  for (const quien of ['admin', 'gestor']) {
+    const respuesta = await api.pedir(quien)
+    assert.equal(respuesta.status, 200)
+    const listado = await respuesta.json()
+    assert.equal(listado.length, 1)
+    assert.equal(listado[0].id, 8)
+    assert.equal(listado[0].urlArchivo, undefined)
+  }
+  assert.deepEqual(api.llamadas, [], 'listar no consulta R2 ni escribe en la base')
+  assert.equal((await api.pedir('gestor', '/8/descarga')).status, 404)
+  assert.equal((await (await api.pedir('admin')).json()).length, 1)
+  assert.deepEqual(api.llamadas, [['comprobar', 'plantillas/uuid.pdf']])
 })
 
-test('sincronización: una falla de conexión o permisos conserva todos los registros', async (t) => {
+test('listado HTTP: funciona aunque R2 esté caído o mal configurado; solo la descarga falla', async (t) => {
   const api = await servidor({ fallaConsultaR2: true })
   t.after(api.cerrar)
   assert.equal((await api.pedir('admin', '', await formulario())).status, 201)
-  assert.equal((await api.pedir('admin')).status, 503)
-  assert.equal(
-    api.llamadas.some(([accion]) => accion === 'retirar'),
-    false,
-  )
+  api.llamadas.length = 0
+  assert.equal((await api.pedir('admin')).status, 200)
+  assert.deepEqual(api.llamadas, [])
+  assert.equal((await api.pedir('gestor', '/8/descarga')).status, 503)
+  assert.equal((await (await api.pedir('gestor')).json()).length, 1)
 })
 
-test('sincronización: máximo cinco consultas simultáneas; un error cancela toda la limpieza', async () => {
-  let enCurso = 0
-  let maximo = 0
-  let bajas = 0
-  let permitirConsultar = false
+test('listado: no inicializa R2 ni selecciona claves; vacío y múltiples registros son lecturas puras', async () => {
   const filas = Array.from({ length: 8 }, (_, i) => ({
     id: i + 1,
     encabezado: `Modelo ${i + 1}`,
@@ -336,45 +332,26 @@ test('sincronización: máximo cinco consultas simultáneas; un error cancela to
     tipoExtension: 'pdf',
     tamanoBytes: 8n,
     fechaCarga: new Date(),
-    urlArchivo: `plantillas/${i + 1}.pdf`,
     usuario: actores.admin,
   }))
-  const servicio = crearServicioPlantillas({
-    prisma: {
-      usuario: { findFirst: async () => ({ tipoUsuario: 'ADMINISTRADOR' }) },
-      documentoPlantilla: {
-        findMany: async () => filas,
-        deleteMany: async ({ where }) => {
-          bajas++
-          assert.deepEqual(where.OR, [{ id: 1, urlArchivo: 'plantillas/1.pdf' }])
-          return { count: 1 }
+  for (const registros of [[], filas]) {
+    const servicio = crearServicioPlantillas({
+      prisma: {
+        usuario: { findFirst: async () => ({ tipoUsuario: 'ADMINISTRADOR' }) },
+        documentoPlantilla: {
+          findMany: async ({ where, select }) => {
+            assert.deepEqual(where, { eliminado: false })
+            assert.equal(select.urlArchivo, undefined)
+            return registros
+          },
         },
       },
-    },
-    almacenamiento: () => ({
-      comprobarExistencia: async (clave) => {
-        enCurso++
-        maximo = Math.max(maximo, enCurso)
-        try {
-          await new Promise((ok) => setImmediate(ok))
-          if (clave === 'plantillas/1.pdf') throw new HttpError(404, 'Ausente')
-          if (!permitirConsultar && clave === 'plantillas/8.pdf')
-            throw new HttpError(503, 'Sin conexión')
-        } finally {
-          enCurso--
-        }
+      almacenamiento: () => {
+        throw Error('El listado no debe inicializar R2')
       },
-    }),
-  })
-  await assert.rejects(servicio.listar(4), { status: 503 })
-  assert.equal(bajas, 0, 'ni siquiera se retira la ausencia confirmada en el lote anterior')
-  permitirConsultar = true
-  const listado = await servicio.listar(4)
-  assert.deepEqual(
-    listado.map((fila) => fila.id),
-    [2, 3, 4, 5, 6, 7, 8],
-  )
-  assert.equal(listado[0].urlArchivo, undefined)
-  assert.ok(maximo <= 5)
-  assert.equal(bajas, 1)
+    })
+    const listado = await servicio.listar(4)
+    assert.equal(listado.length, registros.length)
+    assert.ok(listado.every((fila) => fila.urlArchivo === undefined))
+  }
 })

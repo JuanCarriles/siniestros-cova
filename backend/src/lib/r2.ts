@@ -24,7 +24,10 @@ const nombreArchivoSchema = z
 
 const archivoSchema = z.strictObject({
   nombreOriginal: nombreArchivoSchema,
-  contenido: z.instanceof(Uint8Array),
+  contenido: z.custom<Uint8Array>(
+    (value) => value instanceof Uint8Array,
+    'Contenido de archivo inválido',
+  ),
 })
 
 export type ArchivoEntrada = z.input<typeof archivoSchema>
@@ -110,7 +113,7 @@ export function crearAlmacenamientoR2(
       }
       const tipoExtension = extension as keyof typeof tiposMime
       const mimeType = tiposMime[tipoExtension]
-      const contenido = Buffer.from(archivo.contenido)
+      const contenido = archivo.contenido
       const clave = claveArchivoSchema.parse(`${prefijo}/${randomUUID()}.${tipoExtension}`)
       try {
         await s3.send(

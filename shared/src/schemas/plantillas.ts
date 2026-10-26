@@ -8,7 +8,8 @@ import {
   textoSchema,
 } from './comunes.ts'
 
-// Datos de alta de DocumentoPlantilla; id y baja lógica se gestionan por separado.
+// Metadatos de la entidad exportados por shared para validaciones internas.
+// No es un contrato de carga HTTP: las altas usan exclusivamente altaPlantillaSchema.
 export const documentoPlantillaSchema = z.strictObject({
   encabezado: z.string().trim().min(1).max(120).optional(),
   descripcion: z.string().trim().max(1000).optional(),

@@ -70,53 +70,6 @@ test('PostgreSQL: carga con fecha automática y autor real; consulta y descarga;
             servicio.subir(gestor.id, { encabezado: 'No', descripcion: 'No' }, archivo),
             { status: 403 },
           )
-          // La limpieza solo retira las filas antiguas: conserva cargas reales con el mismo nombre.
-          const ficticias = [
-            ['Formulario de cierre.pdf', 'plantillas/formulario-de-cierre.pdf'],
-            ['Planilla de daños.xlsx', 'plantillas/planilla-de-danos.xlsx'],
-            [
-              'Modelo de denuncia administrativa.docx',
-              'plantillas/modelo-de-denuncia-administrativa.docx',
-            ],
-          ]
-          const idsFicticios = []
-          for (const [nombreOriginal, urlArchivo] of ficticias) {
-            const filaPrueba = await tx.documentoPlantilla.create({
-              data: {
-                encabezado: nombreOriginal,
-                nombreOriginal,
-                urlArchivo,
-                tipoExtension: nombreOriginal.split('.').pop(),
-                idUsuario: admin.id,
-              },
-            })
-            idsFicticios.push(filaPrueba.id)
-          }
-          const realMismoNombre = await tx.documentoPlantilla.create({
-            data: {
-              encabezado: 'Archivo real',
-              nombreOriginal: 'Formulario de cierre.pdf',
-              urlArchivo: 'plantillas/00000000-0000-4000-8000-000000000001.pdf',
-              tipoExtension: 'pdf',
-              tamanoBytes: 42n,
-              idUsuario: admin.id,
-            },
-          })
-          const limpieza = await readFile(
-            new URL(
-              '../prisma/migrations/20261023140000_quitar_plantillas_ficticias/migration.sql',
-              import.meta.url,
-            ),
-            'utf8',
-          )
-          await tx.$executeRawUnsafe(limpieza)
-          assert.equal(
-            await tx.documentoPlantilla.count({ where: { id: { in: idsFicticios } } }),
-            0,
-          )
-          assert.ok(await tx.documentoPlantilla.findUnique({ where: { id: realMismoNombre.id } }))
-          assert.ok(await tx.documentoPlantilla.findUnique({ where: { id: creada.id } }))
-
           await tx.documentoPlantilla.update({
             where: { id: creada.id },
             data: { eliminado: true, fechaBaja: new Date() },
@@ -136,37 +89,30 @@ test('PostgreSQL: carga con fecha automática y autor real; consulta y descarga;
               idUsuario: admin.id,
             },
           })
-          const servicioSincronizado = crearServicioPlantillas({
+          // El listado debe funcionar aun con R2 inaccesible y nunca retirar metadatos.
+          const soloLectura = crearServicioPlantillas({
             prisma: tx,
-            almacenamiento: () => ({
-              comprobarExistencia: async (key) => {
-                if (key === realMismoNombre.urlArchivo)
-                  throw new HttpError(404, 'Archivo eliminado en R2')
-              },
-            }),
+            almacenamiento: () => {
+              throw Error('R2 no disponible: listar no debe necesitarlo')
+            },
           })
-          const sincronizadas = await servicioSincronizado.listar(gestor.id)
-          assert.equal(
-            sincronizadas.some((p) => p.id === realMismoNombre.id),
-            false,
-          )
-          assert.ok(sincronizadas.some((p) => p.id === intacta.id))
-          assert.equal(
-            await tx.documentoPlantilla.findUnique({ where: { id: realMismoNombre.id } }),
-            null,
-          )
-          assert.ok(await tx.documentoPlantilla.findUnique({ where: { id: intacta.id } }))
-          // Un timeout conserva físicamente el registro.
-          const servicioSinConexion = crearServicioPlantillas({
+          const antes = await tx.documentoPlantilla.findUniqueOrThrow({ where: { id: intacta.id } })
+          assert.ok((await soloLectura.listar(gestor.id)).some((p) => p.id === intacta.id))
+          const sinArchivo = crearServicioPlantillas({
             prisma: tx,
             almacenamiento: () => ({
               comprobarExistencia: async () => {
-                throw new HttpError(503, 'Timeout')
+                throw new HttpError(404, 'Archivo ausente')
               },
+              firmarDescarga: async () => assert.fail('No firmar un archivo ausente'),
             }),
           })
-          await assert.rejects(servicioSinConexion.listar(admin.id), { status: 503 })
-          assert.ok(await tx.documentoPlantilla.findUnique({ where: { id: intacta.id } }))
+          await assert.rejects(sinArchivo.descargar(gestor.id, intacta.id), { status: 404 })
+          assert.ok((await sinArchivo.listar(admin.id)).some((p) => p.id === intacta.id))
+          assert.deepEqual(
+            await tx.documentoPlantilla.findUniqueOrThrow({ where: { id: intacta.id } }),
+            antes,
+          )
           throw rollback
         },
         { timeout: 15000 },

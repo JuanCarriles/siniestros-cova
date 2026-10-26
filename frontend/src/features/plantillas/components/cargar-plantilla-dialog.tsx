@@ -175,6 +175,7 @@ export function CargarPlantillaDialog({
                     type="button"
                     variant="outline"
                     id={`${id}-elegir`}
+                    aria-describedby={`${id}-formatos${errorArchivo ? ` ${id}-error-archivo` : ''}`}
                     onClick={() => selector.current?.click()}
                   >
                     {archivo ? 'Elegir otro archivo' : 'Elegir archivo'}
@@ -236,9 +237,9 @@ export function CargarPlantillaDialog({
             <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCerrar}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" loading={isSubmitting}>
               <UploadCloud aria-hidden="true" />
-              {isSubmitting ? 'Cargando…' : 'Confirmar carga'}
+              Confirmar carga
             </Button>
           </DialogFooter>
         </form>
