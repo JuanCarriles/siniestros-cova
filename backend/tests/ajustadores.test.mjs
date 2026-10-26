@@ -20,6 +20,12 @@ function servicioFalso() {
     llamadas,
     servicio: {
       listar: registrar('listar', []),
+      siniestrosActivos: registrar('siniestrosActivos', {
+        casosActivos: 0,
+        pagina: 1,
+        porPagina: 5,
+        siniestros: [],
+      }),
       crear: registrar('crear', { id: 1 }),
       modificar: registrar('modificar', { id: 1 }),
       darDeBaja: registrar('darDeBaja'),
@@ -92,6 +98,7 @@ test('permisos: sin sesión 401, gestor 403 (ni lee ni escribe); admin y superad
     assert.equal((await api.pedir(quien)).status, esperado)
     assert.equal((await api.pedir(quien, '', { method: 'POST', ...json(valido) })).status, esperado)
     assert.equal((await api.pedir(quien, '/1/baja', { method: 'PATCH' })).status, esperado)
+    assert.equal((await api.pedir(quien, '/1/siniestros-activos')).status, esperado)
   }
   assert.equal(llamadas.length, 0)
   assert.equal((await api.pedir('admin')).status, 200)
@@ -139,4 +146,23 @@ test('entrada: valida el formulario con el esquema compartido antes de llegar al
     ['darDeBaja', 2],
     ['reactivar', 2],
   ])
+})
+
+test('API: detalle paginado de casos del ajustador, sin caché ni parámetros inventados', async (t) => {
+  const { servicio, llamadas } = servicioFalso()
+  const api = await servidor(servicio)
+  t.after(api.cerrar)
+  for (const ruta of [
+    '/x/siniestros-activos',
+    '/1/siniestros-activos?pagina=-1',
+    '/1/siniestros-activos?pagina=1000001',
+    '/1/siniestros-activos?otra=1',
+  ]) {
+    assert.equal((await api.pedir('admin', ruta)).status, 400)
+  }
+  assert.equal(llamadas.length, 0)
+  const respuesta = await api.pedir('super', '/7/siniestros-activos?pagina=2')
+  assert.equal(respuesta.status, 200)
+  assert.equal(respuesta.headers.get('cache-control'), 'no-store')
+  assert.deepEqual(llamadas.at(-1), ['siniestrosActivos', 7, 2])
 })
