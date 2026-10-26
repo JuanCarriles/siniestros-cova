@@ -1,5 +1,7 @@
 import type {
   DatosCasoInput,
+  OcupanteAltaData,
+  TitularAltaData,
   VehiculoAltaData,
   VehiculoAltaInput,
 } from '@cova/shared/schemas/siniestros-alta'
@@ -25,8 +27,16 @@ export const datosCasoVacios: DatosCasoFormulario = {
   lugar: { idProvincia: '', localidad: '', calle: '', codigoPostal: '' },
 }
 
-/** Vehículo ya validado del paso 2. La clave lo identifica dentro del alta (todavía no tiene id en la base). */
-export type VehiculoBorrador = VehiculoAltaData & { clave: string }
+/** Personas ya validadas del paso 2. La clave las identifica dentro del alta (todavía no tienen id). */
+export type TitularBorrador = TitularAltaData & { clave: string }
+export type OcupanteBorrador = OcupanteAltaData & { clave: string }
+
+/** Vehículo ya validado del paso 2, con su titular (uno o ninguno todavía) y sus ocupantes. */
+export type VehiculoBorrador = VehiculoAltaData & {
+  clave: string
+  titular: TitularBorrador | null
+  ocupantes: OcupanteBorrador[]
+}
 
 export const vehiculoVacio: VehiculoAltaInput = {
   rolAccidente: '',
@@ -46,7 +56,7 @@ export const vehiculoVacio: VehiculoAltaInput = {
 }
 
 export type BorradorAlta = {
-  version: 2
+  version: 3
   /** Paso en el que quedó (1 = datos del caso) */
   paso: number
   datosCaso: DatosCasoFormulario
@@ -67,10 +77,16 @@ export function leerBorrador(idUsuario: number): BorradorAlta | null {
       version?: number
     }
     if (typeof borrador?.datosCaso !== 'object' || !borrador.datosCaso) return null
-    // La versión 1 (solo el paso 1) se retoma igual, sin vehículos
-    if (borrador.version === 1) return { ...borrador, version: 2, vehiculos: [] } as BorradorAlta
-    if (borrador.version !== 2 || !Array.isArray(borrador.vehiculos)) return null
-    return borrador as BorradorAlta
+    // Las versiones anteriores se retoman igual: la 1 sin vehículos, la 2 con vehículos sin personas
+    if (borrador.version === 1) return { ...borrador, version: 3, vehiculos: [] } as BorradorAlta
+    if (!Array.isArray(borrador.vehiculos) || (borrador.version !== 2 && borrador.version !== 3))
+      return null
+    const vehiculos = borrador.vehiculos.map((v) => ({
+      ...v,
+      titular: v.titular ?? null,
+      ocupantes: Array.isArray(v.ocupantes) ? v.ocupantes : [],
+    }))
+    return { ...borrador, version: 3, vehiculos } as BorradorAlta
   } catch {
     return null
   }
@@ -80,7 +96,7 @@ export function guardarBorrador(
   idUsuario: number,
   datos: Pick<BorradorAlta, 'paso' | 'datosCaso' | 'vehiculos'>,
 ) {
-  const borrador: BorradorAlta = { version: 2, ...datos, guardado: new Date().toISOString() }
+  const borrador: BorradorAlta = { version: 3, ...datos, guardado: new Date().toISOString() }
   try {
     localStorage.setItem(clave(idUsuario), JSON.stringify(borrador))
   } catch {

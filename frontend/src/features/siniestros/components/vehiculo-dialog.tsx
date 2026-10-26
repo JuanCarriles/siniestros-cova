@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Check, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import type { RolAccidente } from '@cova/shared/schemas/enums'
 import {
   ANIO_VEHICULO_MINIMO,
@@ -14,6 +14,7 @@ import {
   type VehiculoAltaInput,
 } from '@cova/shared/schemas/siniestros-alta'
 import { Aviso } from '@/components/aviso'
+import { OpcionesSegmentadas } from '@/components/opciones-segmentadas'
 import { SelectField } from '@/components/select-field'
 import { TextField } from '@/components/text-field'
 import { TextareaField } from '@/components/textarea-field'
@@ -26,7 +27,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { cn } from '@/lib/utils'
 import { vehiculoVacio, type VehiculoBorrador } from '../borrador-alta'
 
 // "Sin seguro o no se sabe": Radix no admite una opción con valor vacío; se guarda sin aseguradora
@@ -142,8 +142,6 @@ export function VehiculoDialog({
       requestAnimationFrame(() => primerCampo.current?.focus())
     })
 
-  const { ref: refRol, ...rolCampo } = register('rolAccidente')
-
   return (
     <Dialog open onOpenChange={(abrir) => !abrir && onCerrar()}>
       <DialogContent
@@ -176,47 +174,24 @@ export function VehiculoDialog({
             </Aviso>
           )}
 
-          {/* Un solo control de dos partes: siempre hay una marcada. Son botones de opción (las flechas cambian
-              de una a otra); la elegida se distingue por el relleno, el ícono y el texto en negrita. */}
-          <fieldset className="grid gap-2">
-            <legend className="mb-2 font-semibold">El vehículo es del</legend>
-            <div className="grid grid-cols-2 gap-1 rounded-xl border-2 border-primary bg-surface p-1">
-              {(Object.keys(ROLES_ACCIDENTE) as RolAccidente[]).map((opcion) => {
-                const elegido = rol === opcion
-                return (
-                  <label
-                    key={opcion}
-                    className={cn(
-                      'flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-lg px-3 text-lg transition-colors has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring',
-                      elegido
-                        ? 'bg-primary font-bold text-primary-foreground'
-                        : 'font-semibold text-primary hover:bg-accent',
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      value={opcion}
-                      {...rolCampo}
-                      ref={(elemento) => {
-                        refRol(elemento)
-                        // El foco va a la opción marcada, como en cualquier grupo de opciones
-                        if (elegido) primerCampo.current = elemento
-                      }}
-                      onChange={() => elegirRol(opcion)}
-                      className="sr-only"
-                    />
-                    {elegido && <Check className="size-6" strokeWidth={3} aria-hidden="true" />}
-                    {ROLES_ACCIDENTE[opcion]}
-                  </label>
-                )
-              })}
-            </div>
+          <div className="grid gap-2">
+            <OpcionesSegmentadas
+              leyenda="El vehículo es del"
+              name="rolAccidente"
+              opciones={(Object.keys(ROLES_ACCIDENTE) as RolAccidente[]).map((valor) => ({
+                valor,
+                etiqueta: ROLES_ACCIDENTE[valor],
+              }))}
+              valor={rol as RolAccidente}
+              onCambio={elegirRol}
+              refMarcada={primerCampo}
+            />
             {otroAsegurado && (
               <p className="rounded-md border-2 border-warning-ink bg-warning-bg px-3 py-2 text-sm font-semibold text-warning-ink">
                 Ya hay un vehículo asegurado en este siniestro. Podés agregar otro si corresponde.
               </p>
             )}
-          </fieldset>
+          </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
             <TextField

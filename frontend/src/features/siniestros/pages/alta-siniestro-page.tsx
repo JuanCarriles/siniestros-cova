@@ -133,7 +133,7 @@ export function AltaSiniestroPage() {
           <VehiculosAlta
             vehiculos={vehiculos}
             onCambiar={cambiarVehiculos}
-            aseguradoras={opciones.aseguradoras}
+            opciones={opciones}
             idAseguradoraSiniestro={String(datosCaso.idAseguradora ?? '')}
           />
           <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">

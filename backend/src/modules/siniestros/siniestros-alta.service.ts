@@ -4,7 +4,7 @@ import { HttpError } from '../../utils/httpError.ts'
 
 type BaseAlta = Pick<
   Prisma.TransactionClient,
-  'siniestro' | 'aseguradora' | 'ajustador' | 'pais' | 'provincia'
+  'siniestro' | 'aseguradora' | 'ajustador' | 'pais' | 'provincia' | 'tipoDocumento'
 >
 
 // Mismo criterio que el listado y las bajas: no dado de baja y en un estado que no es de cierre.
@@ -18,7 +18,7 @@ const siniestroActivo = {
 export function crearServicioAltaSiniestros(prisma: BaseAlta) {
   return {
     async opciones(): Promise<OpcionesAltaSiniestro> {
-      const [aseguradoras, ajustadores, paises, provincias] = await Promise.all([
+      const [aseguradoras, ajustadores, paises, provincias, tiposDocumento] = await Promise.all([
         prisma.aseguradora.findMany({
           where: { eliminado: false },
           select: { id: true, nombre: true },
@@ -45,6 +45,12 @@ export function crearServicioAltaSiniestros(prisma: BaseAlta) {
           select: { id: true, nombre: true, idPais: true },
           orderBy: { nombre: 'asc' },
         }),
+        // En el orden del catálogo: "DNI Tarjeta" primero, "Otro" al final
+        prisma.tipoDocumento.findMany({
+          where: { eliminado: false },
+          select: { id: true, nombre: true },
+          orderBy: { id: 'asc' },
+        }),
       ])
       return {
         aseguradoras,
@@ -55,6 +61,7 @@ export function crearServicioAltaSiniestros(prisma: BaseAlta) {
         })),
         paises,
         provincias,
+        tiposDocumento,
       }
     },
 

@@ -1,13 +1,20 @@
 import { z } from 'zod'
 import {
   booleanoSchema,
+  emailSchema,
   enteroPequenoSchema,
   fechaSchema,
   horaSchema,
   idSchema,
   opcional,
 } from './comunes.ts'
-import { rolAccidenteSchema, usoVehiculoSchema, type RolAccidente } from './enums.ts'
+import {
+  rolAccidenteSchema,
+  tipoLesionSchema,
+  usoVehiculoSchema,
+  type RolAccidente,
+  type TipoLesion,
+} from './enums.ts'
 
 // ------------------------------------------------------------------ Alta de siniestro (CU-09 pasos 4-5, E4-04)
 
@@ -75,6 +82,7 @@ export type OpcionesAltaSiniestro = {
   ajustadores: { id: number; nombre: string; idAseguradora: number; casosActivos: number }[]
   paises: { id: number; nombre: string }[]
   provincias: { id: number; nombre: string; idPais: number }[]
+  tiposDocumento: { id: number; nombre: string }[]
 }
 
 // ------------------------------------------------------------------ Paso 2: vehículos (CU-09 pasos 6-10, E4-05)
@@ -134,3 +142,125 @@ export const vehiculoAltaSchema = z.strictObject({
 
 export type VehiculoAltaInput = z.input<typeof vehiculoAltaSchema>
 export type VehiculoAltaData = z.output<typeof vehiculoAltaSchema>
+
+// ------------------------------------------------------------------ Paso 2: titular y ocupantes (CU-09 11-18, E4-06)
+
+export const ESTADOS_CIVILES = [
+  'Soltero/a',
+  'Casado/a',
+  'Divorciado/a',
+  'Viudo/a',
+  'Unión convivencial',
+] as const
+export const SEXOS = ['Femenino', 'Masculino', 'X'] as const
+export const CONDUCTOR = 'Conductor/a'
+/** Dónde iba la persona. "Otro" pide escribirlo ("en la caja de carga"). */
+export const LUGARES_EN_VEHICULO = [CONDUCTOR, 'Acompañante', 'Pasajero/a', 'Otro'] as const
+export const GRAVEDADES_LESION: Record<TipoLesion, string> = {
+  LEVE: 'Leve',
+  MODERADA: 'Moderada',
+  GRAVE: 'Grave',
+  MUERTE: 'Muerte',
+}
+
+/** Para comparar documentos: "25.884.301" y "25884301" son la misma persona. */
+export function normalizarDocumento(documento: string): string {
+  return documento.replace(/[^0-9a-z]/gi, '').toUpperCase()
+}
+
+// Todo es opcional: se carga lo que se sepa. Una persona sin nombre se muestra como "Desconocido 1, 2…".
+const datosPersona = {
+  nombreCompletoRazonSocial: libre(150),
+  idTipoDocumento: opcional(idSchema),
+  documento: libre(30),
+  estadoCivil: opcional(z.enum(ESTADOS_CIVILES)),
+  sexo: opcional(z.enum(SEXOS)),
+  fechaNacimiento: opcional(
+    fechaSchema.refine((fecha) => fecha <= hoyArgentina(), 'La fecha no puede ser posterior a hoy'),
+  ),
+  numeroPermisoConducir: libre(30),
+  fechaVencimientoCarnet: opcional(fechaSchema),
+  telefono: libre(50),
+  // Vacío es "sin email"; cualquier otra cosa tiene que ser un email (si no, el mensaje genérico sería en inglés)
+  email: z
+    .union([z.literal(''), emailSchema.pipe(z.string().max(120))], {
+      error: 'Ingresá un email válido',
+    })
+    .transform((email) => email || null)
+    .nullable()
+    .optional(),
+  domicilio: z.strictObject({
+    idProvincia: opcional(idSchema),
+    localidad: libre(100),
+    calle: libre(150),
+    codigoPostal: libre(20),
+  }),
+  // Detrás de un control: sin lesiones no se pide nada más; con lesiones, la gravedad
+  conLesiones: booleanoSchema,
+  tipoLesion: opcional(tipoLesionSchema),
+  descripcionLesiones: libre(2000),
+}
+const lugarEnVehiculo = {
+  lugar: opcional(z.enum(LUGARES_EN_VEHICULO)),
+  lugarOtro: libre(60),
+}
+
+type Reglas = {
+  conLesiones: boolean
+  tipoLesion?: TipoLesion | null
+  numeroPermisoConducir?: string | null
+  fechaVencimientoCarnet?: string | null
+  lugar?: string | null
+  lugarOtro?: string | null
+}
+function reglasPersona(datos: Reglas, ctx: z.RefinementCtx) {
+  if (datos.conLesiones && !datos.tipoLesion)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['tipoLesion'],
+      message: 'Elegí la gravedad de las lesiones',
+    })
+  if (datos.fechaVencimientoCarnet && !datos.numeroPermisoConducir)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['numeroPermisoConducir'],
+      message: 'Cargá también el número de permiso',
+    })
+  if (datos.lugar === 'Otro' && !datos.lugarOtro)
+    ctx.addIssue({ code: 'custom', path: ['lugarOtro'], message: 'Indicá dónde iba' })
+}
+// Lo que dejó de corresponder no se guarda: sin lesiones no hay gravedad ni descripción
+function limpiarPersona<T extends Reglas & { descripcionLesiones?: string | null }>(datos: T): T {
+  return {
+    ...datos,
+    tipoLesion: datos.conLesiones ? datos.tipoLesion : null,
+    descripcionLesiones: datos.conLesiones ? datos.descripcionLesiones : null,
+    lugarOtro: datos.lugar === 'Otro' ? datos.lugarOtro : null,
+  }
+}
+
+// Titular del vehículo: primero, si iba en él y dónde
+export const titularAltaSchema = z
+  .strictObject({ ibaEnVehiculo: booleanoSchema, ...lugarEnVehiculo, ...datosPersona })
+  .superRefine((datos, ctx) =>
+    reglasPersona(datos.ibaEnVehiculo ? datos : { ...datos, lugar: null }, ctx),
+  )
+  .transform((datos) =>
+    limpiarPersona(datos.ibaEnVehiculo ? datos : { ...datos, lugar: null, lugarOtro: null }),
+  )
+
+// Ocupante: dónde iba y, si manejaba él (no el titular), qué relación tiene con el titular
+export const ocupanteAltaSchema = z
+  .strictObject({ ...lugarEnVehiculo, relacionPropietario: libre(150), ...datosPersona })
+  .superRefine(reglasPersona)
+  .transform((datos) =>
+    limpiarPersona({
+      ...datos,
+      relacionPropietario: datos.lugar === CONDUCTOR ? datos.relacionPropietario : null,
+    }),
+  )
+
+export type TitularAltaInput = z.input<typeof titularAltaSchema>
+export type TitularAltaData = z.output<typeof titularAltaSchema>
+export type OcupanteAltaInput = z.input<typeof ocupanteAltaSchema>
+export type OcupanteAltaData = z.output<typeof ocupanteAltaSchema>

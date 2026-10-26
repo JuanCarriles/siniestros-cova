@@ -27,6 +27,9 @@ const db = {
   get provincia() {
     return getPrisma().provincia
   },
+  get tipoDocumento() {
+    return getPrisma().tipoDocumento
+  },
   get $queryRaw() {
     const prisma = getPrisma()
     return prisma.$queryRaw.bind(prisma)
