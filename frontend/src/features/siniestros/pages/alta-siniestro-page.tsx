@@ -110,7 +110,10 @@ export function AltaSiniestroPage() {
           opciones={opciones}
           valoresIniciales={datosCaso}
           onCambio={alCambiar}
-          onContinuar={() => irAlPaso(2)}
+          onContinuar={(validados) => {
+            ultimos.current = validados
+            irAlPaso(2)
+          }}
           acciones={cancelar}
         />
       ) : (
