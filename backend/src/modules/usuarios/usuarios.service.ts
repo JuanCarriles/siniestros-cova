@@ -1,3 +1,8 @@
+import {
+  siniestroActivoAsociado as siniestroActivo,
+  seleccionSiniestrosActivos,
+  paginaSiniestrosActivos,
+} from '../siniestros/siniestros-asociados.ts'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import {
   motivoRestriccionUsuario,
@@ -19,10 +24,7 @@ import {
 export type BaseUsuarios = Pick<Prisma.TransactionClient, 'usuario' | 'pais' | 'provincia'> & {
   transaccion<T>(trabajo: (tx: Transaccion) => Promise<T>): Promise<T>
 }
-const siniestroActivo = {
-  eliminado: false,
-  estadoSiniestro: { esCierre: false },
-} satisfies Prisma.SiniestroWhereInput
+
 // Selección explícita: ni el listado ni las respuestas de alta/modificación contienen contraseñas.
 const detalle = {
   id: true,
@@ -160,6 +162,18 @@ export function crearServicioUsuarios(base: BaseUsuarios) {
           await tx.recuperacionContrasena.deleteMany({ where: { idUsuario: id } })
         }
         return aListado(fila)
+      })
+    },
+    async siniestrosActivos(actor: SesionUsuario, id: number, pagina: number) {
+      return base.transaccion(async (tx) => {
+        const actual = await buscar(tx, id)
+        await autorizar(tx, actor, actual.tipoUsuario)
+        const fila = await tx.usuario.findUnique({
+          where: { id },
+          select: seleccionSiniestrosActivos(pagina),
+        })
+        if (!fila) throw new HttpError(404, 'El usuario no existe.')
+        return paginaSiniestrosActivos(fila, pagina)
       })
     },
     async darDeBaja(actor: SesionUsuario, id: number) {
