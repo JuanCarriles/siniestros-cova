@@ -1,5 +1,6 @@
 import {
   altaPlantillaSchema,
+  MENSAJE_ERROR_ELIMINAR_PLANTILLA,
   type AltaPlantillaInput,
   type PlantillaListado,
 } from '@cova/shared/schemas/plantillas'
@@ -49,7 +50,9 @@ export function crearServicioPlantillas(deps: {
     if (accion && actor.tipoUsuario === 'GESTOR') {
       throw new HttpError(
         403,
-        `Solo administradores y superadministradores pueden ${accion} plantillas.`,
+        accion === 'eliminar'
+          ? 'Solo administradores y superadministradores pueden eliminar plantillas.'
+          : 'Solo administradores y superadministradores pueden cargar plantillas.',
       )
     }
   }
@@ -58,39 +61,10 @@ export function crearServicioPlantillas(deps: {
       await autorizar(idUsuario)
       const filas = await prisma.documentoPlantilla.findMany({
         where: { eliminado: false },
-        select: { ...seleccion, urlArchivo: true },
+        select: seleccion,
         orderBy: [{ fechaCarga: 'desc' }, { id: 'desc' }],
       })
-      if (filas.length === 0) return []
-      const r2 = almacenamiento()
-      const ausentes: typeof filas = []
-      // Acotar pedidos simultáneos. Solo un 404 confirmado permite retirar el registro.
-      // Si cualquier consulta falla por otro motivo, no se borra ningún registro del listado.
-      for (let inicio = 0; inicio < filas.length; inicio += 5) {
-        const comprobadas = await Promise.all(
-          filas.slice(inicio, inicio + 5).map(async (fila) => {
-            try {
-              await r2.comprobarExistencia(fila.urlArchivo)
-              return null
-            } catch (error) {
-              if (error instanceof HttpError && error.status === 404) return fila
-              throw error
-            }
-          }),
-        )
-        for (const fila of comprobadas) if (fila) ausentes.push(fila)
-      }
-      if (ausentes.length > 0) {
-        // La clave también debe coincidir: no retirar una fila cuyo archivo haya cambiado.
-        await prisma.documentoPlantilla.deleteMany({
-          where: {
-            eliminado: false,
-            OR: ausentes.map(({ id, urlArchivo }) => ({ id, urlArchivo })),
-          },
-        })
-      }
-      const idsAusentes = new Set(ausentes.map((fila) => fila.id))
-      return filas.filter((fila) => !idsAusentes.has(fila.id)).map(presentar)
+      return filas.map(presentar)
     },
     async subir(idUsuario: number, entrada: AltaPlantillaInput, archivo: ArchivoEntrada) {
       await autorizar(idUsuario, 'cargar')
@@ -129,7 +103,7 @@ export function crearServicioPlantillas(deps: {
         where: { id, eliminado: false },
         select: { id: true, urlArchivo: true },
       })
-      // Idempotente: también permite confirmar una fila que la conciliación ya retiró.
+      // Idempotente: una plantilla ya eliminada no da error.
       if (!fila) return
       // R2 primero: si falla, conservamos el registro para reintentar.
       // DeleteObject también admite que el archivo haya sido eliminado desde Cloudflare.
@@ -139,11 +113,8 @@ export function crearServicioPlantillas(deps: {
           where: { id: fila.id, urlArchivo: fila.urlArchivo },
         })
       } catch {
-        // Si R2 borró pero la base falló, el reintento o la conciliación completan la limpieza.
-        throw new HttpError(
-          503,
-          'No se pudo completar la eliminación de la plantilla. Volvé a intentarlo.',
-        )
+        // Si R2 borró pero la base falló, un reintento completa la limpieza (DeleteObject es idempotente).
+        throw new HttpError(503, MENSAJE_ERROR_ELIMINAR_PLANTILLA)
       }
     },
     async descargar(idUsuario: number, id: number) {

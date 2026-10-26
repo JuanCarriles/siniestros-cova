@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react'
 import { TriangleAlert, Trash2 } from 'lucide-react'
-import type { PlantillaListado } from '@cova/shared/schemas/plantillas'
+import {
+  MENSAJE_ERROR_ELIMINAR_PLANTILLA,
+  type PlantillaListado,
+} from '@cova/shared/schemas/plantillas'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,7 +45,9 @@ export function EliminarPlantillaDialog({
     } catch (error) {
       setError(
         error instanceof ApiError
-          ? error.message
+          ? error.status === 503
+            ? MENSAJE_ERROR_ELIMINAR_PLANTILLA
+            : error.message
           : 'No se pudo eliminar la plantilla. Probá de nuevo.',
       )
       setEnviando(false)
@@ -101,7 +106,7 @@ export function EliminarPlantillaDialog({
           </Button>
           <Button variant="destructive" loading={enviando} onClick={() => void confirmar()}>
             <Trash2 aria-hidden="true" />
-            {enviando ? 'Eliminando…' : 'Eliminar definitivamente'}
+            Eliminar definitivamente
           </Button>
         </DialogFooter>
       </DialogContent>
