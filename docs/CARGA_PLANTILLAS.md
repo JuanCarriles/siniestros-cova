@@ -63,7 +63,7 @@ un adaptador simulado y no suben a R2. Las fixtures de los cinco formatos son fi
 Para probar manualmente, cargar un documento, verificar autor y fecha, y descargarlo.
 Intentar un archivo mayor a 10 MB y uno de texto renombrado a PDF: ambos deben rechazarse.
 Un gestor debe poder descargar sin ver el botón de carga, y un POST directo suyo debe
-responder 403. La eliminación manual desde la interfaz y la edición de plantillas no forman parte de esta historia.
+responder 403. La edición de plantillas no forma parte de esta historia.
 
 ## Listado y archivos ausentes
 
@@ -78,8 +78,8 @@ el registro. Los problemas de conexión, permisos o acceso al bucket responden 5
 no se interpretan como ausencia del archivo ni provocan borrados.
 
 Borrar un objeto desde el panel de Cloudflare no elimina su registro en el sistema.
-La eliminación de plantillas debe hacerse mediante la funcionalidad correspondiente
-de la aplicación (E3-02); esa operación no forma parte de esta rama de carga.
+Las plantillas se eliminan desde la aplicación mediante **Eliminar**, con confirmación
+explícita (E3-02). Un listado o una descarga nunca retiran el registro.
 
 El listado y el selector muestran un ícono de formato: PDF, Excel, Word o imagen,
 con nombre accesible para lectores de pantalla y colores de los tokens del sistema.
@@ -114,3 +114,27 @@ o un VPS donde esa limpieza nunca se aplicó no debe ejecutarla.
 
 Para retirar ejemplos antiguos de una base de desarrollo, identificar y revisar sus
 registros específicos con el equipo. No resetear una base con datos para limpiar fixtures.
+
+## Eliminación definitiva desde el sistema
+
+Administradores y superadministradores pueden usar **Eliminar** en el listado. El modal
+identifica la plantilla y el archivo, advierte que el borrado es definitivo y aclara
+que los documentos ya generados no se modifican ni se eliminan. El foco inicial queda
+en **Cancelar**. Los gestores no ven la acción y el servidor rechaza su DELETE con 403.
+
+`DELETE /api/plantillas/:id` valida id, sesión y rol vigente. El servidor toma la clave
+de la base, elimina el objeto en R2 y recién después elimina físicamente el registro.
+Si R2 falla, conserva la fila para reintentar. Si la base falla después del borrado en
+R2, un reintento completa la limpieza. La operación es idempotente:
+un objeto o registro ya ausente no impide volver a confirmar. No se recorren ni borran
+documentos de siniestros, que tienen claves y registros independientes.
+
+Si la base falla después de borrar en R2, el modal indica: «No se pudo completar
+la eliminación. Volvé a tocar “Eliminar definitivamente” para terminarla». Este aviso
+se muestra también aunque el cliente HTTP oculte por seguridad el texto general de
+los errores 503. El registro permanece visible hasta que se confirme un reintento;
+abrir el listado o intentar descargar no lo elimina automáticamente.
+
+`DocumentoPlantilla.eliminado` y `fechaBaja` se conservan por compatibilidad con
+datos históricos y sus filtros. Esta acción hace un borrado físico y no escribe
+esas columnas. Retirarlas, si el equipo lo decide, requiere otra migración.

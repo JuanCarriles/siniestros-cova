@@ -113,6 +113,56 @@ test('PostgreSQL: carga con fecha automática y autor real; consulta y descarga;
             await tx.documentoPlantilla.findUniqueOrThrow({ where: { id: intacta.id } }),
             antes,
           )
+          // Borrar la plantilla no modifica una copia ya generada para un siniestro.
+          const aseguradora = await tx.aseguradora.create({
+            data: { nombre: `Eliminar plantilla ${marca}` },
+          })
+          const estado = await tx.estadoSiniestro.create({
+            data: { nombre: `Eliminar plantilla ${marca}`, descripcion: '-' },
+          })
+          const caso = await tx.siniestro.create({
+            data: {
+              numeroSiniestro: 'P-ELIMINAR',
+              numeroPoliza: 'P-ELIMINAR',
+              fechaAsignacion: new Date(),
+              demorado: false,
+              menorEdadInvolucrado: false,
+              idUsuario: gestor.id,
+              idAseguradora: aseguradora.id,
+              idEstadoSiniestro: estado.id,
+            },
+          })
+          const generado = await tx.documentoSiniestro.create({
+            data: {
+              nombreOriginal: 'documento-generado.pdf',
+              tipoExtension: 'pdf',
+              mimeType: 'application/pdf',
+              tamanoBytes: 10n,
+              idUsuario: gestor.id,
+              idSiniestro: caso.id,
+              urlArchivoSinDominio: `siniestros/${caso.id}/copia-generada.pdf`,
+            },
+          })
+          const eliminacionesR2 = []
+          const servicioBorrado = crearServicioPlantillas({
+            prisma: tx,
+            almacenamiento: () => ({
+              eliminar: async (key) => {
+                eliminacionesR2.push(key)
+              },
+            }),
+          })
+          await assert.rejects(servicioBorrado.eliminar(gestor.id, intacta.id), { status: 403 })
+          assert.equal(eliminacionesR2.length, 0)
+          await servicioBorrado.eliminar(admin.id, intacta.id)
+          assert.deepEqual(eliminacionesR2, [intacta.urlArchivo])
+          assert.equal(await tx.documentoPlantilla.findUnique({ where: { id: intacta.id } }), null)
+          assert.deepEqual(
+            await tx.documentoSiniestro.findUnique({ where: { id: generado.id } }),
+            generado,
+          )
+          await servicioBorrado.eliminar(admin.id, intacta.id)
+          assert.equal(eliminacionesR2.length, 1)
           throw rollback
         },
         { timeout: 15000 },

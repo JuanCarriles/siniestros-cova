@@ -43,9 +43,12 @@ function preparar({
   rolActual,
   archivoAusente = false,
   fallaConsultaR2 = false,
+  fallaEliminarR2 = false,
+  fallaBajaBase = false,
 } = {}) {
   const llamadas = []
   let fila
+  let eliminadoEnR2 = false
   const prisma = {
     usuario: {
       findFirst: async ({ where }) => {
@@ -69,7 +72,17 @@ function preparar({
         assert.equal(where.eliminado, false)
         return fila ? [fila] : []
       },
-      deleteMany: async () => assert.fail('Listar o descargar nunca debe borrar registros'),
+      deleteMany: async ({ where }) => {
+        llamadas.push(['retirar', where])
+        assert.deepEqual(where, { id: 8, urlArchivo: 'plantillas/uuid.pdf' })
+        if (fallaBajaBase) {
+          fallaBajaBase = false
+          throw new Error('Falla transitoria de la base')
+        }
+        const count = fila ? 1 : 0
+        fila = undefined
+        return { count }
+      },
       findFirst: async ({ where }) => {
         assert.equal(where.eliminado, false)
         return where.id === 8 ? fila : null
@@ -80,6 +93,7 @@ function preparar({
     subir: async (archivo, carpeta) => {
       llamadas.push(['subir', archivo.nombreOriginal, carpeta])
       if (fallaR2) throw Error('R2 no disponible')
+      eliminadoEnR2 = false
       return {
         clave: 'plantillas/uuid.pdf',
         nombreOriginal: archivo.nombreOriginal,
@@ -89,14 +103,18 @@ function preparar({
     },
     comprobarExistencia: async (clave) => {
       llamadas.push(['comprobar', clave])
-      if (archivoAusente)
+      if (archivoAusente || eliminadoEnR2)
         throw new HttpError(
           404,
           'El archivo no está disponible. Pedile a un administrador que vuelva a cargarlo.',
         )
       if (fallaConsultaR2) throw new HttpError(503, 'No se pudo consultar R2')
     },
-    eliminar: async (clave) => llamadas.push(['eliminar', clave]),
+    eliminar: async (clave) => {
+      llamadas.push(['eliminar', clave])
+      if (fallaEliminarR2) throw new HttpError(503, 'No se pudo eliminar de R2')
+      eliminadoEnR2 = true
+    },
     firmarDescarga: async (clave) => {
       llamadas.push(['firmar', clave])
       return { url: 'https://r2.example.invalid/firmada', venceEnSegundos: 60 }
@@ -354,4 +372,78 @@ test('listado: no inicializa R2 ni selecciona claves; vacío y múltiples regist
     assert.equal(listado.length, registros.length)
     assert.ok(listado.every((fila) => fila.urlArchivo === undefined))
   }
+})
+
+test('eliminar HTTP: solo admin y superadmin; id válido; clave tomada de la base y borrado idempotente', async (t) => {
+  const api = await servidor()
+  t.after(api.cerrar)
+  assert.equal((await api.pedir('admin', '', await formulario())).status, 201)
+  const inicio = api.llamadas.length
+  for (const [quien, esperado] of [
+    [null, 401],
+    ['inventada', 401],
+    ['gestor', 403],
+  ]) {
+    assert.equal((await api.pedir(quien, '/8', { method: 'DELETE' })).status, esperado)
+  }
+  assert.equal((await api.pedir('admin', '/abc', { method: 'DELETE' })).status, 400)
+  assert.equal(api.llamadas.length, inicio)
+  assert.equal(
+    (
+      await api.pedir('admin', '/8', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urlArchivo: 'siniestros/1/otro.pdf' }),
+      })
+    ).status,
+    204,
+  )
+  assert.deepEqual(api.llamadas.slice(inicio), [
+    ['eliminar', 'plantillas/uuid.pdf'],
+    ['retirar', { id: 8, urlArchivo: 'plantillas/uuid.pdf' }],
+  ])
+  assert.deepEqual(await (await api.pedir('gestor')).json(), [])
+  assert.equal((await api.pedir('super', '/8', { method: 'DELETE' })).status, 204)
+  assert.equal(api.llamadas.filter(([accion]) => accion === 'eliminar').length, 1)
+  assert.equal((await api.pedir('super', '', await formulario())).status, 201)
+  assert.equal((await api.pedir('super', '/8', { method: 'DELETE' })).status, 204)
+})
+
+test('eliminar: una degradación de rol antes del pedido bloquea el borrado en el servicio', async () => {
+  const api = preparar({ rolActual: 'GESTOR' })
+  await assert.rejects(
+    api.servicio.eliminar(4, 8),
+    (error) => error.status === 403 && /eliminar/.test(error.message),
+  )
+  await assert.rejects(api.servicio.eliminar(999, 8), { status: 401 })
+  assert.equal(api.llamadas.length, 0)
+})
+
+test('eliminar: si falla R2 se conserva el registro; si falla la base se puede reintentar', async (t) => {
+  const sinR2 = await servidor({ fallaEliminarR2: true })
+  t.after(sinR2.cerrar)
+  await sinR2.pedir('admin', '', await formulario())
+  assert.equal((await sinR2.pedir('admin', '/8', { method: 'DELETE' })).status, 503)
+  assert.equal(
+    sinR2.llamadas.some(([accion]) => accion === 'retirar'),
+    false,
+  )
+  assert.equal((await (await sinR2.pedir('admin')).json()).length, 1)
+  const sinBase = await servidor({ fallaBajaBase: true })
+  t.after(sinBase.cerrar)
+  await sinBase.pedir('admin', '', await formulario())
+  const fallo = await sinBase.pedir('admin', '/8', { method: 'DELETE' })
+  assert.equal(fallo.status, 503)
+  assert.match(
+    (await fallo.json()).error,
+    /Volvé a tocar «Eliminar definitivamente» para terminarla/,
+  )
+  const pendientes = await sinBase.pedir('admin')
+  assert.equal(pendientes.status, 200)
+  assert.equal((await pendientes.json()).length, 1, 'listar no completa el borrado pendiente')
+  assert.equal((await sinBase.pedir('gestor', '/8/descarga')).status, 404)
+  assert.equal((await (await sinBase.pedir('admin')).json()).length, 1)
+  assert.equal(sinBase.llamadas.filter(([accion]) => accion === 'retirar').length, 1)
+  assert.equal((await sinBase.pedir('admin', '/8', { method: 'DELETE' })).status, 204)
+  assert.deepEqual(await (await sinBase.pedir('admin')).json(), [])
 })

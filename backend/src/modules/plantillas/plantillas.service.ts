@@ -1,5 +1,6 @@
 import {
   altaPlantillaSchema,
+  MENSAJE_ERROR_ELIMINAR_PLANTILLA,
   type AltaPlantillaInput,
   type PlantillaListado,
 } from '@cova/shared/schemas/plantillas'
@@ -40,16 +41,18 @@ export function crearServicioPlantillas(deps: {
   almacenamiento: () => AlmacenamientoR2
 }) {
   const { prisma, almacenamiento } = deps
-  async function autorizar(idUsuario: number, escritura = false) {
+  async function autorizar(idUsuario: number, accion?: 'cargar' | 'eliminar') {
     const actor = await prisma.usuario.findFirst({
       where: { id: idUsuario, eliminado: false },
       select: { tipoUsuario: true },
     })
     if (!actor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
-    if (escritura && actor.tipoUsuario === 'GESTOR') {
+    if (accion && actor.tipoUsuario === 'GESTOR') {
       throw new HttpError(
         403,
-        'Solo administradores y superadministradores pueden cargar plantillas.',
+        accion === 'eliminar'
+          ? 'Solo administradores y superadministradores pueden eliminar plantillas.'
+          : 'Solo administradores y superadministradores pueden cargar plantillas.',
       )
     }
   }
@@ -64,14 +67,14 @@ export function crearServicioPlantillas(deps: {
       return filas.map(presentar)
     },
     async subir(idUsuario: number, entrada: AltaPlantillaInput, archivo: ArchivoEntrada) {
-      await autorizar(idUsuario, true)
+      await autorizar(idUsuario, 'cargar')
       const datos = altaPlantillaSchema.parse(entrada)
       await validarArchivoPlantilla(archivo)
       const r2 = almacenamiento()
       const objeto = await r2.subir(archivo, 'plantillas')
       try {
         // Se vuelve a comprobar el rol tras la transferencia a R2.
-        await autorizar(idUsuario, true)
+        await autorizar(idUsuario, 'cargar')
         const fila = await prisma.documentoPlantilla.create({
           data: {
             ...datos,
@@ -92,6 +95,26 @@ export function crearServicioPlantillas(deps: {
         }
         if (error instanceof HttpError) throw error
         throw new HttpError(503, 'No se pudo registrar la plantilla. Intentá cargarla nuevamente.')
+      }
+    },
+    async eliminar(idUsuario: number, id: number) {
+      await autorizar(idUsuario, 'eliminar')
+      const fila = await prisma.documentoPlantilla.findFirst({
+        where: { id, eliminado: false },
+        select: { id: true, urlArchivo: true },
+      })
+      // Idempotente: una plantilla ya eliminada no da error.
+      if (!fila) return
+      // R2 primero: si falla, conservamos el registro para reintentar.
+      // DeleteObject también admite que el archivo haya sido eliminado desde Cloudflare.
+      await almacenamiento().eliminar(fila.urlArchivo)
+      try {
+        await prisma.documentoPlantilla.deleteMany({
+          where: { id: fila.id, urlArchivo: fila.urlArchivo },
+        })
+      } catch {
+        // Si R2 borró pero la base falló, un reintento completa la limpieza (DeleteObject es idempotente).
+        throw new HttpError(503, MENSAJE_ERROR_ELIMINAR_PLANTILLA)
       }
     },
     async descargar(idUsuario: number, id: number) {

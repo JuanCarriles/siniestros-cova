@@ -71,6 +71,10 @@ export function crearPlantillasRouter(deps: {
       )
     },
   )
+  router.delete('/:id', requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'), async (req, res) => {
+    await servicio.eliminar(usuarioDeSesion(req).id, idSchema.parse(req.params.id))
+    res.status(204).end()
+  })
   router.get('/:id/descarga', async (req, res) => {
     res.json(await servicio.descargar(usuarioDeSesion(req).id, idSchema.parse(req.params.id)))
   })

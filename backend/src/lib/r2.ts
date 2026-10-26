@@ -192,7 +192,7 @@ export function crearAlmacenamientoR2(
       }
     },
 
-    // Compensación de altas fallidas y limpieza de pruebas; no usar para bajas lógicas.
+    // Borrado físico de plantillas autorizadas, compensación de altas y pruebas; no usar para bajas lógicas.
     async eliminar(clave: string) {
       const key = claveArchivoSchema.parse(clave)
       try {

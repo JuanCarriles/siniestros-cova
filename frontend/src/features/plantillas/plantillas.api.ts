@@ -21,3 +21,7 @@ export async function descargarPlantilla(id: number) {
   enlace.click()
   enlace.remove()
 }
+
+export async function eliminarPlantilla(id: number) {
+  await api(`/plantillas/${id}`, { method: 'DELETE' })
+}

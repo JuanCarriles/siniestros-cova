@@ -30,6 +30,8 @@ export type DocumentoPlantillaUpdateData = z.output<typeof documentoPlantillaUpd
 // Contrato público: el autor, la fecha y la clave de R2 nunca vienen del formulario.
 export const PLANTILLA_MAX_BYTES = 10 * 1024 * 1024
 export const PLANTILLA_FORMATOS = 'PDF, JPG, PNG, DOCX y XLSX'
+export const MENSAJE_ERROR_ELIMINAR_PLANTILLA =
+  'No se pudo completar la eliminación. Volvé a tocar «Eliminar definitivamente» para terminarla.'
 export const PLANTILLA_ACCEPT = '.pdf,.jpg,.jpeg,.png,.docx,.xlsx'
 export const PLANTILLA_EXTENSIONES = ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'xlsx'] as const
 

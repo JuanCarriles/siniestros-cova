@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLoaderData, useRevalidator } from 'react-router'
-import { Download, Files, SearchX } from 'lucide-react'
+import { Download, Files, SearchX, Trash2 } from 'lucide-react'
 import type { PlantillaListado } from '@cova/shared/schemas/plantillas'
 import { BarraAbm } from '@/components/abm/barra-abm'
 import { ListadoAbm } from '@/components/abm/listado-abm'
@@ -15,6 +15,7 @@ import type { cargarPlantillas } from '../loader'
 import { descargarPlantilla } from '../plantillas.api'
 import { formatoTamanoArchivo } from '../formato-archivo'
 import { IconoArchivo } from '../components/icono-archivo'
+import { EliminarPlantillaDialog } from '../components/eliminar-plantilla-dialog'
 import { CargarPlantillaDialog } from '../components/cargar-plantilla-dialog'
 
 export function PlantillasPage() {
@@ -24,6 +25,9 @@ export function PlantillasPage() {
   const puedeCargar = usuario.tipo !== 'GESTOR'
   const [busqueda, setBusqueda] = useState('')
   const [cargando, setCargando] = useState(false)
+  const [paraEliminar, setParaEliminar] = useState<PlantillaListado | null>(null)
+  const origenEliminar = useRef<HTMLButtonElement | null>(null)
+  const tituloListado = useRef<HTMLHeadingElement>(null)
   const [descargando, setDescargando] = useState<number | null>(null)
   const [aviso, setAviso] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null)
   const buscado = normalizarBusqueda(busqueda)
@@ -96,18 +100,35 @@ export function PlantillasPage() {
       ),
     },
     {
-      id: 'descarga',
-      encabezado: 'Descarga',
+      id: 'acciones',
+      encabezado: 'Acciones',
       celda: (p) => (
-        <Button
-          variant="outline"
-          disabled={descargando !== null}
-          onClick={() => void descargar(p)}
-          aria-label={`Descargar ${p.encabezado}`}
-        >
-          <Download aria-hidden="true" />
-          {descargando === p.id ? 'Preparando…' : 'Descargar'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            disabled={descargando !== null}
+            onClick={() => void descargar(p)}
+            aria-label={`Descargar ${p.encabezado}`}
+          >
+            <Download aria-hidden="true" />
+            {descargando === p.id ? 'Preparando…' : 'Descargar'}
+          </Button>
+          {puedeCargar && (
+            <Button
+              variant="ghost"
+              className="text-danger-ink hover:bg-danger-bg hover:text-danger-ink"
+              aria-label={`Eliminar ${p.encabezado}`}
+              onClick={(evento) => {
+                origenEliminar.current = evento.currentTarget
+                setAviso(null)
+                setParaEliminar(p)
+              }}
+            >
+              <Trash2 aria-hidden="true" />
+              Eliminar
+            </Button>
+          )}
+        </div>
       ),
     },
   ]
@@ -133,6 +154,7 @@ export function PlantillasPage() {
         }
       />
       <ListadoAbm
+        tituloRef={tituloListado}
         titulo={plural(visibles.length, 'plantilla')}
         aviso={aviso && <Aviso tipo={aviso.tipo}>{aviso.texto}</Aviso>}
         nota={
@@ -170,6 +192,23 @@ export function PlantillasPage() {
           }
         />
       </ListadoAbm>
+      {paraEliminar && (
+        <EliminarPlantillaDialog
+          key={paraEliminar.id}
+          plantilla={paraEliminar}
+          onCerrar={() => setParaEliminar(null)}
+          onHecho={(texto) => {
+            setParaEliminar(null)
+            setAviso({ tipo: 'exito', texto })
+            void revalidator.revalidate()
+          }}
+          elementoAlCerrar={(eliminada) =>
+            !eliminada && origenEliminar.current?.isConnected
+              ? origenEliminar.current
+              : tituloListado.current
+          }
+        />
+      )}
       {cargando && (
         <CargarPlantillaDialog
           onCerrar={() => setCargando(false)}
