@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import express from 'express'
 import cookieParser from 'cookie-parser'
+import { esCierreEnviado } from '../../shared/src/schemas/siniestros.ts'
 import { crearSiniestrosRouter } from '../src/modules/siniestros/siniestros.routes.ts'
 import { crearRequerirSesion } from '../src/middlewares/autenticar.ts'
 import { errorHandler } from '../src/middlewares/errorHandler.ts'
@@ -39,7 +40,10 @@ test('HTTP baja y borrado: sesión, rol, id y confirmación estricta antes de ej
       servicio: {},
       operaciones: {
         darDeBaja: async (...args) => llamadas.push(['baja', ...args]),
-        eliminar: async (...args) => llamadas.push(['eliminar', ...args]),
+        eliminar: async (...args) => {
+          if (args[1] === 9) throw Object.assign(new Error('FK de prueba'), { code: 'P2003' })
+          llamadas.push(['eliminar', ...args])
+        },
       },
       requerirSesion: crearRequerirSesion({
         duracionMs: 1000,
@@ -75,14 +79,18 @@ test('HTTP baja y borrado: sesión, rol, id y confirmación estricta antes de ej
         status,
       )
     }
-    for (const body of [
-      {},
-      { numeroSiniestro: '' },
-      { numeroSiniestro: ' ' },
-      { numeroSiniestro: 'x'.repeat(256) },
-      { numeroSiniestro: '2026-001', idUsuario: 999 },
-      { numeroSiniestro: '2026-001', estado: 'Cierre enviado' },
-    ]) {
+    const invalidos =
+      method === 'PATCH'
+        ? [{ idUsuario: 999 }, { fechaBaja: '2020-01-01' }, { numeroSiniestro: '2026-001' }]
+        : [
+            {},
+            { numeroSiniestro: '' },
+            { numeroSiniestro: ' ' },
+            { numeroSiniestro: 'x'.repeat(256) },
+            { numeroSiniestro: '2026-001', idUsuario: 999 },
+            { numeroSiniestro: '2026-001', estado: 'Cierre enviado' },
+          ]
+    for (const body of invalidos) {
       assert.equal((await pedir('admin', method, ruta, body)).status, 400)
     }
   }
@@ -91,16 +99,24 @@ test('HTTP baja y borrado: sesión, rol, id y confirmación estricta antes de ej
     400,
   )
   assert.equal(llamadas.length, 0)
-  assert.equal(
-    (await pedir('admin', 'PATCH', '/8/baja', { numeroSiniestro: ' 2026-001 ' })).status,
-    204,
-  )
+  assert.equal((await pedir('admin', 'PATCH', '/8/baja')).status, 204)
   assert.equal((await pedir('super', 'DELETE', '/8', { numeroSiniestro: '2026-001' })).status, 204)
   assert.deepEqual(
     llamadas.map(([accion, actor, id, body]) => [accion, actor.id, id, body]),
     [
-      ['baja', 1, 8, { numeroSiniestro: '2026-001' }],
+      ['baja', 1, 8, undefined],
       ['eliminar', 2, 8, { numeroSiniestro: '2026-001' }],
     ],
   )
+  assert.equal((await pedir('super', 'PATCH', '/8/baja', {})).status, 204)
+  const registro = t.mock.method(console, 'error', () => {})
+  const fallo = await pedir('admin', 'DELETE', '/9', { numeroSiniestro: '2026-001' })
+  assert.equal(fallo.status, 500, 'una FK inesperada no debe presentarse como un conflicto 409')
+  assert.equal((await fallo.json()).error, 'Error interno del servidor')
+  assert.equal(registro.mock.calls[0].arguments[0].code, 'P2003')
+})
+
+test('cierre: la regla depende de esCierre y no del nombre visible', () => {
+  assert.equal(esCierreEnviado({ esCierre: true, nombre: 'Cierre renombrado' }), true)
+  assert.equal(esCierreEnviado({ esCierre: false, nombre: 'Cierre enviado' }), false)
 })

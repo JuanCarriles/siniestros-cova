@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLoaderData, useRevalidator } from 'react-router'
 import { Download, Files, SearchX, Trash2 } from 'lucide-react'
 import type { PlantillaListado } from '@cova/shared/schemas/plantillas'
@@ -22,21 +22,6 @@ export function PlantillasPage() {
   const { plantillas } = useLoaderData<typeof cargarPlantillas>()
   const { usuario } = usePanel()
   const revalidator = useRevalidator()
-  // Al volver desde Cloudflare se consulta el listado y se concilian las eliminaciones.
-  useEffect(() => {
-    let ultimaConsulta = 0
-    const actualizar = () => {
-      if (document.visibilityState !== 'visible' || Date.now() - ultimaConsulta < 2000) return
-      ultimaConsulta = Date.now()
-      void revalidator.revalidate()
-    }
-    window.addEventListener('focus', actualizar)
-    document.addEventListener('visibilitychange', actualizar)
-    return () => {
-      window.removeEventListener('focus', actualizar)
-      document.removeEventListener('visibilitychange', actualizar)
-    }
-  }, [revalidator])
   const puedeCargar = usuario.tipo !== 'GESTOR'
   const [busqueda, setBusqueda] = useState('')
   const [cargando, setCargando] = useState(false)

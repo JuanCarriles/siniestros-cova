@@ -42,12 +42,12 @@ export function OperacionSiniestroDialog({
     evento.preventDefault()
     setRevisado(true)
     const datos = confirmarSiniestroSchema.safeParse({ numeroSiniestro: numero })
-    if (enviando || !coincide || !datos.success) return
+    if (enviando || (permanente && (!coincide || !datos.success))) return
     setEnviando(true)
     setError(null)
     try {
-      if (permanente) await eliminarSiniestro(siniestro.id, datos.data)
-      else await darDeBajaSiniestro(siniestro.id, datos.data)
+      if (permanente && datos.success) await eliminarSiniestro(siniestro.id, datos.data)
+      else await darDeBajaSiniestro(siniestro.id)
       completado.current = true
       onHecho(
         permanente
@@ -64,7 +64,7 @@ export function OperacionSiniestroDialog({
           : null
       setError(
         codigo === 'ELIMINACION_SINIESTRO_PENDIENTE'
-          ? 'No se pudieron eliminar todos los archivos. El siniestro conserva sus registros y podés reintentar la eliminación.'
+          ? 'La eliminación quedó pendiente. El siniestro conserva sus registros. Reintentá para terminarla.'
           : fallo instanceof ApiError
             ? fallo.message
             : 'No se pudo completar la operación. Probá de nuevo.',
@@ -117,8 +117,8 @@ export function OperacionSiniestroDialog({
               </p>
             </div>
             <p>
-              Solo se permite en estado <strong>Cierre enviado</strong>. Confirmá únicamente si
-              querés borrar todo el expediente.
+              El siniestro está en estado <strong>{siniestro.estado.nombre}</strong>. Confirmá
+              únicamente si querés borrar todo el expediente.
             </p>
           </>
         ) : (
@@ -134,22 +134,24 @@ export function OperacionSiniestroDialog({
           noValidate
           aria-busy={enviando}
         >
-          <TextField
-            label="Escribí el número de siniestro para confirmar"
-            value={numero}
-            onChange={(e) => setNumero(e.target.value)}
-            onBlur={() => setRevisado(true)}
-            required
-            disabled={enviando}
-            autoComplete="off"
-            maxLength={255}
-            hint={`Ingresá ${siniestro.numeroSiniestro} exactamente como aparece arriba.`}
-            error={
-              revisado && !coincide
-                ? 'El número ingresado no coincide con el siniestro.'
-                : undefined
-            }
-          />
+          {permanente && (
+            <TextField
+              label="Escribí el número de siniestro para confirmar"
+              value={numero}
+              onChange={(e) => setNumero(e.target.value)}
+              onBlur={() => setRevisado(true)}
+              required
+              disabled={enviando}
+              autoComplete="off"
+              maxLength={255}
+              hint={`Ingresá ${siniestro.numeroSiniestro} exactamente como aparece arriba.`}
+              error={
+                revisado && !coincide
+                  ? 'El número ingresado no coincide con el siniestro.'
+                  : undefined
+              }
+            />
+          )}
           {error && (
             <Aviso tipo="error" enfocar>
               {error}
@@ -165,15 +167,14 @@ export function OperacionSiniestroDialog({
             >
               Cancelar
             </Button>
-            <Button type="submit" variant="destructive" disabled={!coincide} loading={enviando}>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={permanente && !coincide}
+              loading={enviando}
+            >
               {permanente ? <Trash2 aria-hidden="true" /> : <CircleMinus aria-hidden="true" />}
-              {enviando
-                ? permanente
-                  ? 'Eliminando…'
-                  : 'Dando de baja…'
-                : permanente
-                  ? 'Eliminar definitivamente'
-                  : 'Dar de baja'}
+              {permanente ? 'Eliminar definitivamente' : 'Dar de baja'}
             </Button>
           </DialogFooter>
         </form>

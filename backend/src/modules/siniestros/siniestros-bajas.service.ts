@@ -56,11 +56,11 @@ export function crearServicioBajasSiniestros(deps: {
       )
     }
   }
-  function exigirCierre(estado: { nombre: string; esCierre: boolean }) {
+  function exigirCierre(estado: { esCierre: boolean }) {
     if (!esCierreEnviado(estado)) {
       throw new HttpError(
         409,
-        'Solo se puede eliminar definitivamente un siniestro en estado «Cierre enviado». Actualizá el listado.',
+        'Solo se puede eliminar definitivamente un siniestro en estado de cierre. Actualizá el listado.',
         { codigo: 'SINIESTRO_NO_CERRADO' },
       )
     }
@@ -110,6 +110,7 @@ export function crearServicioBajasSiniestros(deps: {
       }
     }
   }
+  // Si se agrega una tabla con idSiniestro, sumarla acá y a la prueba del expediente completo.
   async function borrarRegistros(
     tx: Prisma.TransactionClient,
     id: number,
@@ -161,13 +162,11 @@ export function crearServicioBajasSiniestros(deps: {
       })
   }
   return {
-    async darDeBaja(usuario: SesionUsuario, id: number, entrada: ConfirmarSiniestro) {
-      const confirmacion = confirmarSiniestroSchema.parse(entrada)
+    async darDeBaja(usuario: SesionUsuario, id: number) {
       await base.transaccion(async (tx) => {
         const actor = await autorizar(tx, usuario.id)
         const fila = await buscar(tx, id)
         if (!fila) throw new HttpError(404, 'El siniestro no existe.')
-        confirmar(fila.numeroSiniestro, confirmacion)
         if (fila.eliminacionEnCurso)
           throw new HttpError(
             409,
@@ -202,36 +201,27 @@ export function crearServicioBajasSiniestros(deps: {
         return claves
       })
       if (inicial === null) return
-      const borradas = new Set<string>()
-      let pendientes = inicial
-      // No hay llamadas externas dentro de una transacción de PostgreSQL.
-      for (let intento = 0; intento < 3; intento++) {
-        await borrarArchivos(pendientes)
-        for (const clave of pendientes) borradas.add(clave)
-        const nuevas = await base.transaccion(async (tx) => {
-          await autorizar(tx, usuario.id)
-          const fila = await buscar(tx, id)
-          if (!fila) return null
-          confirmar(fila.numeroSiniestro, confirmacion)
-          exigirCierre(fila.estadoSiniestro)
-          if (!fila.eliminacionEnCurso)
-            throw new HttpError(
-              409,
-              'El siniestro cambió. Actualizá el listado antes de reintentar.',
-            )
-          const faltantes = (await clavesDocumentos(tx, id)).filter((clave) => !borradas.has(clave))
-          if (faltantes.length) return faltantes
-          await borrarRegistros(tx, id, fila.idDireccion)
-          return null
-        })
-        if (nuevas === null) return
-        pendientes = nuevas
-      }
-      throw new HttpError(
-        409,
-        'Se agregaron documentos durante la eliminación. Reintentá para terminar de eliminar el siniestro.',
-        { codigo: 'ELIMINACION_SINIESTRO_PENDIENTE' },
-      )
+      // Una sola pasada de R2 fuera de las transacciones; los fallos se reintentan desde el listado.
+      await borrarArchivos(inicial)
+      await base.transaccion(async (tx) => {
+        await autorizar(tx, usuario.id)
+        const fila = await buscar(tx, id)
+        if (!fila) return
+        confirmar(fila.numeroSiniestro, confirmacion)
+        exigirCierre(fila.estadoSiniestro)
+        if (!fila.eliminacionEnCurso)
+          throw new HttpError(409, 'El siniestro cambió. Actualizá el listado antes de reintentar.')
+        // Una carga pudo pasar su última comprobación justo antes de marcar el caso.
+        // El bloqueo del padre protege esta comprobación y el borrado de las filas hijas.
+        const actuales = await clavesDocumentos(tx, id)
+        if (actuales.some((clave) => !inicial.includes(clave)))
+          throw new HttpError(
+            409,
+            'El inventario de archivos cambió. El siniestro conserva sus registros. Reintentá para completar la eliminación.',
+            { codigo: 'ELIMINACION_SINIESTRO_PENDIENTE' },
+          )
+        await borrarRegistros(tx, id, fila.idDireccion)
+      })
     },
   }
 }

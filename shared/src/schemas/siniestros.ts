@@ -204,11 +204,14 @@ export type PartesSiniestro = {
 }
 
 // El número se confirma en el servidor contra el registro vigente, nunca contra datos del navegador.
+export const confirmarBajaSiniestroSchema = z.strictObject({})
+
 export const confirmarSiniestroSchema = z.strictObject({
   numeroSiniestro: z.string().trim().min(1, 'Escribí el número del siniestro').max(255),
 })
 export type ConfirmarSiniestro = z.output<typeof confirmarSiniestroSchema>
 
-export function esCierreEnviado(estado: { nombre: string; esCierre: boolean }): boolean {
-  return estado.esCierre && estado.nombre === 'Cierre enviado'
+// La regla usa la bandera del catálogo; cambiar el texto visible no cambia los permisos.
+export function esCierreEnviado(estado: { esCierre: boolean }): boolean {
+  return estado.esCierre
 }

@@ -66,7 +66,7 @@ export function crearPlantillasRouter(deps: {
       res.status(201).json(
         await servicio.subir(usuarioDeSesion(req).id, datos, {
           nombreOriginal: nombreOriginal(req.file.originalname),
-          contenido: Uint8Array.from(req.file.buffer),
+          contenido: req.file.buffer,
         }),
       )
     },

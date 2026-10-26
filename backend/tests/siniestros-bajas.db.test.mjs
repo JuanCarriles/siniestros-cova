@@ -38,6 +38,10 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
             where: { nombre: 'Cierre enviado' },
           })
           assert.equal(cierre.esCierre, true)
+          await tx.estadoSiniestro.update({
+            where: { id: cierre.id },
+            data: { nombre: `Cierre renombrado ${marca}` },
+          })
           const otroCierre = await tx.estadoSiniestro.create({
             data: { nombre: `Otro cierre ${marca}`, descripcion: '-', esCierre: true },
           })
@@ -105,12 +109,13 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
               ),
               { status: 403 },
             )
-            await assert.rejects(servicio[accion](admin, s.id, { numeroSiniestro: 'OTRO' }), {
-              status: 400,
-            })
+            if (accion === 'eliminar')
+              await assert.rejects(servicio.eliminar(admin, s.id, { numeroSiniestro: 'OTRO' }), {
+                status: 400,
+              })
           }
           assert.equal(llamadas.length, 0)
-          await servicio.darDeBaja(admin, s.id, confirmar(s))
+          await servicio.darDeBaja(admin, s.id)
           const dadaBaja = await obtener(s)
           assert.equal(dadaBaja.eliminado, true)
           assert.equal(dadaBaja.fechaBaja.toISOString(), ahora.toISOString())
@@ -121,7 +126,7 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
           assert.equal(evento.fechaEvento.toISOString(), ahora.toISOString())
           assert.match(evento.descripcion, /Ana Prueba dio de baja lógica/)
           assert.match(evento.descripcion, /25\/10\/2026/)
-          await servicio.darDeBaja(superadmin, s.id, confirmar(s))
+          await servicio.darDeBaja(superadmin, s.id)
           assert.equal(
             await tx.historialSiniestro.count({
               where: { idSiniestro: s.id, tipoEvento: 'BAJA_SINIESTRO' },
@@ -149,8 +154,17 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
             false,
           )
           await assert.rejects(servicio.eliminar(admin, s.id, confirmar(s)), { status: 409 })
-          const falsoCierre = await caso({ idEstadoSiniestro: otroCierre.id })
-          await assert.rejects(servicio.eliminar(admin, falsoCierre.id, confirmar(falsoCierre)), {
+          const cierreConOtroNombre = await caso({ idEstadoSiniestro: otroCierre.id })
+          await servicio.eliminar(admin, cierreConOtroNombre.id, confirmar(cierreConOtroNombre))
+          assert.equal(
+            await tx.siniestro.findUnique({ where: { id: cierreConOtroNombre.id } }),
+            null,
+          )
+          const nombreSinBandera = await tx.estadoSiniestro.create({
+            data: { nombre: 'Cierre enviado', descripcion: '-', esCierre: false },
+          })
+          const noCerrado = await caso({ idEstadoSiniestro: nombreSinBandera.id })
+          await assert.rejects(servicio.eliminar(admin, noCerrado.id, confirmar(noCerrado)), {
             status: 409,
           })
 
@@ -238,11 +252,26 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
             (await lectura.listar(gestor, filtros)).siniestros.some((f) => f.id === objetivo.id),
             false,
           )
-          await assert.rejects(servicio.darDeBaja(admin, objetivo.id, confirmar(objetivo)), {
+          await assert.rejects(servicio.darDeBaja(admin, objetivo.id), {
             status: 409,
           })
           claveFallida = null
           agregarTarde = () => documento(objetivo, 'tarde.pdf')
+          await assert.rejects(
+            servicio.eliminar(superadmin, objetivo.id, confirmar(objetivo)),
+            (error) =>
+              error.status === 409 && error.details.codigo === 'ELIMINACION_SINIESTRO_PENDIENTE',
+          )
+          assert.equal((await obtener(objetivo)).eliminacionEnCurso, true)
+          assert.equal(
+            await tx.documentoSiniestro.count({ where: { idSiniestro: objetivo.id } }),
+            3,
+          )
+          assert.equal(
+            llamadas.includes(`siniestros/${objetivo.id}/tarde.pdf`),
+            false,
+            'no hay una segunda pasada automática: el archivo nuevo espera el reintento explícito',
+          )
           await servicio.eliminar(superadmin, objetivo.id, confirmar(objetivo))
           assert.equal(await tx.siniestro.findUnique({ where: { id: objetivo.id } }), null)
           for (const tabla of [

@@ -1,6 +1,10 @@
 import { Router, type RequestHandler } from 'express'
 import { idSchema } from '@cova/shared/schemas/comunes'
-import { confirmarSiniestroSchema, filtrosSiniestrosSchema } from '@cova/shared/schemas/siniestros'
+import {
+  confirmarBajaSiniestroSchema,
+  confirmarSiniestroSchema,
+  filtrosSiniestrosSchema,
+} from '@cova/shared/schemas/siniestros'
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import type { crearServicioSiniestros } from './siniestros.service.ts'
@@ -31,11 +35,8 @@ export function crearSiniestrosRouter(deps: {
     '/:id/baja',
     requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'),
     async (req, res) => {
-      await operaciones.darDeBaja(
-        usuarioDeSesion(req),
-        idSchema.parse(req.params.id),
-        confirmarSiniestroSchema.parse(req.body),
-      )
+      confirmarBajaSiniestroSchema.parse(req.body ?? {})
+      await operaciones.darDeBaja(usuarioDeSesion(req), idSchema.parse(req.params.id))
       res.status(204).end()
     },
   )
