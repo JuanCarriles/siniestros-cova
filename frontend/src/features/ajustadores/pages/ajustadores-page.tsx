@@ -284,6 +284,7 @@ export function AjustadoresPage() {
         onGuardado={terminar}
       />
       <EstadoAjustadorDialog
+        key={cambioAbierto ? `${cambio?.ajustador.id}-${cambio?.tipo}` : 'cerrado'}
         abierto={cambioAbierto}
         elementoAlCerrar={elementoAlCerrar}
         cambio={cambio}
