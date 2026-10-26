@@ -13,8 +13,6 @@ import { HttpError } from '../../utils/httpError.ts'
 
 type BaseAjustadores = Pick<Prisma.TransactionClient, 'ajustador' | 'aseguradora'>
 
-// Siniestro activo: no eliminado y en un estado que no es el de cierre (la regla usa la bandera, no el nombre)
-
 const sinSiniestrosActivos = {
   siniestros: { none: siniestroActivo },
 } satisfies Prisma.AjustadorWhereInput

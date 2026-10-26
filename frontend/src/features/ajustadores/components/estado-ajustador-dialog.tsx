@@ -161,7 +161,7 @@ export function EstadoAjustadorDialog({
           </Aviso>
         )}
         {cambio?.tipo === 'baja' && (
-          <SiniestrosActivosBaja consulta={consulta} onAbrir={onCerrar} />
+          <SiniestrosActivosBaja consulta={consulta} nombre={nombre} onAbrir={onCerrar} />
         )}
         <DialogFooter>
           {bajaBloqueada ? (

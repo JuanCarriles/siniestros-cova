@@ -2,7 +2,9 @@
 
 En Usuarios o Ajustadores, elegir **Dar de baja** consulta los siniestros actuales. Activo significa: sin baja lógica y con un estado cuya bandera `esCierre` es falsa. Un cerrado o dado de baja no bloquea, aunque conserve la asociación histórica.
 
-El modal muestra número, aseguradora y estado de cada caso, en páginas de cinco, con **Ver siniestro** para abrir su ficha. **Actualizar casos** vuelve a consultar y permite comprobar si ya se resolvieron o reasignaron. No se reasignan casos automáticamente ni se da de baja sin confirmar.
+El modal muestra número, aseguradora y estado de cada caso, en páginas de cinco, con **Ver siniestro** para abrir su ficha. **Actualizar casos** vuelve a consultar y permite comprobar si ya se resolvieron o reasignaron. La lista no tiene un scroll interno: usa el desplazamiento del modal para facilitar la lectura con zoom o letra grande. La indicación para cerrar o reasignar los casos es visible, y los enlaces a las fichas respetan el `basePath` del panel. No se reasignan casos automáticamente ni se da de baja sin confirmar.
+
+**Dependencia pendiente:** esta historia no implementa la edición ni la reasignación de siniestros desde la ficha. Esas operaciones dependen de su propia historia. Hasta que esté disponible, la preparación de casos resueltos o reasignados para la prueba debe hacerla el equipo técnico en una base de desarrollo, conservando los datos reales.
 
 Mientras se consulta, si falla la consulta o si queda al menos un activo, no se habilita la confirmación. Al confirmar, el servidor vuelve a evaluar la condición en la escritura: un caso asignado después de abrir el modal también bloquea la baja. Un 409 por casos nuevos actualiza el detalle y el listado.
 
@@ -14,4 +16,4 @@ No requiere cambios del esquema ni migraciones.
 
 - `npm run test:usuarios -w backend` y `npm run test:ajustadores -w backend`: permisos y validación HTTP.
 - `npm run test:bajas:db -w backend`: ambos tipos, paginación, casos cerrados/eliminados/ajenos excluidos, jerarquías vigentes, baja bloqueada con uno o más activos y permitida al quedar cero. Todos los datos se revierten.
-- Manual: abrir el modal de una persona con casos activos; comprobar el detalle, abrir una ficha y volver. Resolver o reasignar los casos desde el módulo correspondiente; volver al modal y usar **Actualizar casos**. La baja solo se completa después de quedar sin activos y confirmarla.
+- Manual: abrir el modal de una persona con casos activos; comprobar el detalle, abrir una ficha y volver. Con ayuda del equipo técnico y solo sobre datos de prueba, preparar los casos cerrados o reasignados; volver al modal y usar **Actualizar casos**. La baja solo se completa después de quedar sin activos y confirmarla.

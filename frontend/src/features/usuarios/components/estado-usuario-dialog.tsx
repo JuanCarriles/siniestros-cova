@@ -135,7 +135,7 @@ export function EstadoUsuarioDialog({
           </Aviso>
         )}
         {cambio?.tipo === 'baja' && !sinPermiso && (
-          <SiniestrosActivosBaja consulta={consulta} onAbrir={onCerrar} />
+          <SiniestrosActivosBaja consulta={consulta} nombre={nombre} onAbrir={onCerrar} />
         )}
         <DialogFooter>
           <DialogClose asChild>

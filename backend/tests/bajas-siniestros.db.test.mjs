@@ -176,7 +176,7 @@ test('PostgreSQL: detalle, permisos, paginación y baja solo después de resolve
           )
           throw rollback
         },
-        { timeout: 30_000, isolationLevel: 'Serializable' },
+        { timeout: 30_000 },
       ),
       (error) => error === rollback,
     )

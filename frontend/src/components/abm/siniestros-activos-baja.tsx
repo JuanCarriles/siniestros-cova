@@ -1,17 +1,21 @@
 import { Link } from 'react-router'
 import { ArrowRight, RefreshCw } from 'lucide-react'
 import { Aviso } from '@/components/aviso'
+import { usePanel } from '@/components/layout/panel-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { ConsultaSiniestrosActivosBaja } from './use-siniestros-activos-baja'
 
 export function SiniestrosActivosBaja({
   consulta,
+  nombre,
   onAbrir,
 }: {
   consulta: ConsultaSiniestrosActivosBaja
+  nombre: string
   onAbrir: () => void
 }) {
+  const { basePath } = usePanel()
   const { datos, cargando, error } = consulta
   if (cargando)
     return (
@@ -45,12 +49,12 @@ export function SiniestrosActivosBaja({
         </Aviso>
       ) : (
         <>
-          <p className="sr-only" role="status">
-            {casosActivos} {casosActivos === 1 ? 'siniestro pendiente' : 'siniestros pendientes'}.
-            La baja estará disponible cuando no quede ninguno activo.
+          <p role="status">
+            Para dar de baja a <strong>{nombre}</strong>, primero cerrá o reasigná estos siniestros.
+            Después tocá <strong>Actualizar casos</strong>.
           </p>
           {siniestros.length ? (
-            <ul className="grid max-h-64 gap-3 overflow-y-auto rounded-lg border p-3">
+            <ul className="grid gap-3 rounded-lg border p-3">
               {siniestros.map((caso) => (
                 <li
                   key={caso.id}
@@ -62,7 +66,7 @@ export function SiniestrosActivosBaja({
                     <Badge variant="info">{caso.estado}</Badge>
                   </div>
                   <Button asChild variant="outline">
-                    <Link to={`/siniestros/${caso.id}`} onClick={onAbrir}>
+                    <Link to={`${basePath}/siniestros/${caso.id}`} onClick={onAbrir}>
                       Ver siniestro <ArrowRight aria-hidden="true" />
                       <span className="sr-only"> {caso.numeroSiniestro}</span>
                     </Link>
