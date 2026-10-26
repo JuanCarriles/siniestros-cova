@@ -1,21 +1,34 @@
 import { normalizarDocumento } from '@cova/shared/schemas/siniestros-alta'
-import type { VehiculoBorrador } from './borrador-alta'
+import type { PersonaExternaBorrador, VehiculoBorrador } from './borrador-alta'
 
-// Personas del paso 2 del alta (E4-06), en el orden en que aparecen: por vehículo, el titular y sus ocupantes.
-function personasEnOrden(vehiculos: VehiculoBorrador[]) {
-  return vehiculos.flatMap((v) =>
-    [
-      v.titular && { persona: v.titular, rol: 'titular', vehiculo: v },
-      ...v.ocupantes.map((o) => ({ persona: o, rol: 'ocupante', vehiculo: v })),
-    ].filter((x) => !!x),
-  )
+/** Todas las personas del paso 2: las de cada vehículo y las que no iban en ninguno (E4-06 y E4-07). */
+export type Involucrados = {
+  vehiculos: VehiculoBorrador[]
+  personasExternas: PersonaExternaBorrador[]
+}
+
+// En el orden del alta: por vehículo, el titular y sus ocupantes; al final, las personas fuera de los vehículos.
+// Dónde está cargada cada una, para el aviso de documento repetido.
+function personasEnOrden({ vehiculos, personasExternas }: Involucrados) {
+  return [
+    ...vehiculos.flatMap((v) =>
+      [
+        v.titular && { persona: v.titular, donde: `titular del vehículo ${v.dominio}` },
+        ...v.ocupantes.map((o) => ({ persona: o, donde: `ocupante del vehículo ${v.dominio}` })),
+      ].filter((x) => !!x),
+    ),
+    ...personasExternas.map((p) => ({
+      persona: p,
+      donde: `persona fuera de los vehículos (${p.rolSinVehiculo})`,
+    })),
+  ]
 }
 
 /** Nombre a mostrar de cada persona. Sin nombre: "Desconocido 1", "Desconocido 2"… en el orden del alta. */
-export function nombresPersonas(vehiculos: VehiculoBorrador[]): Map<string, string> {
+export function nombresPersonas(involucrados: Involucrados): Map<string, string> {
   const nombres = new Map<string, string>()
   let desconocidos = 0
-  for (const { persona } of personasEnOrden(vehiculos))
+  for (const { persona } of personasEnOrden(involucrados))
     nombres.set(persona.clave, persona.nombreCompletoRazonSocial ?? `Desconocido ${++desconocidos}`)
   return nombres
 }
@@ -25,17 +38,17 @@ export function nombresPersonas(vehiculos: VehiculoBorrador[]): Map<string, stri
  * la misma persona o empresa puede ser titular de dos vehículos del siniestro.
  */
 export function documentoRepetido(
-  vehiculos: VehiculoBorrador[],
+  involucrados: Involucrados,
   documento: string | null | undefined,
   claveActual: string | null,
 ): string | null {
   const buscado = normalizarDocumento(documento ?? '')
   if (!buscado) return null
-  const otra = personasEnOrden(vehiculos).find(
+  const otra = personasEnOrden(involucrados).find(
     ({ persona }) =>
       persona.clave !== claveActual &&
       !!persona.documento &&
       normalizarDocumento(persona.documento) === buscado,
   )
-  return otra ? `${otra.rol} del vehículo ${otra.vehiculo.dominio}` : null
+  return otra?.donde ?? null
 }

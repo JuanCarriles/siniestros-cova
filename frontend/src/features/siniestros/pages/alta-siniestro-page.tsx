@@ -21,10 +21,12 @@ import {
   guardarBorrador,
   leerBorrador,
   type DatosCasoFormulario,
+  type PersonaExternaBorrador,
   type VehiculoBorrador,
 } from '../borrador-alta'
 import { DatosCasoForm } from '../components/datos-caso-form'
 import { PasosAlta } from '../components/pasos-alta'
+import { PersonasExternasAlta } from '../components/personas-externas-alta'
 import { VehiculosAlta } from '../components/vehiculos-alta'
 import type { cargarAltaSiniestro } from '../loader'
 
@@ -61,22 +63,44 @@ export function AltaSiniestroPage() {
   )
   const ultimos = useRef(datosCaso)
   const [vehiculos, setVehiculos] = useState<VehiculoBorrador[]>(inicial?.vehiculos ?? [])
+  const [personasExternas, setPersonasExternas] = useState<PersonaExternaBorrador[]>(
+    inicial?.personasExternas ?? [],
+  )
 
   const alCambiar = useCallback(
     (valores: DatosCasoFormulario) => {
       ultimos.current = valores
-      guardarBorrador(idUsuario, { paso: 1, datosCaso: valores, vehiculos })
+      guardarBorrador(idUsuario, { paso: 1, datosCaso: valores, vehiculos, personasExternas })
     },
-    [idUsuario, vehiculos],
+    [idUsuario, vehiculos, personasExternas],
   )
   function cambiarVehiculos(nuevos: VehiculoBorrador[]) {
     setVehiculos(nuevos)
-    guardarBorrador(idUsuario, { paso, datosCaso: ultimos.current, vehiculos: nuevos })
+    guardarBorrador(idUsuario, {
+      paso,
+      datosCaso: ultimos.current,
+      vehiculos: nuevos,
+      personasExternas,
+    })
+  }
+  function cambiarPersonasExternas(nuevas: PersonaExternaBorrador[]) {
+    setPersonasExternas(nuevas)
+    guardarBorrador(idUsuario, {
+      paso,
+      datosCaso: ultimos.current,
+      vehiculos,
+      personasExternas: nuevas,
+    })
   }
   function irAlPaso(numero: number) {
     setDatosCaso(ultimos.current)
     setPaso(numero)
-    guardarBorrador(idUsuario, { paso: numero, datosCaso: ultimos.current, vehiculos })
+    guardarBorrador(idUsuario, {
+      paso: numero,
+      datosCaso: ultimos.current,
+      vehiculos,
+      personasExternas,
+    })
     window.scrollTo({ top: 0 })
   }
   function descartar() {
@@ -135,9 +159,16 @@ export function AltaSiniestroPage() {
           />
           <VehiculosAlta
             vehiculos={vehiculos}
+            personasExternas={personasExternas}
             onCambiar={cambiarVehiculos}
             opciones={opciones}
             idAseguradoraSiniestro={String(datosCaso.idAseguradora ?? '')}
+          />
+          <PersonasExternasAlta
+            personas={personasExternas}
+            onCambiar={cambiarPersonasExternas}
+            vehiculos={vehiculos}
+            opciones={opciones}
           />
           <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="grid gap-3 sm:flex sm:flex-wrap">

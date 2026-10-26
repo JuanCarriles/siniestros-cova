@@ -178,8 +178,6 @@ const datosPersona = {
   fechaNacimiento: opcional(
     fechaSchema.refine((fecha) => fecha <= hoyArgentina(), 'La fecha no puede ser posterior a hoy'),
   ),
-  numeroPermisoConducir: libre(30),
-  fechaVencimientoCarnet: opcional(fechaSchema),
   telefono: libre(50),
   // Vacío es "sin email"; cualquier otra cosa tiene que ser un email (si no, el mensaje genérico sería en inglés)
   email: z
@@ -199,6 +197,11 @@ const datosPersona = {
   conLesiones: booleanoSchema,
   tipoLesion: opcional(tipoLesionSchema),
   descripcionLesiones: libre(2000),
+}
+// Solo para quien iba en un vehículo
+const permisoConducir = {
+  numeroPermisoConducir: libre(30),
+  fechaVencimientoCarnet: opcional(fechaSchema),
 }
 const lugarEnVehiculo = {
   lugar: opcional(z.enum(LUGARES_EN_VEHICULO)),
@@ -230,18 +233,25 @@ function reglasPersona(datos: Reglas, ctx: z.RefinementCtx) {
     ctx.addIssue({ code: 'custom', path: ['lugarOtro'], message: 'Indicá dónde iba' })
 }
 // Lo que dejó de corresponder no se guarda: sin lesiones no hay gravedad ni descripción
-function limpiarPersona<T extends Reglas & { descripcionLesiones?: string | null }>(datos: T): T {
+function limpiarLesiones<T extends Reglas & { descripcionLesiones?: string | null }>(datos: T): T {
   return {
     ...datos,
     tipoLesion: datos.conLesiones ? datos.tipoLesion : null,
     descripcionLesiones: datos.conLesiones ? datos.descripcionLesiones : null,
-    lugarOtro: datos.lugar === 'Otro' ? datos.lugarOtro : null,
   }
+}
+function limpiarPersona<T extends Reglas & { descripcionLesiones?: string | null }>(datos: T): T {
+  return limpiarLesiones({ ...datos, lugarOtro: datos.lugar === 'Otro' ? datos.lugarOtro : null })
 }
 
 // Titular del vehículo: primero, si iba en él y dónde
 export const titularAltaSchema = z
-  .strictObject({ ibaEnVehiculo: booleanoSchema, ...lugarEnVehiculo, ...datosPersona })
+  .strictObject({
+    ibaEnVehiculo: booleanoSchema,
+    ...lugarEnVehiculo,
+    ...datosPersona,
+    ...permisoConducir,
+  })
   .superRefine((datos, ctx) =>
     reglasPersona(datos.ibaEnVehiculo ? datos : { ...datos, lugar: null }, ctx),
   )
@@ -251,7 +261,12 @@ export const titularAltaSchema = z
 
 // Ocupante: dónde iba y, si manejaba él (no el titular), qué relación tiene con el titular
 export const ocupanteAltaSchema = z
-  .strictObject({ ...lugarEnVehiculo, relacionPropietario: libre(150), ...datosPersona })
+  .strictObject({
+    ...lugarEnVehiculo,
+    relacionPropietario: libre(150),
+    ...datosPersona,
+    ...permisoConducir,
+  })
   .superRefine(reglasPersona)
   .transform((datos) =>
     limpiarPersona({
@@ -264,3 +279,21 @@ export type TitularAltaInput = z.input<typeof titularAltaSchema>
 export type TitularAltaData = z.output<typeof titularAltaSchema>
 export type OcupanteAltaInput = z.input<typeof ocupanteAltaSchema>
 export type OcupanteAltaData = z.output<typeof ocupanteAltaSchema>
+
+// ------------------------------------------------------------------ Paso 2: personas fuera de los vehículos (CU-09 19-22, E4-07)
+
+/** Los roles más comunes, como atajo: el rol se escribe libre ("dueño del comercio", "conductor de la moto"…). */
+export const ROLES_SIN_VEHICULO = ['Peatón', 'Testigo', 'Dueño/a de propiedad'] as const
+
+// Peatones, testigos, dueños de propiedades dañadas: el rol es lo único obligatorio (explica por qué está en el
+// siniestro). Sin permiso de conducir ni lugar en un vehículo.
+export const personaExternaAltaSchema = z
+  .strictObject({
+    rolSinVehiculo: obligatorio('Indicá qué rol tuvo en el siniestro', 100),
+    ...datosPersona,
+  })
+  .superRefine(reglasPersona)
+  .transform(limpiarLesiones)
+
+export type PersonaExternaAltaInput = z.input<typeof personaExternaAltaSchema>
+export type PersonaExternaAltaData = z.output<typeof personaExternaAltaSchema>
