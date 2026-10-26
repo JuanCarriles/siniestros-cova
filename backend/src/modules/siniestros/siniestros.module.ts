@@ -1,5 +1,7 @@
+import { crearAlmacenamientoR2, type AlmacenamientoR2 } from '../../lib/r2.ts'
 import { getPrisma } from '../../lib/prisma.ts'
 import { requerirSesion } from '../auth/auth.module.ts'
+import { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import { crearSiniestrosRouter } from './siniestros.routes.ts'
 import { crearServicioSiniestros } from './siniestros.service.ts'
 
@@ -23,7 +25,16 @@ const db = {
   },
 }
 
+let almacenamiento: AlmacenamientoR2 | undefined
+const operaciones = crearServicioBajasSiniestros({
+  almacenamiento: () => (almacenamiento ??= crearAlmacenamientoR2()),
+  base: {
+    transaccion: (trabajo) => getPrisma().$transaction(trabajo, { timeout: 15_000 }),
+  },
+})
+
 export const siniestrosRouter = crearSiniestrosRouter({
   servicio: crearServicioSiniestros(db),
+  operaciones,
   requerirSesion,
 })

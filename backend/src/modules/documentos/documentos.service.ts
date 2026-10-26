@@ -30,7 +30,7 @@ export function crearServicioDocumentos(deps: {
     if (!usuario) throw new HttpError(403, 'Usuario no disponible')
     await autorizar(acceso)
     const siniestro = await prisma.siniestro.findFirst({
-      where: { id: acceso.destino.idSiniestro, eliminado: false },
+      where: { id: acceso.destino.idSiniestro, eliminado: false, eliminacionEnCurso: false },
       select: { id: true },
     })
     if (!siniestro) throw new HttpError(404, 'Siniestro no disponible')
@@ -47,6 +47,7 @@ export function crearServicioDocumentos(deps: {
       const carpeta = `siniestros/${destino.idSiniestro}`
       const archivo = await almacenamiento.subir(entrada.archivo, carpeta)
       try {
+        await comprobarAcceso({ idUsuario, accion: 'subir', destino })
         const data = documentoSiniestroSchema.parse({
           nombreOriginal: archivo.nombreOriginal,
           urlArchivoSinDominio: archivo.clave,

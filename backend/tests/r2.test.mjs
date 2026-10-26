@@ -158,6 +158,7 @@ test('servicio: guarda sólo la clave y firma usando el registro consultado', as
   assert.deepEqual(llamadas, [
     'autorizar',
     'subir',
+    'autorizar',
     'guardar',
     'autorizar',
     'firmar:siniestros/2/uuid.pdf',
@@ -188,7 +189,13 @@ test('servicio: si Prisma falla después de subir, compensa eliminando sólo la 
     servicio.subir({ idUsuario: 1, destino: { tipo: 'siniestro', idSiniestro: 2 }, archivo }),
     { status: 503 },
   )
-  assert.deepEqual(llamadas, ['autorizar', 'subir', 'guardar', 'eliminar:siniestros/2/uuid.pdf'])
+  assert.deepEqual(llamadas, [
+    'autorizar',
+    'subir',
+    'autorizar',
+    'guardar',
+    'eliminar:siniestros/2/uuid.pdf',
+  ])
 })
 
 test('servicio: un usuario sin permiso de descarga nunca obtiene una firma', async () => {
@@ -231,4 +238,39 @@ test('existencia: HEAD usa la clave de la base; ausencia 404 y errores de acceso
   }
   await assert.rejects(almacenamiento.comprobarExistencia('https://otro.example/archivo.pdf'))
   almacenamiento.cerrar()
+})
+
+test('documentos: si empieza la eliminación del caso durante la subida, compensa el objeto y no registra el documento', async () => {
+  let consultas = 0
+  let guardado = false
+  let eliminado = null
+  const servicio = crearServicioDocumentos({
+    prisma: {
+      usuario: { findFirst: async () => ({ id: 1 }) },
+      siniestro: {
+        findFirst: async ({ where }) => {
+          assert.equal(where.eliminacionEnCurso, false)
+          return ++consultas === 1 ? { id: 2 } : null
+        },
+      },
+      documentoSiniestro: {
+        create: async () => {
+          guardado = true
+        },
+      },
+    },
+    autorizar: async () => {},
+    almacenamiento: {
+      subir: async () => ({ clave: 'siniestros/2/nuevo.pdf' }),
+      eliminar: async (clave) => {
+        eliminado = clave
+      },
+    },
+  })
+  await assert.rejects(
+    servicio.subir({ idUsuario: 1, destino: { tipo: 'siniestro', idSiniestro: 2 }, archivo }),
+    { status: 503 },
+  )
+  assert.equal(guardado, false)
+  assert.equal(eliminado, 'siniestros/2/nuevo.pdf')
 })

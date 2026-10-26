@@ -33,6 +33,7 @@ enum TipoEventoHistorial {
   ASIGNACION
   REASIGNACION
   CAMBIO_ESTADO
+  BAJA_SINIESTRO
 }
 
 enum TipoPerito {
@@ -439,6 +440,8 @@ model Siniestro {
   idDireccion           Int?
   eliminado             Boolean   @default(false)
   fechaBaja             DateTime? @db.Timestamptz(3)
+  /// Impide nuevas operaciones mientras se eliminan los archivos externos; permite reintentar fallos.
+  eliminacionEnCurso    Boolean   @default(false)
 
   estadoSiniestro      EstadoSiniestro      @relation(fields: [idEstadoSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   aseguradora          Aseguradora          @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)

@@ -24,6 +24,11 @@ const evento = (tipoEvento: TipoEventoHistorial, descripcion: string): EventoHis
 })
 
 export const eventoHistorial = {
+  bajaSiniestro: (autor: Persona, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.BAJA_SINIESTRO,
+      `${nombreCompleto(autor)} dio de baja lógica el siniestro el ${formatearFecha(fecha)}`,
+    ),
   /** "Se asignó el caso al usuario Pedro González el 20/10/2026" */
   asignacion: (asignado: Persona, fecha: Date) =>
     evento(
