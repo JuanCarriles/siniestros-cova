@@ -1,6 +1,7 @@
 import {
   parametrosListadoValidos,
   type OpcionesSiniestros,
+  type ConfirmarSiniestro,
   type PaginaSiniestros,
   type PartesSiniestro,
   type SiniestroResumen,
@@ -23,6 +24,13 @@ export function partesSiniestro(id: number): Promise<PartesSiniestro> {
 
 export function obtenerSiniestro(id: number): Promise<SiniestroResumen> {
   return api(`/siniestros/${id}`)
+}
+
+export function darDeBajaSiniestro(id: number): Promise<void> {
+  return api(`/siniestros/${id}/baja`, { method: 'PATCH' })
+}
+export function eliminarSiniestro(id: number, confirmacion: ConfirmarSiniestro): Promise<void> {
+  return api(`/siniestros/${id}`, { method: 'DELETE', body: confirmacion })
 }
 
 // ------------------------------------------------------------------ Alta (E4-04)

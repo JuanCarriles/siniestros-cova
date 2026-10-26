@@ -35,14 +35,16 @@ export function rutaLoginSesionVencida(volver = window.location.pathname + windo
 
 export async function api<T = void>(ruta: string, opciones: Opciones = {}): Promise<T> {
   const { method = 'GET', body, signal, sesion = 'requerida' } = opciones
+  const esFormulario = body instanceof FormData
   let respuesta: Response
   try {
     respuesta = await fetch(`/api${ruta}`, {
       method,
       signal,
       credentials: 'same-origin',
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers:
+        body === undefined || esFormulario ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : esFormulario ? body : JSON.stringify(body),
     })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err
