@@ -322,7 +322,7 @@ export function DatosCasoForm({
         </Grupo>
 
         <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-3">{acciones}</div>
+          <div className="grid gap-3 sm:flex sm:flex-wrap">{acciones}</div>
           <Button type="submit" size="lg" loading={isSubmitting}>
             Continuar
             <ArrowRight aria-hidden="true" />

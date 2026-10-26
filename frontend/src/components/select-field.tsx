@@ -57,7 +57,7 @@ export function SelectField({
       .join(' ') || undefined
 
   return (
-    <div className={cn('grid gap-1.5', containerClassName)}>
+    <div className={cn('grid content-start gap-1.5', containerClassName)}>
       <Label htmlFor={id}>
         {label}
         {required && (

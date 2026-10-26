@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { Link, useLoaderData, useNavigate } from 'react-router'
-import { ChevronLeft, Construction, Pencil } from 'lucide-react'
+import { ArrowRight, ChevronLeft, Construction, Pencil } from 'lucide-react'
 import { PASOS_ALTA } from '@cova/shared/schemas/siniestros-alta'
 import { Aviso } from '@/components/aviso'
 import { usePanel } from '@/components/layout/panel-context'
@@ -21,9 +21,11 @@ import {
   guardarBorrador,
   leerBorrador,
   type DatosCasoFormulario,
+  type VehiculoBorrador,
 } from '../borrador-alta'
 import { DatosCasoForm } from '../components/datos-caso-form'
 import { PasosAlta } from '../components/pasos-alta'
+import { VehiculosAlta } from '../components/vehiculos-alta'
 import type { cargarAltaSiniestro } from '../loader'
 
 const fechaHora = (iso: string) =>
@@ -34,7 +36,7 @@ const fechaHora = (iso: string) =>
     minute: '2-digit',
   })
 
-// CU-09: alta de siniestro en cinco pasos (E4-04 hace el primero). Lo cargado se guarda en este navegador a
+// CU-09: alta de siniestro en cinco pasos (E4-04 el primero; E4-05 los vehículos del segundo). Lo cargado se guarda en este navegador a
 // medida que se escribe; el siniestro recién se crea al confirmar el último paso.
 export function AltaSiniestroPage() {
   const { idUsuario, opciones } = useLoaderData<typeof cargarAltaSiniestro>()
@@ -58,18 +60,23 @@ export function AltaSiniestroPage() {
         },
   )
   const ultimos = useRef(datosCaso)
+  const [vehiculos, setVehiculos] = useState<VehiculoBorrador[]>(inicial?.vehiculos ?? [])
 
   const alCambiar = useCallback(
     (valores: DatosCasoFormulario) => {
       ultimos.current = valores
-      guardarBorrador(idUsuario, 1, valores)
+      guardarBorrador(idUsuario, { paso: 1, datosCaso: valores, vehiculos })
     },
-    [idUsuario],
+    [idUsuario, vehiculos],
   )
+  function cambiarVehiculos(nuevos: VehiculoBorrador[]) {
+    setVehiculos(nuevos)
+    guardarBorrador(idUsuario, { paso, datosCaso: ultimos.current, vehiculos: nuevos })
+  }
   function irAlPaso(numero: number) {
     setDatosCaso(ultimos.current)
     setPaso(numero)
-    guardarBorrador(idUsuario, numero, ultimos.current)
+    guardarBorrador(idUsuario, { paso: numero, datosCaso: ultimos.current, vehiculos })
     window.scrollTo({ top: 0 })
   }
   function descartar() {
@@ -116,20 +123,37 @@ export function AltaSiniestroPage() {
           }}
           acciones={cancelar}
         />
+      ) : paso === 2 ? (
+        <section className="grid gap-6">
+          <ResumenCaso
+            numero={String(datosCaso.numeroSiniestro)}
+            aseguradora={
+              opciones.aseguradoras.find((a) => String(a.id) === String(datosCaso.idAseguradora))
+                ?.nombre
+            }
+            onModificar={() => irAlPaso(1)}
+          />
+          <VehiculosAlta
+            vehiculos={vehiculos}
+            onCambiar={cambiarVehiculos}
+            aseguradoras={opciones.aseguradoras}
+            idAseguradoraSiniestro={String(datosCaso.idAseguradora ?? '')}
+          />
+          <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid gap-3 sm:flex sm:flex-wrap">
+              {cancelar}
+              <Button type="button" size="lg" variant="outline" onClick={() => irAlPaso(1)}>
+                Volver a datos del caso
+              </Button>
+            </div>
+            <Button type="button" size="lg" onClick={() => irAlPaso(3)}>
+              Continuar
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          </div>
+        </section>
       ) : (
         <section className="grid gap-6">
-          <div className="rounded-xl border bg-card p-6 shadow-card">
-            <h2 className="text-xl font-bold text-primary">Datos del caso listos</h2>
-            <p className="mt-2 text-muted-foreground">
-              Siniestro{' '}
-              <span className="dato font-semibold text-foreground">
-                {datosCaso.numeroSiniestro}
-              </span>{' '}
-              ·{' '}
-              {opciones.aseguradoras.find((a) => String(a.id) === String(datosCaso.idAseguradora))
-                ?.nombre ?? 'Aseguradora'}
-            </p>
-          </div>
           <div className="flex flex-wrap items-center gap-6 rounded-xl border bg-card px-6 py-10 shadow-card sm:px-10">
             <span
               className="grid size-16 place-items-center rounded-2xl bg-callout-bg text-primary"
@@ -138,15 +162,14 @@ export function AltaSiniestroPage() {
               <Construction className="size-8" />
             </span>
             <p className="max-w-xl text-muted-foreground">
-              El paso «{PASOS_ALTA[1]}» todavía está en construcción. Lo cargado queda guardado en
-              este navegador: podés volver a esta pantalla cuando esté disponible.
+              El paso «{PASOS_ALTA[paso - 1]}» todavía está en construcción. Lo cargado queda
+              guardado en este navegador: podés volver a esta pantalla cuando esté disponible.
             </p>
           </div>
           <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:justify-between">
             {cancelar}
-            <Button type="button" size="lg" variant="outline" onClick={() => irAlPaso(1)}>
-              <Pencil aria-hidden="true" />
-              Volver a datos del caso
+            <Button type="button" size="lg" variant="outline" onClick={() => irAlPaso(paso - 1)}>
+              Volver a {PASOS_ALTA[paso - 2].toLowerCase()}
             </Button>
           </div>
         </section>
@@ -172,5 +195,30 @@ export function AltaSiniestroPage() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+// Recuerda de qué siniestro se trata mientras se cargan los pasos siguientes
+function ResumenCaso({
+  numero,
+  aseguradora,
+  onModificar,
+}: {
+  numero: string
+  aseguradora: string | undefined
+  onModificar: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-5 py-4 shadow-card sm:px-6">
+      <p className="text-lg">
+        <span className="text-muted-foreground">Siniestro </span>
+        <span className="dato font-bold">{numero}</span>
+        <span className="text-muted-foreground"> · {aseguradora ?? 'Aseguradora'}</span>
+      </p>
+      <Button type="button" variant="link" className="px-0" onClick={onModificar}>
+        <Pencil aria-hidden="true" />
+        Modificar datos del caso
+      </Button>
+    </div>
   )
 }
