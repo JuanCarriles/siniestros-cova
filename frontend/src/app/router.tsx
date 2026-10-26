@@ -6,7 +6,12 @@ import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
 import { cargarAjustadores } from '@/features/ajustadores/loader'
 import { AjustadoresPage } from '@/features/ajustadores/pages/ajustadores-page'
 import { cargarAseguradoras } from '@/features/aseguradoras/loader'
-import { cargarFichaSiniestro, cargarSiniestros } from '@/features/siniestros/loader'
+import {
+  cargarAltaSiniestro,
+  cargarFichaSiniestro,
+  cargarSiniestros,
+} from '@/features/siniestros/loader'
+import { AltaSiniestroPage } from '@/features/siniestros/pages/alta-siniestro-page'
 import { FichaSiniestroPage } from '@/features/siniestros/pages/ficha-siniestro-page'
 import { SiniestrosPage } from '@/features/siniestros/pages/siniestros-page'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
@@ -89,6 +94,11 @@ export const router = createBrowserRouter([
             // Sin path: sus errores (403 por rol, fallas al cargar) se muestran dentro del panel, con el menú
             errorElement: <SeccionNoDisponible />,
             children: [
+              {
+                path: 'siniestros/nuevo',
+                loader: cargarAltaSiniestro,
+                Component: AltaSiniestroPage,
+              },
               {
                 path: 'siniestros/:idSiniestro',
                 loader: cargarFichaSiniestro,

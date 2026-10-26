@@ -142,7 +142,8 @@ ocultar columnas). Mientras entra, el encabezado se pega al borde de la pantalla
 recorta con `overflow-clip` y no con `overflow-hidden`).
 
 Para buscar sin importar tildes ni mayúsculas: `normalizarBusqueda` (`src/lib/texto.ts`). En los formularios, una lista
-desplegable es un `SelectField` (`src/components/select-field.tsx`) dentro de un `Controller` de react-hook-form.
+desplegable es un `SelectField` (`src/components/select-field.tsx`) dentro de un `Controller` de react-hook-form, y un
+texto largo es un `TextareaField` (`src/components/textarea-field.tsx`), con la misma etiqueta, ayuda y error que `TextField`.
 
 Con la letra grande del sistema, una tabla de seis columnas más el menú ya no entra a 1280 px: agrupar datos afines en una
 columna (ajustadores: email y teléfono en "Contacto") antes que dejar que aparezca desplazamiento de costado.
