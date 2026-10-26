@@ -43,7 +43,8 @@
     "seed:volumen": "tsx --env-file-if-exists=.env prisma/seeds/seed-volumen.ts",
     "db:reset:dev": "prisma migrate reset --config prisma.config.ts && npm run seed:dev",
     "test:plantillas": "node --experimental-strip-types --test tests/plantillas.test.mjs",
-    "test:plantillas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/plantillas.db.test.mjs"
+    "test:plantillas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/plantillas.db.test.mjs",
+    "test:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/bajas-siniestros.db.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1151.0",
