@@ -4,18 +4,25 @@ import {
   useLocation,
   useNavigate,
   useNavigation,
+  useRevalidator,
   useRouteLoaderData,
   useSearchParams,
 } from 'react-router'
 import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, Trash2 } from 'lucide-react'
 import {
   DIAS_ALERTA,
+  esCierreEnviado,
   DIAS_DEMORADO,
   parametrosListadoValidos,
   POR_PAGINA,
   type OrdenSiniestros,
   type SiniestroListado,
 } from '@cova/shared/schemas/siniestros'
+import { Aviso } from '@/components/aviso'
+import {
+  OperacionSiniestroDialog,
+  type OperacionSiniestro,
+} from '../components/operacion-siniestro-dialog'
 import { BarraAbm } from '@/components/abm/barra-abm'
 import type { AccionFila } from '@/components/abm/menu-acciones'
 import { FiltroAbm } from '@/components/abm/filtro-abm'
@@ -63,6 +70,19 @@ export function SiniestrosPage() {
   const visibles = columnasRol.filter((c) => columnas.visible(c.id))
   const [pedido, setPedido] = useState<PedidoPartes | null>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
+  const revalidator = useRevalidator()
+  const [operacion, setOperacion] = useState<OperacionSiniestro | null>(null)
+  const [mensaje, setMensaje] = useState<string | null>(null)
+  const origenOperacion = useRef<HTMLButtonElement | null>(null)
+  function abrirOperacion(
+    tipo: OperacionSiniestro['tipo'],
+    siniestro: SiniestroListado,
+    origen: HTMLButtonElement | null,
+  ) {
+    origenOperacion.current = origen
+    setMensaje(null)
+    setOperacion({ tipo, siniestro })
+  }
 
   // Cambia filtros en la dirección; cualquier filtro nuevo vuelve a la primera página
   function cambiar(valores: Record<string, string | null>) {
@@ -129,37 +149,38 @@ export function SiniestrosPage() {
     })
   const hrefSiniestro = (id: number) => `${basePath}/siniestros/${id}`
 
-  // Menú ⋮ (mockup "Menú de acciones de una fila"). Dar de baja y eliminar llegan en sus propias historias: por ahora
-  // se ven deshabilitadas. Eliminar solo aplica a los casos cerrados (RF-14); el gestor solo ve el detalle.
-  const sinAccion = () => undefined
+  // CU-09 3.d/3.e. El servidor vuelve a validar rol, estado y número al confirmar.
   const acciones = (s: SiniestroListado): AccionFila[] => [
-    {
-      etiqueta: 'Ver detalle',
-      icono: <Eye aria-hidden="true" />,
-      onSelect: () => void navigate(hrefSiniestro(s.id)),
-    },
+    ...(!s.eliminacionEnCurso
+      ? [
+          {
+            etiqueta: 'Ver detalle',
+            icono: <Eye aria-hidden="true" />,
+            onSelect: () => void navigate(hrefSiniestro(s.id)),
+          },
+        ]
+      : []),
     ...(esGestor
       ? []
       : [
-          ...(s.eliminado
-            ? []
-            : [
+          ...(!s.eliminado && !s.eliminacionEnCurso
+            ? [
                 {
                   etiqueta: 'Dar de baja',
                   icono: <CircleMinus aria-hidden="true" />,
                   peligro: true,
-                  proximamente: true,
-                  onSelect: sinAccion,
+                  onSelect: (origen: HTMLButtonElement | null) => abrirOperacion('baja', s, origen),
                 },
-              ]),
-          ...(s.estado.esCierre
+              ]
+            : []),
+          ...(esCierreEnviado(s.estado)
             ? [
                 {
-                  etiqueta: 'Eliminar',
+                  etiqueta: s.eliminacionEnCurso ? 'Reintentar eliminación' : 'Eliminar',
                   icono: <Trash2 aria-hidden="true" />,
                   peligro: true,
-                  proximamente: true,
-                  onSelect: sinAccion,
+                  onSelect: (origen: HTMLButtonElement | null) =>
+                    abrirOperacion('eliminar', s, origen),
                 },
               ]
             : []),
@@ -262,6 +283,7 @@ export function SiniestrosPage() {
       <FiltrosActivos filtros={activos} onQuitar={quitarFiltro} onQuitarTodos={quitarTodos} />
 
       <ListadoAbm
+        aviso={mensaje && <Aviso tipo="exito">{mensaje}</Aviso>}
         tituloRef={titulo}
         titulo={plural(pagina.total, 'siniestro')}
         resumen={[
@@ -363,6 +385,24 @@ export function SiniestrosPage() {
         </div>
       </ListadoAbm>
 
+      {operacion && (
+        <OperacionSiniestroDialog
+          key={`${operacion.tipo}-${operacion.siniestro.id}`}
+          operacion={operacion}
+          onCerrar={() => setOperacion(null)}
+          onHecho={(texto) => {
+            setOperacion(null)
+            setMensaje(texto)
+            void revalidator.revalidate()
+          }}
+          onDesactualizado={() => void revalidator.revalidate()}
+          elementoAlCerrar={(completado) =>
+            !completado && origenOperacion.current?.isConnected
+              ? origenOperacion.current
+              : titulo.current
+          }
+        />
+      )}
       <PartesDialog pedido={pedido} onCerrar={() => setPedido(null)} />
     </>
   )

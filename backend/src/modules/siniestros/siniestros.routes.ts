@@ -1,9 +1,14 @@
 import { Router, type RequestHandler } from 'express'
 import { idSchema } from '@cova/shared/schemas/comunes'
-import { filtrosSiniestrosSchema } from '@cova/shared/schemas/siniestros'
+import {
+  confirmarBajaSiniestroSchema,
+  confirmarSiniestroSchema,
+  filtrosSiniestrosSchema,
+} from '@cova/shared/schemas/siniestros'
 import { datosCasoSchema } from '@cova/shared/schemas/siniestros-alta'
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import type { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
+import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import type { crearServicioSiniestros } from './siniestros.service.ts'
 
 // CU-09. Todos los roles; el servicio limita al gestor a sus siniestros (RF-17).
@@ -15,11 +20,12 @@ import type { crearServicioSiniestros } from './siniestros.service.ts'
 // GET  /api/siniestros/alta/opciones
 // POST /api/siniestros/alta/datos-caso   valida el paso 1 (204 o el error con su campo)
 export function crearSiniestrosRouter(deps: {
+  operaciones: ReturnType<typeof crearServicioBajasSiniestros>
   servicio: ReturnType<typeof crearServicioSiniestros>
   alta: ReturnType<typeof crearServicioAltaSiniestros>
   requerirSesion: RequestHandler
 }) {
-  const { servicio, alta, requerirSesion } = deps
+  const { servicio, alta, operaciones, requerirSesion } = deps
   const router = Router()
   router.use(requerirSesion, requerirRol('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'))
 
@@ -40,6 +46,23 @@ export function crearSiniestrosRouter(deps: {
     res.json(await servicio.opciones(usuarioDeSesion(req)))
   })
 
+  router.patch(
+    '/:id/baja',
+    requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'),
+    async (req, res) => {
+      confirmarBajaSiniestroSchema.parse(req.body ?? {})
+      await operaciones.darDeBaja(usuarioDeSesion(req), idSchema.parse(req.params.id))
+      res.status(204).end()
+    },
+  )
+  router.delete('/:id', requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'), async (req, res) => {
+    await operaciones.eliminar(
+      usuarioDeSesion(req),
+      idSchema.parse(req.params.id),
+      confirmarSiniestroSchema.parse(req.body),
+    )
+    res.status(204).end()
+  })
   router.get('/:id', async (req, res) => {
     res.json(await servicio.obtener(usuarioDeSesion(req), idSchema.parse(req.params.id)))
   })

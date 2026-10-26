@@ -6,6 +6,8 @@ import {
   type AjustadorListado,
   type BloqueoBajaAjustador,
 } from '@cova/shared/schemas/ajustadores'
+import { SiniestrosActivosBaja } from '@/components/abm/siniestros-activos-baja'
+import { useSiniestrosActivosBaja } from '@/components/abm/use-siniestros-activos-baja'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
 import {
@@ -50,13 +52,20 @@ export function EstadoAjustadorDialog({
   const ajustador = cambio?.ajustador
   const bloqueo = bloqueoServidor?.idAjustador === ajustador?.id ? bloqueoServidor : null
   const nombre = ajustador ? `${ajustador.nombres} ${ajustador.apellidos}` : ''
-  const casos = bloqueo?.casosActivos ?? ajustador?.casosActivos ?? 0
+  const consulta = useSiniestrosActivosBaja({
+    tipo: 'ajustador',
+    id: ajustador?.id,
+    habilitado: abierto && cambio?.tipo === 'baja',
+  })
+  const casos =
+    consulta.datos?.casosActivos ?? bloqueo?.casosActivos ?? ajustador?.casosActivos ?? 0
+  const pendienteConsulta = cambio?.tipo === 'baja' && !consulta.verificada
   const bajaBloqueada = cambio?.tipo === 'baja' && casos > 0
   const reactivacionBloqueada = cambio?.tipo === 'reactivar' && ajustador?.aseguradora.eliminado
   const bloqueada = bajaBloqueada || reactivacionBloqueada
 
   async function confirmar() {
-    if (!cambio || enviando || bloqueada) return
+    if (!cambio || enviando || bloqueada || pendienteConsulta) return
     setEnviando(true)
     setError(null)
     try {
@@ -73,6 +82,7 @@ export function EstadoAjustadorDialog({
       )
       if (err instanceof ApiError && err.status === 409 && datos.success) {
         setBloqueoServidor(datos.data)
+        consulta.actualizar()
         onDesactualizado?.()
       } else {
         setError(err instanceof ApiError ? err.message : 'No se pudo completar. Probá de nuevo.')
@@ -150,9 +160,11 @@ export function EstadoAjustadorDialog({
             {error}
           </Aviso>
         )}
+        {cambio?.tipo === 'baja' && (
+          <SiniestrosActivosBaja consulta={consulta} nombre={nombre} onAbrir={onCerrar} />
+        )}
         <DialogFooter>
           {bajaBloqueada ? (
-            // Sin "Ver sus siniestros" hasta que exista el módulo de siniestros
             <DialogClose asChild>
               <Button ref={principal}>Entendido</Button>
             </DialogClose>
@@ -173,6 +185,7 @@ export function EstadoAjustadorDialog({
                 <Button
                   variant={cambio?.tipo === 'baja' ? 'destructive' : 'default'}
                   loading={enviando}
+                  disabled={pendienteConsulta}
                   onClick={() => void confirmar()}
                 >
                   {cambio?.tipo === 'baja' ? 'Dar de baja' : 'Reactivar'}
