@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -22,7 +24,10 @@ const nombreArchivoSchema = z
 
 const archivoSchema = z.strictObject({
   nombreOriginal: nombreArchivoSchema,
-  contenido: z.instanceof(Uint8Array),
+  contenido: z.custom<Uint8Array>(
+    (value) => value instanceof Uint8Array,
+    'Contenido de archivo inválido',
+  ),
 })
 
 export type ArchivoEntrada = z.input<typeof archivoSchema>
@@ -108,7 +113,7 @@ export function crearAlmacenamientoR2(
       }
       const tipoExtension = extension as keyof typeof tiposMime
       const mimeType = tiposMime[tipoExtension]
-      const contenido = Buffer.from(archivo.contenido)
+      const contenido = archivo.contenido
       const clave = claveArchivoSchema.parse(`${prefijo}/${randomUUID()}.${tipoExtension}`)
       try {
         await s3.send(
@@ -131,6 +136,31 @@ export function crearAlmacenamientoR2(
         tipoExtension,
         mimeType,
         tamanoBytes: BigInt(contenido.byteLength),
+      }
+    },
+
+    // Una firma se genera localmente: no demuestra que el objeto exista en R2.
+    // Comprobar solo después de autorizar y resolver la clave desde la base.
+    async comprobarExistencia(clave: string) {
+      const key = claveArchivoSchema.parse(clave)
+      try {
+        await s3.send(new HeadObjectCommand({ Bucket: config.R2_BUCKET, Key: key }))
+      } catch (error) {
+        const nombre = (error as { name?: unknown } | null)?.name
+        if (nombre === 'NotFound' || nombre === 'NoSuchKey') {
+          // HEAD puede devolver un 404 genérico también si falta el bucket.
+          // Solo confirmar ausencia del archivo si el bucket sigue accesible.
+          try {
+            await s3.send(new HeadBucketCommand({ Bucket: config.R2_BUCKET }))
+          } catch (errorBucket) {
+            throw errorR2('No se pudo comprobar la disponibilidad del bucket de R2', errorBucket)
+          }
+          throw new HttpError(
+            404,
+            'El archivo de esta plantilla no está disponible en el almacenamiento. Pedile a un administrador que vuelva a cargarlo.',
+          )
+        }
+        throw errorR2('No se pudo comprobar la disponibilidad del archivo en R2', error)
       }
     },
 

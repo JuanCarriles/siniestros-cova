@@ -42,6 +42,8 @@
     "seed:dev": "tsx --env-file-if-exists=.env prisma/seeds/seed-dev.ts",
     "seed:volumen": "tsx --env-file-if-exists=.env prisma/seeds/seed-volumen.ts",
     "db:reset:dev": "prisma migrate reset --config prisma.config.ts && npm run seed:dev",
+    "test:plantillas": "node --experimental-strip-types --test tests/plantillas.test.mjs",
+    "test:plantillas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/plantillas.db.test.mjs",
     "test:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/bajas-siniestros.db.test.mjs"
   },
   "dependencies": {
@@ -53,12 +55,15 @@
     "argon2": "^0.45.1",
     "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
+    "file-type": "^22.2.0",
     "helmet": "^8.3.0",
+    "multer": "^2.5.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.20.5",
     "prisma": "7.10.0",
     "tsdown": "^0.21.10",

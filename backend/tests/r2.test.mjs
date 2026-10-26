@@ -60,13 +60,18 @@ test('subida: clave UUID, tamaño real, contenido privado y ninguna URL en los m
   assert.equal(comandos[0].input.ACL, undefined)
   assert.equal(comandos[0].input.CacheControl, 'private, no-store')
   assert.equal(comandos[0].input.ContentLength, archivo.contenido.byteLength)
-  assert.deepEqual(comandos[0].input.Body, archivo.contenido)
+  assert.equal(
+    comandos[0].input.Body,
+    archivo.contenido,
+    'R2 recibe el mismo Buffer, sin copiar los bytes',
+  )
   almacenamiento.cerrar()
 })
 
 test('subida: rechaza vacíos, exceso de tamaño, extensiones y nombres inválidos antes de enviar', async () => {
   const { almacenamiento, comandos } = almacenamientoPrueba()
   for (const entrada of [
+    { ...archivo, contenido: 'bytes inválidos' },
     { ...archivo, contenido: Buffer.alloc(0) },
     { ...archivo, contenido: Buffer.alloc(10 * 1024 * 1024 + 1) },
     { ...archivo, nombreOriginal: 'ejecutable.exe' },
@@ -109,13 +114,6 @@ function servicioPrueba({ denegar = false, fallaBase = false, eliminado = false 
         assert.equal(where.eliminado, false)
         return eliminado ? null : documento
       },
-    },
-    documentoPlantilla: {
-      create: async ({ data }) => {
-        documento = { id: 3, ...data }
-        return documento
-      },
-      findFirst: async () => documento,
     },
   }
   const almacenamiento = {
@@ -166,17 +164,14 @@ test('servicio: guarda sólo la clave y firma usando el registro consultado', as
   ])
 })
 
-test('plantillas: el campo histórico urlArchivo también guarda una clave relativa', async () => {
-  const { servicio } = servicioPrueba()
-  const plantilla = await servicio.subir({ idUsuario: 1, destino: { tipo: 'plantilla' }, archivo })
-  assert.equal(plantilla.urlArchivo, 'plantillas/uuid.pdf')
-  await servicio.descargar({ idUsuario: 1, tipo: 'plantilla', idDocumento: 3 })
-})
-
 test('servicio: la denegación evita subir archivos; la baja evita firmar descargas', async () => {
   const denegado = servicioPrueba({ denegar: true })
   await assert.rejects(
-    denegado.servicio.subir({ idUsuario: 1, destino: { tipo: 'plantilla' }, archivo }),
+    denegado.servicio.subir({
+      idUsuario: 1,
+      destino: { tipo: 'siniestro', idSiniestro: 2 },
+      archivo,
+    }),
   )
   assert.deepEqual(denegado.llamadas, ['autorizar'])
   const baja = servicioPrueba({ eliminado: true })
@@ -204,4 +199,36 @@ test('servicio: un usuario sin permiso de descarga nunca obtiene una firma', asy
     /Acceso denegado/,
   )
   assert.ok(!llamadas.some((llamada) => llamada.startsWith('firmar:')))
+})
+
+test('existencia: HEAD usa la clave de la base; ausencia 404 y errores de acceso o bucket 503', async () => {
+  const { almacenamiento, cliente, comandos } = almacenamientoPrueba()
+  await almacenamiento.comprobarExistencia('plantillas/modelo.pdf')
+  assert.equal(comandos[0].constructor.name, 'HeadObjectCommand')
+  assert.equal(comandos[0].input.Key, 'plantillas/modelo.pdf')
+  assert.equal(comandos[0].input.Bucket, variables.R2_BUCKET)
+  for (const name of ['NotFound', 'NoSuchKey', 'AccessDenied', 'NoSuchBucket', 'TimeoutError']) {
+    cliente.send = async (comando) => {
+      if (comando.constructor.name === 'HeadBucketCommand') return {}
+      throw Object.assign(new Error('No exponer detalle'), { name })
+    }
+    await assert.rejects(almacenamiento.comprobarExistencia('plantillas/modelo.pdf'), (error) => {
+      assert.equal(error.status, ['NotFound', 'NoSuchKey'].includes(name) ? 404 : 503)
+      assert.equal(error.message.includes('No exponer detalle'), false)
+      return true
+    })
+  }
+  // Un HEAD 404 ambiguo con bucket inaccesible se informa como error de almacenamiento.
+  for (const name of ['NotFound', 'NoSuchBucket', 'AccessDenied', 'TimeoutError']) {
+    cliente.send = async (comando) => {
+      throw Object.assign(new Error('No exponer detalle'), {
+        name: comando.constructor.name === 'HeadObjectCommand' ? 'NotFound' : name,
+      })
+    }
+    await assert.rejects(almacenamiento.comprobarExistencia('plantillas/modelo.pdf'), {
+      status: 503,
+    })
+  }
+  await assert.rejects(almacenamiento.comprobarExistencia('https://otro.example/archivo.pdf'))
+  almacenamiento.cerrar()
 })
