@@ -81,6 +81,7 @@ test('PostgreSQL: alta paso 1 (E4-04): opciones activas y número duplicado por 
           },
         ])
         assert.ok(opciones.provincias.length > 0 && opciones.paises.length > 0)
+        assert.ok(opciones.tiposDocumento.some((t) => t.nombre === 'DNI Tarjeta'))
 
         const datos = {
           numeroSiniestro: `NUEVO-${marca}`,
