@@ -2,20 +2,23 @@ import { useRef, useState, type ReactNode } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
 import type { TipoLesion } from '@cova/shared/schemas/enums'
 import {
   CONDUCTOR,
   ESTADOS_CIVILES,
   GRAVEDADES_LESION,
   LUGARES_EN_VEHICULO,
+  ROLES_SIN_VEHICULO,
   SEXOS,
   hoyArgentina,
   ocupanteAltaSchema,
+  personaExternaAltaSchema,
   titularAltaSchema,
   type OcupanteAltaData,
   type OcupanteAltaInput,
   type OpcionesAltaSiniestro,
+  type PersonaExternaAltaData,
   type TitularAltaData,
   type TitularAltaInput,
 } from '@cova/shared/schemas/siniestros-alta'
@@ -25,6 +28,7 @@ import { SelectField } from '@/components/select-field'
 import { TextField } from '@/components/text-field'
 import { TextareaField } from '@/components/textarea-field'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -33,19 +37,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { OcupanteBorrador, TitularBorrador, VehiculoBorrador } from '../borrador-alta'
-import { documentoRepetido, paisDelDomicilio } from '../personas-alta'
+import type {
+  OcupanteBorrador,
+  PersonaExternaBorrador,
+  TitularBorrador,
+  VehiculoBorrador,
+} from '../borrador-alta'
+import { documentoRepetido, paisDelDomicilio, type Involucrados } from '../personas-alta'
 
-export type ModoPersona = 'titular' | 'ocupante'
-type PersonaBorrador = TitularBorrador | OcupanteBorrador
-type PersonaData = TitularAltaData | OcupanteAltaData
+/** titular y ocupante, de un vehículo; externa, alguien que no iba en ninguno (peatón, testigo…) */
+export type ModoPersona = 'titular' | 'ocupante' | 'externa'
+type PersonaBorrador = TitularBorrador | OcupanteBorrador | PersonaExternaBorrador
+type PersonaData = TitularAltaData | OcupanteAltaData | PersonaExternaAltaData
 
-/** Lo que se escribe en el modal: titular y ocupante comparten los datos personales. El país solo filtra provincias. */
+/** Lo que se escribe en el modal: todos comparten los datos personales. El país solo filtra provincias. */
 type PersonaFormulario = Omit<TitularAltaInput, 'ibaEnVehiculo'> &
-  Pick<OcupanteAltaInput, 'relacionPropietario'> & { ibaEnVehiculo: boolean; pais: string }
+  Pick<OcupanteAltaInput, 'relacionPropietario'> & {
+    ibaEnVehiculo: boolean
+    rolSinVehiculo: string
+    pais: string
+  }
 
 const personaVacia: PersonaFormulario = {
   ibaEnVehiculo: true,
+  rolSinVehiculo: '',
   lugar: '',
   lugarOtro: '',
   relacionPropietario: '',
@@ -70,12 +85,29 @@ const personaVacia: PersonaFormulario = {
 const esquemas = {
   titular: z
     .custom<PersonaFormulario>()
-    .transform(({ pais: _pais, relacionPropietario: _relacion, ...datos }) => datos)
+    .transform(
+      ({ pais: _pais, relacionPropietario: _relacion, rolSinVehiculo: _rol, ...datos }) => datos,
+    )
     .pipe(titularAltaSchema),
   ocupante: z
     .custom<PersonaFormulario>()
-    .transform(({ pais: _pais, ibaEnVehiculo: _iba, ...datos }) => datos)
+    .transform(({ pais: _pais, ibaEnVehiculo: _iba, rolSinVehiculo: _rol, ...datos }) => datos)
     .pipe(ocupanteAltaSchema),
+  externa: z
+    .custom<PersonaFormulario>()
+    .transform(
+      ({
+        pais: _pais,
+        ibaEnVehiculo: _iba,
+        lugar: _lugar,
+        lugarOtro: _lugarOtro,
+        relacionPropietario: _relacion,
+        numeroPermisoConducir: _permiso,
+        fechaVencimientoCarnet: _vencimiento,
+        ...datos
+      }) => datos,
+    )
+    .pipe(personaExternaAltaSchema),
 }
 
 const texto = (valor: string | null | undefined) => valor ?? ''
@@ -83,8 +115,9 @@ function aFormulario(p: PersonaBorrador, opciones: OpcionesAltaSiniestro): Perso
   const provincia = opciones.provincias.find((x) => x.id === p.domicilio.idProvincia)
   return {
     ibaEnVehiculo: 'ibaEnVehiculo' in p ? p.ibaEnVehiculo : true,
-    lugar: texto(p.lugar),
-    lugarOtro: texto(p.lugarOtro),
+    rolSinVehiculo: 'rolSinVehiculo' in p ? p.rolSinVehiculo : '',
+    lugar: 'lugar' in p ? texto(p.lugar) : '',
+    lugarOtro: 'lugarOtro' in p ? texto(p.lugarOtro) : '',
     relacionPropietario: 'relacionPropietario' in p ? texto(p.relacionPropietario) : '',
     nombreCompletoRazonSocial: texto(p.nombreCompletoRazonSocial),
     idTipoDocumento: p.idTipoDocumento ? String(p.idTipoDocumento) : '',
@@ -92,8 +125,8 @@ function aFormulario(p: PersonaBorrador, opciones: OpcionesAltaSiniestro): Perso
     estadoCivil: texto(p.estadoCivil),
     sexo: texto(p.sexo),
     fechaNacimiento: texto(p.fechaNacimiento),
-    numeroPermisoConducir: texto(p.numeroPermisoConducir),
-    fechaVencimientoCarnet: texto(p.fechaVencimientoCarnet),
+    numeroPermisoConducir: 'numeroPermisoConducir' in p ? texto(p.numeroPermisoConducir) : '',
+    fechaVencimientoCarnet: 'fechaVencimientoCarnet' in p ? texto(p.fechaVencimientoCarnet) : '',
     telefono: texto(p.telefono),
     email: texto(p.email),
     pais: paisDelDomicilio(p.domicilio.idProvincia, opciones),
@@ -109,25 +142,27 @@ function aFormulario(p: PersonaBorrador, opciones: OpcionesAltaSiniestro): Perso
   }
 }
 
-// CU-09 pasos 11-18 (E4-06). El titular empieza por si iba en el vehículo; el ocupante, por dónde iba (y, si
-// manejaba, su relación con el titular). Todo es opcional. Las lesiones quedan detrás de "¿Tuvo lesiones?".
-// Un documento que ya está en el alta no se puede guardar (CU-09 13.b y 16.a). Se monta mientras está abierto.
+// CU-09 pasos 11-22 (E4-06 y E4-07). El titular empieza por si iba en el vehículo; el ocupante, por dónde iba (y,
+// si manejaba, su relación con el titular); la persona fuera de los vehículos, por su rol en el siniestro, lo único
+// obligatorio, y no tiene permiso de conducir. Las lesiones quedan detrás de "¿Tuvo lesiones?". Un documento que
+// ya está en el alta no se puede guardar (CU-09 13.b y 16.a). Se monta mientras está abierto.
 export function PersonaDialog({
   modo,
   vehiculo,
   persona,
-  vehiculos,
+  involucrados,
   opciones,
   onGuardar,
   onCerrar,
   elementoAlCerrar,
 }: {
   modo: ModoPersona
-  vehiculo: VehiculoBorrador
+  /** El vehículo del titular o del ocupante; null para una persona fuera de los vehículos */
+  vehiculo: VehiculoBorrador | null
   /** null: cargar una nueva */
   persona: PersonaBorrador | null
   /** Todo el alta, para avisar si el documento ya está cargado */
-  vehiculos: VehiculoBorrador[]
+  involucrados: Involucrados
   opciones: OpcionesAltaSiniestro
   onGuardar: (datos: PersonaData) => void
   onCerrar: () => void
@@ -147,7 +182,7 @@ export function PersonaDialog({
     reset,
     setFocus,
     setValue,
-    formState: { errors },
+    formState: { errors, isSubmitted },
   } = useForm<PersonaFormulario, unknown, PersonaData>({
     resolver: zodResolver(esquemas[modo]),
     defaultValues: persona ? aFormulario(persona, opciones) : vacia,
@@ -157,13 +192,16 @@ export function PersonaDialog({
   const conLesiones = useWatch({ control, name: 'conLesiones' })
   const pais = useWatch({ control, name: 'pais' })
   const documento = useWatch({ control, name: 'documento' })
-  const repetido = documentoRepetido(vehiculos, documento, persona?.clave ?? null)
+  const rol = useWatch({ control, name: 'rolSinVehiculo' })
+  const repetido = documentoRepetido(involucrados, documento, persona?.clave ?? null)
   const provincias = opciones.provincias.filter((p) => String(p.idPais) === pais)
 
   // Al abrir (y después de "Guardar y agregar otro"): la primera pregunta del modal
   const enfocarPrimera = () =>
     formulario.current
-      ?.querySelector<HTMLElement>('input[type=radio]:checked, button[role=combobox]')
+      ?.querySelector<HTMLElement>(
+        'input[name=rolSinVehiculo], input[type=radio]:checked, button[role=combobox]',
+      )
       ?.focus()
 
   const guardar = (seguir: boolean) =>
@@ -173,15 +211,21 @@ export function PersonaDialog({
       onGuardar(datos)
       if (!seguir) return onCerrar()
       reset(vacia)
-      setAgregado('Se agregó el ocupante. Ya podés cargar el siguiente.')
+      setAgregado(
+        modo === 'externa'
+          ? 'Se agregó la persona. Ya podés cargar la siguiente.'
+          : 'Se agregó el ocupante. Ya podés cargar el siguiente.',
+      )
       requestAnimationFrame(enfocarPrimera)
     })
 
   const elegir = (nombre: string) => `Elegir ${nombre}…`
   const titulo =
-    modo === 'titular'
-      ? `${nueva ? 'Cargar' : 'Modificar'} titular del vehículo ${vehiculo.dominio}`
-      : `${nueva ? 'Agregar' : 'Modificar'} ocupante del vehículo ${vehiculo.dominio}`
+    modo === 'externa'
+      ? `${nueva ? 'Agregar' : 'Modificar'} persona fuera de los vehículos`
+      : modo === 'titular'
+        ? `${nueva ? 'Cargar' : 'Modificar'} titular del vehículo ${vehiculo?.dominio ?? ''}`
+        : `${nueva ? 'Agregar' : 'Modificar'} ocupante del vehículo ${vehiculo?.dominio ?? ''}`
 
   return (
     <Dialog open onOpenChange={(abrir) => !abrir && onCerrar()}>
@@ -202,7 +246,11 @@ export function PersonaDialog({
       >
         <DialogHeader>
           <DialogTitle>{titulo}</DialogTitle>
-          <DialogDescription>Todos los datos son opcionales: cargá lo que sepas.</DialogDescription>
+          <DialogDescription>
+            {modo === 'externa'
+              ? 'Solo el rol en el siniestro es obligatorio. Del resto, cargá lo que sepas.'
+              : 'Todos los datos son opcionales: cargá lo que sepas.'}
+          </DialogDescription>
         </DialogHeader>
         <form
           ref={formulario}
@@ -216,69 +264,113 @@ export function PersonaDialog({
             </Aviso>
           )}
 
-          <Seccion titulo="En el vehículo">
-            {modo === 'titular' && (
-              <Controller
-                control={control}
-                name="ibaEnVehiculo"
-                render={({ field }) => (
-                  <OpcionesSegmentadas
-                    leyenda="¿Iba en el vehículo al momento del hecho?"
-                    name="ibaEnVehiculo"
-                    opciones={[
-                      { valor: 'si', etiqueta: 'Sí, iba' },
-                      { valor: 'no', etiqueta: 'No iba' },
-                    ]}
-                    valor={field.value ? 'si' : 'no'}
-                    onCambio={(valor) => field.onChange(valor === 'si')}
-                  />
-                )}
-              />
-            )}
-            {(modo === 'ocupante' || iba) && (
-              <div className="grid gap-5 sm:grid-cols-2">
+          {modo === 'externa' ? (
+            <Seccion titulo="En el siniestro">
+              <div className="grid gap-3">
+                <TextField
+                  label="Rol en el siniestro"
+                  required
+                  autoComplete="off"
+                  maxLength={100}
+                  hint="Elegí un ejemplo o escribí otro: «conductor de la moto», «dueño del comercio»…"
+                  error={errors.rolSinVehiculo?.message}
+                  {...register('rolSinVehiculo')}
+                />
+                {/* Atajos: completan el campo, que se puede seguir editando */}
+                <div role="group" aria-label="Ejemplos de rol" className="flex flex-wrap gap-2">
+                  {ROLES_SIN_VEHICULO.map((ejemplo) => {
+                    const elegido = rol.trim() === ejemplo
+                    return (
+                      <button
+                        key={ejemplo}
+                        type="button"
+                        aria-pressed={elegido}
+                        onClick={() =>
+                          setValue('rolSinVehiculo', ejemplo, {
+                            shouldDirty: true,
+                            shouldValidate: isSubmitted,
+                          })
+                        }
+                        className={cn(
+                          'inline-flex min-h-11 items-center gap-2 rounded-full border-2 px-4 font-semibold transition-colors hover:bg-accent focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                          elegido
+                            ? 'border-primary bg-accent text-primary'
+                            : 'border-input bg-surface',
+                        )}
+                      >
+                        {elegido && <Check className="size-4" aria-hidden="true" />}
+                        {ejemplo}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </Seccion>
+          ) : (
+            <Seccion titulo="En el vehículo">
+              {modo === 'titular' && (
                 <Controller
                   control={control}
-                  name="lugar"
+                  name="ibaEnVehiculo"
                   render={({ field }) => (
-                    <SelectField
-                      label="Lugar en el vehículo"
-                      opcionVacia="Sin especificar"
-                      placeholder={elegir('lugar')}
-                      opciones={LUGARES_EN_VEHICULO.map((l) => ({ valor: l, etiqueta: l }))}
-                      value={String(field.value ?? '')}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      ref={field.ref}
-                      error={errors.lugar?.message}
+                    <OpcionesSegmentadas
+                      leyenda="¿Iba en el vehículo al momento del hecho?"
+                      name="ibaEnVehiculo"
+                      opciones={[
+                        { valor: 'si', etiqueta: 'Sí, iba' },
+                        { valor: 'no', etiqueta: 'No iba' },
+                      ]}
+                      valor={field.value ? 'si' : 'no'}
+                      onCambio={(valor) => field.onChange(valor === 'si')}
                     />
                   )}
                 />
-                {lugar === 'Otro' && (
-                  <TextField
-                    label="¿Dónde iba?"
-                    autoComplete="off"
-                    maxLength={60}
-                    placeholder="Por ejemplo: en la caja de carga"
-                    error={errors.lugarOtro?.message}
-                    {...register('lugarOtro')}
+              )}
+              {(modo === 'ocupante' || iba) && (
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <Controller
+                    control={control}
+                    name="lugar"
+                    render={({ field }) => (
+                      <SelectField
+                        label="Lugar en el vehículo"
+                        opcionVacia="Sin especificar"
+                        placeholder={elegir('lugar')}
+                        opciones={LUGARES_EN_VEHICULO.map((l) => ({ valor: l, etiqueta: l }))}
+                        value={String(field.value ?? '')}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        ref={field.ref}
+                        error={errors.lugar?.message}
+                      />
+                    )}
                   />
-                )}
-                {/* Solo para quien manejaba sin ser el titular: por qué tenía el vehículo */}
-                {modo === 'ocupante' && lugar === CONDUCTOR && (
-                  <TextField
-                    label="Relación con el titular"
-                    containerClassName="sm:col-span-2"
-                    autoComplete="off"
-                    maxLength={150}
-                    hint="Por ejemplo: hijo de la titular, empleado de la empresa, préstamo."
-                    error={errors.relacionPropietario?.message}
-                    {...register('relacionPropietario')}
-                  />
-                )}
-              </div>
-            )}
-          </Seccion>
+                  {lugar === 'Otro' && (
+                    <TextField
+                      label="¿Dónde iba?"
+                      autoComplete="off"
+                      maxLength={60}
+                      placeholder="Por ejemplo: en la caja de carga"
+                      error={errors.lugarOtro?.message}
+                      {...register('lugarOtro')}
+                    />
+                  )}
+                  {/* Solo para quien manejaba sin ser el titular: por qué tenía el vehículo */}
+                  {modo === 'ocupante' && lugar === CONDUCTOR && (
+                    <TextField
+                      label="Relación con el titular"
+                      containerClassName="sm:col-span-2"
+                      autoComplete="off"
+                      maxLength={150}
+                      hint="Por ejemplo: hijo de la titular, empleado de la empresa, préstamo."
+                      error={errors.relacionPropietario?.message}
+                      {...register('relacionPropietario')}
+                    />
+                  )}
+                </div>
+              )}
+            </Seccion>
+          )}
 
           <Seccion titulo="Datos personales">
             <div className="grid gap-5 sm:grid-cols-2">
@@ -382,23 +474,25 @@ export function PersonaDialog({
             </div>
           </Seccion>
 
-          <Seccion titulo="Permiso de conducir">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <TextField
-                label="Número de permiso"
-                autoComplete="off"
-                maxLength={30}
-                error={errors.numeroPermisoConducir?.message}
-                {...register('numeroPermisoConducir')}
-              />
-              <TextField
-                label="Fecha de vencimiento"
-                type="date"
-                error={errors.fechaVencimientoCarnet?.message}
-                {...register('fechaVencimientoCarnet')}
-              />
-            </div>
-          </Seccion>
+          {modo !== 'externa' && (
+            <Seccion titulo="Permiso de conducir">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <TextField
+                  label="Número de permiso"
+                  autoComplete="off"
+                  maxLength={30}
+                  error={errors.numeroPermisoConducir?.message}
+                  {...register('numeroPermisoConducir')}
+                />
+                <TextField
+                  label="Fecha de vencimiento"
+                  type="date"
+                  error={errors.fechaVencimientoCarnet?.message}
+                  {...register('fechaVencimientoCarnet')}
+                />
+              </div>
+            </Seccion>
+          )}
 
           <Seccion titulo="Domicilio">
             <div className="grid gap-5 sm:grid-cols-2">
@@ -524,10 +618,10 @@ export function PersonaDialog({
             <Button type="button" variant="outline" onClick={onCerrar}>
               Cancelar
             </Button>
-            {modo === 'ocupante' && nueva && (
+            {modo !== 'titular' && nueva && (
               <Button type="button" variant="outline" onClick={(e) => void guardar(true)(e)}>
                 <Plus aria-hidden="true" />
-                Guardar y agregar otro
+                {modo === 'externa' ? 'Guardar y agregar otra' : 'Guardar y agregar otro'}
               </Button>
             )}
             <Button type="submit">
@@ -535,7 +629,9 @@ export function PersonaDialog({
                 ? 'Guardar cambios'
                 : modo === 'titular'
                   ? 'Guardar titular'
-                  : 'Agregar ocupante'}
+                  : modo === 'ocupante'
+                    ? 'Agregar ocupante'
+                    : 'Agregar persona'}
             </Button>
           </DialogFooter>
         </form>

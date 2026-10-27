@@ -4,19 +4,17 @@ import {
   ChevronDown,
   Pencil,
   Plus,
-  Trash2,
   TriangleAlert,
-  UserPlus,
   UserRound,
   Users,
   type LucideIcon,
 } from 'lucide-react'
 import {
-  GRAVEDADES_LESION,
   ROLES_ACCIDENTE,
   USOS_VEHICULO,
   type OcupanteAltaData,
   type OpcionesAltaSiniestro,
+  type PersonaExternaAltaData,
   type TitularAltaData,
   type VehiculoAltaData,
 } from '@cova/shared/schemas/siniestros-alta'
@@ -31,16 +29,27 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import type { OcupanteBorrador, TitularBorrador, VehiculoBorrador } from '../borrador-alta'
+import type {
+  OcupanteBorrador,
+  PersonaExternaBorrador,
+  TitularBorrador,
+  VehiculoBorrador,
+} from '../borrador-alta'
 import { nombresPersonas } from '../personas-alta'
-import { PersonaDialog, type ModoPersona } from './persona-dialog'
+import { PersonaDialog } from './persona-dialog'
+import { BotonPersona, BotonQuitar, TarjetaPersona } from './tarjeta-persona'
 import { VehiculoDialog } from './vehiculo-dialog'
 
+type ModoEnVehiculo = 'titular' | 'ocupante'
 type PersonaBorrador = TitularBorrador | OcupanteBorrador
-type EdicionPersona = { modo: ModoPersona; claveVehiculo: string; persona: PersonaBorrador | null }
+type EdicionPersona = {
+  modo: ModoEnVehiculo
+  claveVehiculo: string
+  persona: PersonaBorrador | null
+}
 type Quitando =
   | { tipo: 'vehiculo'; vehiculo: VehiculoBorrador }
-  | { tipo: ModoPersona; vehiculo: VehiculoBorrador; persona: PersonaBorrador; nombre: string }
+  | { tipo: ModoEnVehiculo; vehiculo: VehiculoBorrador; persona: PersonaBorrador; nombre: string }
 
 const lugarDe = (p: { lugar?: string | null; lugarOtro?: string | null }) =>
   p.lugar === 'Otro' ? p.lugarOtro : p.lugar
@@ -49,11 +58,14 @@ const lugarDe = (p: { lugar?: string | null; lugarOtro?: string | null }) =>
 // es y quién es su titular; abierto muestra sus datos, el titular y los ocupantes.
 export function VehiculosAlta({
   vehiculos,
+  personasExternas,
   onCambiar,
   opciones,
   idAseguradoraSiniestro,
 }: {
   vehiculos: VehiculoBorrador[]
+  /** Solo para los nombres "Desconocido N" y el aviso de documento repetido */
+  personasExternas: PersonaExternaBorrador[]
   onCambiar: (vehiculos: VehiculoBorrador[]) => void
   opciones: OpcionesAltaSiniestro
   idAseguradoraSiniestro: string
@@ -68,7 +80,7 @@ export function VehiculosAlta({
   const origen = useRef<HTMLElement | null>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
   const volverA = () => (origen.current?.isConnected ? origen.current : titulo.current)
-  const nombres = nombresPersonas(vehiculos)
+  const nombres = nombresPersonas({ vehiculos, personasExternas })
 
   function desde(boton: HTMLElement) {
     origen.current = boton
@@ -100,7 +112,7 @@ export function VehiculosAlta({
         : `Se agregó el vehículo ${datos.dominio}.`,
     )
   }
-  function guardarPersona(datos: TitularAltaData | OcupanteAltaData) {
+  function guardarPersona(datos: TitularAltaData | OcupanteAltaData | PersonaExternaAltaData) {
     if (!persona) return
     const clave = persona.persona?.clave ?? crypto.randomUUID()
     const vehiculo = vehiculos.find((v) => v.clave === persona.claveVehiculo)
@@ -419,7 +431,7 @@ export function VehiculosAlta({
           modo={persona.modo}
           vehiculo={vehiculoEnEdicion}
           persona={persona.persona}
-          vehiculos={vehiculos}
+          involucrados={{ vehiculos, personasExternas }}
           opciones={opciones}
           onGuardar={guardarPersona}
           onCerrar={() => setPersona(null)}
@@ -492,96 +504,6 @@ function Panel({
       </h3>
       <div className={cn('grid gap-3 p-4', grilla && 'lg:grid-cols-2')}>{children}</div>
     </section>
-  )
-}
-
-function TarjetaPersona({
-  nombre,
-  persona,
-  tipoDocumento,
-  situacion,
-  onModificar,
-  onQuitar,
-}: {
-  nombre: string
-  persona: PersonaBorrador
-  tipoDocumento: string | undefined
-  situacion: string
-  onModificar: (boton: HTMLElement) => void
-  onQuitar: (boton: HTMLElement, nombre: string) => void
-}) {
-  return (
-    <div className="grid content-start gap-2 rounded-lg border-2 border-line-strong bg-surface-subtle p-4">
-      <p className="text-lg font-bold">{nombre}</p>
-      {persona.documento && (
-        <p className="dato">{[tipoDocumento, persona.documento].filter(Boolean).join(' ')}</p>
-      )}
-      <p>{situacion}</p>
-      {persona.conLesiones && persona.tipoLesion ? (
-        <p className="w-fit rounded-md border-2 border-injury-border bg-injury-bg px-2 font-semibold text-injury-ink">
-          Lesiones: {GRAVEDADES_LESION[persona.tipoLesion]}
-        </p>
-      ) : (
-        <p className="text-muted-foreground">Sin lesiones</p>
-      )}
-      <div className="mt-1 flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          onClick={(e) => onModificar(e.currentTarget)}
-          aria-label={`Modificar a ${nombre}`}
-        >
-          <Pencil aria-hidden="true" />
-          Modificar
-        </Button>
-        <BotonQuitar
-          etiqueta={`Quitar a ${nombre}`}
-          onClick={(e) => onQuitar(e.currentTarget, nombre)}
-        >
-          Quitar
-        </BotonQuitar>
-      </div>
-    </div>
-  )
-}
-
-function BotonPersona({
-  onClick,
-  children,
-}: {
-  onClick: (boton: HTMLElement) => void
-  children: ReactNode
-}) {
-  return (
-    <Button
-      variant="outline"
-      className="min-h-14 border-2 border-dashed border-primary/50"
-      onClick={(e) => onClick(e.currentTarget)}
-    >
-      <UserPlus aria-hidden="true" />
-      {children}
-    </Button>
-  )
-}
-
-function BotonQuitar({
-  etiqueta,
-  onClick,
-  children,
-}: {
-  etiqueta: string
-  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void
-  children: ReactNode
-}) {
-  return (
-    <Button
-      variant="ghost"
-      className="text-danger-ink hover:bg-danger-bg hover:text-danger-ink"
-      onClick={onClick}
-      aria-label={etiqueta}
-    >
-      <Trash2 aria-hidden="true" />
-      {children}
-    </Button>
   )
 }
 
