@@ -351,13 +351,17 @@ model Vehiculo {
   idAseguradora     Int?
   rolAccidente      RolAccidente?
   uso               UsoVehiculo?
+  /// El siniestro al que pertenece, aunque no tenga titular ni ocupantes cargados (CU-09 11.a)
+  idSiniestro       Int
   eliminado         Boolean       @default(false)
   fechaBaja         DateTime?     @db.Timestamptz(3)
 
   aseguradora          Aseguradora?         @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestro            Siniestro            @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   personasInvolucradas PersonaInvolucrada[]
 
   @@index([idAseguradora])
+  @@index([idSiniestro])
 }
 
 model TipoDocumento {
@@ -452,6 +456,7 @@ model Siniestro {
   eventosHistorial     HistorialSiniestro[]
   mensajes             MensajeChat[]
   documentos           DocumentoSiniestro[]
+  vehiculos            Vehiculo[]
   novedades            NovedadSiniestro[]
   peritos              Perito[]
   personasInvolucradas PersonaInvolucrada[]

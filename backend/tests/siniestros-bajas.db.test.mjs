@@ -174,8 +174,13 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
             idDireccion: admin.idDireccion,
           })
           const ajeno = await caso()
-          const exclusivo = await tx.vehiculo.create({ data: { dominio: 'PRU123' } })
-          const compartido = await tx.vehiculo.create({ data: { dominio: 'COM456' } })
+          const exclusivo = await tx.vehiculo.create({
+            data: { dominio: 'PRU123', idSiniestro: objetivo.id },
+          })
+          // De otro siniestro, aunque una persona del objetivo lo referencie: se conserva
+          const compartido = await tx.vehiculo.create({
+            data: { dominio: 'COM456', idSiniestro: ajeno.id },
+          })
           const direccionPersona = await tx.direccion.create({ data: { calle: 'Prueba' } })
           const direccionPerito = await tx.direccion.create({ data: { calle: 'Perito prueba' } })
           const abogado = await tx.abogado.create({ data: { nombreCompleto: 'Abogada prueba' } })

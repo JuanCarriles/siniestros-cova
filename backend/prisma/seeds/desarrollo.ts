@@ -1171,6 +1171,7 @@ export async function seedDesarrollo(
       const vehiculo = await tx.vehiculo.create({
         data: {
           ...datos,
+          idSiniestro,
           rolAccidente: rol,
           idAseguradora: aseguradora ? obtener(aseguradoras, aseguradora, 'la aseguradora') : null,
         },

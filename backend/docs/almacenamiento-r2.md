@@ -68,8 +68,18 @@ recurso. Nunca aceptar idUsuario o una clave de almacenamiento directamente del
 navegador como prueba de autorización.
 
 El servicio de documentos genera `siniestros/ID/UUID.ext`; el módulo de plantillas
-genera `plantillas/UUID.ext`. El nombre original se conserva como metadato. Los campos
-existentes se mantienen:
+genera `plantillas/UUID.ext`. El nombre original se conserva como metadato.
+
+Los documentos del alta de un siniestro (CU-09, E4-10) se suben a `altas/IDUSUARIO/UUID.ext`
+mientras el siniestro no existe. Al crearlo se registran con esa clave y después se mueven
+a `siniestros/ID/UUID.ext`: se copian, se actualiza la clave en la base y recién entonces se
+borra el original. Si la copia o la actualización fallan, el documento conserva la clave de
+`altas/`, que sigue siendo válida. `altas/` es temporal: una regla de ciclo de vida de R2
+borra lo que tenga más de 30 días (ver la sección de R2 en `DEPLOY.md`). El archivo de un
+siniestro se identifica siempre por `DocumentoSiniestro` (idSiniestro y clave), nunca por
+la carpeta.
+
+Los campos existentes se mantienen:
 
 | Modelo | Campo que contiene exclusivamente la clave |
 | --- | --- |

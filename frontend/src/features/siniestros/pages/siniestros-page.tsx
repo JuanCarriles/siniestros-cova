@@ -43,6 +43,7 @@ import { TablaSiniestros } from '../components/tabla-siniestros'
 import { TarjetaSiniestro } from '../components/tarjeta-siniestro'
 import { useColumnasVisibles } from '../hooks/use-columnas-visibles'
 import { leerBorrador } from '../borrador-alta'
+import { mensajeAltaCreada } from '../crear-alta'
 import type { cargarPanel } from '@/features/auth/sesion'
 import type { cargarSiniestros } from '../loader'
 
@@ -72,7 +73,13 @@ export function SiniestrosPage() {
   const titulo = useRef<HTMLHeadingElement>(null)
   const revalidator = useRevalidator()
   const [operacion, setOperacion] = useState<OperacionSiniestro | null>(null)
-  const [mensaje, setMensaje] = useState<string | null>(null)
+  // Al volver de crear un siniestro (E4-10), el aviso del alta
+  const [mensaje, setMensaje] = useState<string | null>(() => mensajeAltaCreada(location.state))
+  useEffect(() => {
+    // Se muestra una vez: recargar la página no lo repite
+    if (mensajeAltaCreada(location.state))
+      void navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.state, location.pathname, location.search, navigate])
   const origenOperacion = useRef<HTMLButtonElement | null>(null)
   function abrirOperacion(
     tipo: OperacionSiniestro['tipo'],

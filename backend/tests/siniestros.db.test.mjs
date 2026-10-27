@@ -84,10 +84,17 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
               modelo: 'Corolla',
               anio: 2021,
               rolAccidente: 'ASEGURADO',
+              idSiniestro: s1.id,
             },
           })
           const tercero = await tx.vehiculo.create({
-            data: { dominio: 'AF447TR', marca: 'Fiat', modelo: 'Cronos', rolAccidente: 'TERCERO' },
+            data: {
+              dominio: 'AF447TR',
+              marca: 'Fiat',
+              modelo: 'Cronos',
+              rolAccidente: 'TERCERO',
+              idSiniestro: s1.id,
+            },
           })
           const persona = (data) =>
             tx.personaInvolucrada.create({ data: { idSiniestro: s1.id, ...data } })

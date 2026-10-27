@@ -1,6 +1,10 @@
+import { configCorreo } from '../../config/correo.ts'
+import { env } from '../../config/env.ts'
+import { crearCorreoAsignacion } from '../../lib/correo-asignacion.ts'
 import { crearAlmacenamientoR2, type AlmacenamientoR2 } from '../../lib/r2.ts'
 import { getPrisma } from '../../lib/prisma.ts'
 import { requerirSesion } from '../auth/auth.module.ts'
+import { crearServicioCrearSiniestro } from './siniestros-alta-crear.service.ts'
 import { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import { crearSiniestrosRouter } from './siniestros.routes.ts'
@@ -39,8 +43,9 @@ const db = {
 }
 
 let almacenamiento: AlmacenamientoR2 | undefined
+const r2 = () => (almacenamiento ??= crearAlmacenamientoR2())
 const operaciones = crearServicioBajasSiniestros({
-  almacenamiento: () => (almacenamiento ??= crearAlmacenamientoR2()),
+  almacenamiento: r2,
   base: {
     transaccion: (trabajo) => getPrisma().$transaction(trabajo, { timeout: 15_000 }),
   },
@@ -49,6 +54,12 @@ const operaciones = crearServicioBajasSiniestros({
 export const siniestrosRouter = crearSiniestrosRouter({
   servicio: crearServicioSiniestros(db),
   alta: crearServicioAltaSiniestros(db),
+  creacion: crearServicioCrearSiniestro({
+    transaccion: (trabajo) => getPrisma().$transaction(trabajo, { timeout: 30_000 }),
+    almacenamiento: r2,
+    enviarAvisoAsignacion: crearCorreoAsignacion(configCorreo),
+    urlSistema: env.APP_URL,
+  }),
   operaciones,
   requerirSesion,
 })

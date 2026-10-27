@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   booleanoSchema,
+  claveArchivoSchema,
   emailSchema,
   enteroPequenoSchema,
   fechaSchema,
@@ -16,6 +17,7 @@ import {
   type RolAccidente,
   type TipoLesion,
   type TipoPerito,
+  type TipoUsuario,
 } from './enums.ts'
 
 // ------------------------------------------------------------------ Alta de siniestro (CU-09 pasos 4-5, E4-04)
@@ -85,6 +87,8 @@ export type OpcionesAltaSiniestro = {
   paises: { id: number; nombre: string }[]
   provincias: { id: number; nombre: string; idPais: number }[]
   tiposDocumento: { id: number; nombre: string }[]
+  /** Paso 5: a quién se puede asignar el siniestro (gestores, administradores y superadministradores) */
+  usuarios: { id: number; nombre: string; tipoUsuario: TipoUsuario; casosActivos: number }[]
 }
 
 // ------------------------------------------------------------------ Paso 2: vehículos (CU-09 pasos 6-10, E4-05)
@@ -357,3 +361,103 @@ export const peritoAltaSchema = z
 
 export type PeritoAltaInput = z.input<typeof peritoAltaSchema>
 export type PeritoAltaData = z.output<typeof peritoAltaSchema>
+
+// ------------------------------------------------------------------ Paso 5: documentos, asignación y alta (CU-09 32-36, E4-10)
+
+/**
+ * Un documento ya subido a R2 durante el alta, antes de que exista el siniestro (carpeta altas/{idUsuario}). Al
+ * crear el siniestro se registra como documento suyo.
+ */
+export const documentoAltaSchema = z.strictObject({
+  clave: claveArchivoSchema,
+  nombreOriginal: z.string().trim().min(1).max(255),
+  tipoExtension: z.string().min(1).max(10),
+  mimeType: z.string().min(1).max(120),
+  tamanoBytes: z.number().int().positive(),
+})
+export type DocumentoAlta = z.infer<typeof documentoAltaSchema>
+
+// Las personas llevan la clave con que las identifica el alta: los abogados las referencian por esa clave
+const conClave = <T extends z.ZodType>(datos: T) =>
+  z.strictObject({ clave: z.string().min(1).max(64), datos })
+
+export const MENSAJE_ASIGNACION_OBLIGATORIA =
+  'La asignación es obligatoria: elegí a quién se le asigna el siniestro'
+
+// Todo lo cargado en los cinco pasos, tal como se manda al confirmar (paso 35). El servidor vuelve a validar cada
+// parte con su schema y, acá, lo que cruza pasos.
+export const crearSiniestroSchema = z
+  .strictObject({
+    datosCaso: datosCasoSchema,
+    vehiculos: z
+      .array(
+        z.strictObject({
+          datos: vehiculoAltaSchema,
+          titular: conClave(titularAltaSchema).nullable(),
+          ocupantes: z.array(conClave(ocupanteAltaSchema)).max(60),
+        }),
+      )
+      .max(30),
+    personasExternas: z.array(conClave(personaExternaAltaSchema)).max(60),
+    abogados: z.array(abogadoAltaSchema).max(30),
+    peritos: z.array(peritoAltaSchema).max(2),
+    documentos: z.array(documentoAltaSchema).max(60),
+    idUsuarioAsignado: elegido(MENSAJE_ASIGNACION_OBLIGATORIA),
+  })
+  .superRefine((alta, ctx) => {
+    const error = (message: string, path: (string | number)[]) =>
+      ctx.addIssue({ code: 'custom', message, path })
+
+    const dominios = new Set<string>()
+    alta.vehiculos.forEach((v, i) => {
+      const dominio = normalizarDominio(v.datos.dominio)
+      if (dominios.has(dominio))
+        error(`El vehículo ${v.datos.dominio} está cargado dos veces`, ['vehiculos', i])
+      dominios.add(dominio)
+    })
+
+    const personas = [
+      ...alta.vehiculos.flatMap((v) => [...(v.titular ? [v.titular] : []), ...v.ocupantes]),
+      ...alta.personasExternas,
+    ]
+    const claves = new Set<string>()
+    const documentos = new Set<string>()
+    for (const p of personas) {
+      if (claves.has(p.clave)) error('Hay una persona cargada dos veces', ['personasExternas'])
+      claves.add(p.clave)
+      const documento = p.datos.documento ? normalizarDocumento(p.datos.documento) : ''
+      if (documento && documentos.has(documento))
+        error(`El documento ${p.datos.documento} está cargado en dos personas`, [
+          'personasExternas',
+        ])
+      if (documento) documentos.add(documento)
+    }
+
+    // Cada persona tiene a lo sumo un abogado, y solo personas de esta alta
+    const representadas = new Set<string>()
+    alta.abogados.forEach((a, i) => {
+      for (const clave of a.representados) {
+        if (!claves.has(clave))
+          error(`${a.nombreCompleto} representa a una persona que ya no está en el alta`, [
+            'abogados',
+            i,
+          ])
+        if (representadas.has(clave)) error('Una persona tiene más de un abogado', ['abogados', i])
+        representadas.add(clave)
+      }
+    })
+
+    const tipos = alta.peritos.map((p) => p.tipoPerito)
+    if (new Set(tipos).size !== tipos.length)
+      error('Puede haber un perito CESVI y uno médico como máximo', ['peritos'])
+
+    const archivos = alta.documentos.map((d) => d.clave)
+    if (new Set(archivos).size !== archivos.length)
+      error('Hay un documento cargado dos veces', ['documentos'])
+  })
+
+export type CrearSiniestroInput = z.input<typeof crearSiniestroSchema>
+export type CrearSiniestroData = z.output<typeof crearSiniestroSchema>
+
+/** Respuesta al crear: si el aviso por mail no salió, el siniestro igual quedó creado (36.a) */
+export type SiniestroCreado = { id: number; numeroSiniestro: string; correoEnviado: boolean }
