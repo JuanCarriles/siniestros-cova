@@ -22,6 +22,7 @@ import {
   leerBorrador,
   type AbogadoBorrador,
   type DatosCasoFormulario,
+  type PeritoBorrador,
   type PersonaExternaBorrador,
   type VehiculoBorrador,
 } from '../borrador-alta'
@@ -29,6 +30,7 @@ import { limpiarRepresentados } from '../abogados-alta'
 import { AbogadosAlta } from '../components/abogados-alta'
 import { DatosCasoForm } from '../components/datos-caso-form'
 import { PasosAlta } from '../components/pasos-alta'
+import { PeritosAlta } from '../components/peritos-alta'
 import { PersonasExternasAlta } from '../components/personas-externas-alta'
 import { VehiculosAlta } from '../components/vehiculos-alta'
 import type { cargarAltaSiniestro } from '../loader'
@@ -42,7 +44,7 @@ const fechaHora = (iso: string) =>
   })
 
 // CU-09: alta de siniestro en cinco pasos (E4-04 datos del caso; E4-05 a E4-07 vehículos y personas; E4-08
-// abogados). Lo cargado se guarda en este navegador a medida que se escribe; el siniestro recién se crea al
+// abogados; E4-09 peritos). Lo cargado se guarda en este navegador a medida que se escribe; el siniestro recién se crea al
 // confirmar el último paso.
 export function AltaSiniestroPage() {
   const { idUsuario, opciones } = useLoaderData<typeof cargarAltaSiniestro>()
@@ -71,6 +73,7 @@ export function AltaSiniestroPage() {
     inicial?.personasExternas ?? [],
   )
   const [abogados, setAbogados] = useState<AbogadoBorrador[]>(inicial?.abogados ?? [])
+  const [peritos, setPeritos] = useState<PeritoBorrador[]>(inicial?.peritos ?? [])
   const [faltanRepresentados, setFaltanRepresentados] = useState(false)
   const involucrados = { vehiculos, personasExternas }
 
@@ -83,9 +86,10 @@ export function AltaSiniestroPage() {
         vehiculos,
         personasExternas,
         abogados,
+        peritos,
       })
     },
-    [idUsuario, vehiculos, personasExternas, abogados],
+    [idUsuario, vehiculos, personasExternas, abogados, peritos],
   )
   // Si se quita a una persona del paso 2, deja de figurar en su abogado
   function cambiarPersonas(cambio: Partial<typeof involucrados>) {
@@ -99,6 +103,7 @@ export function AltaSiniestroPage() {
       datosCaso: ultimos.current,
       ...nuevas,
       abogados: nuevosAbogados,
+      peritos,
     })
   }
   function cambiarAbogados(nuevos: AbogadoBorrador[]) {
@@ -109,6 +114,17 @@ export function AltaSiniestroPage() {
       datosCaso: ultimos.current,
       ...involucrados,
       abogados: nuevos,
+      peritos,
+    })
+  }
+  function cambiarPeritos(nuevos: PeritoBorrador[]) {
+    setPeritos(nuevos)
+    guardarBorrador(idUsuario, {
+      paso,
+      datosCaso: ultimos.current,
+      ...involucrados,
+      abogados,
+      peritos: nuevos,
     })
   }
   function irAlPaso(numero: number) {
@@ -120,6 +136,7 @@ export function AltaSiniestroPage() {
       datosCaso: ultimos.current,
       ...involucrados,
       abogados,
+      peritos,
     })
     window.scrollTo({ top: 0 })
   }
@@ -240,6 +257,30 @@ export function AltaSiniestroPage() {
                   : irAlPaso(4)
               }
             >
+              Continuar
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          </div>
+        </section>
+      ) : paso === 4 ? (
+        <section className="grid gap-6">
+          <ResumenCaso
+            numero={String(datosCaso.numeroSiniestro)}
+            aseguradora={
+              opciones.aseguradoras.find((a) => String(a.id) === String(datosCaso.idAseguradora))
+                ?.nombre
+            }
+            onModificar={() => irAlPaso(1)}
+          />
+          <PeritosAlta peritos={peritos} onCambiar={cambiarPeritos} />
+          <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid gap-3 sm:flex sm:flex-wrap">
+              {cancelar}
+              <Button type="button" size="lg" variant="outline" onClick={() => irAlPaso(3)}>
+                Volver a abogados
+              </Button>
+            </div>
+            <Button type="button" size="lg" onClick={() => irAlPaso(5)}>
               Continuar
               <ArrowRight aria-hidden="true" />
             </Button>
