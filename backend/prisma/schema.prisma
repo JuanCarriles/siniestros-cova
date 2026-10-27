@@ -34,6 +34,7 @@ enum TipoEventoHistorial {
   REASIGNACION
   CAMBIO_ESTADO
   BAJA_SINIESTRO
+  REACTIVACION_SINIESTRO
 }
 
 enum TipoPerito {

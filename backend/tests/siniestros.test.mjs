@@ -92,12 +92,13 @@ test('filtros: valores por defecto y validación de la dirección', async (t) =>
   assert.deepEqual(api.llamadas.pop()[2], {
     pagina: 1,
     porPagina: 25,
+    activos: false,
     bajas: false,
     orden: 'asignacion',
   })
   const res = await api.pedir(
     'admin',
-    '?pagina=3&porPagina=50&q=%20R%C3%ADos%20&estado=2&aseguradora=4&gestor=5&bajas=true&orden=demora',
+    '?pagina=3&porPagina=50&q=%20R%C3%ADos%20&estado=2&aseguradora=4&gestor=5&activos=true&bajas=true&orden=demora',
   )
   assert.equal(res.status, 200)
   assert.deepEqual(api.llamadas.pop()[2], {
@@ -107,6 +108,7 @@ test('filtros: valores por defecto y validación de la dirección', async (t) =>
     estado: 2,
     aseguradora: 4,
     gestor: 5,
+    activos: true,
     bajas: true,
     orden: 'demora',
   })
@@ -119,6 +121,7 @@ test('filtros: valores por defecto y validación de la dirección', async (t) =>
     '?estado=abc',
     '?orden=nombre',
     '?bajas=si',
+    '?activos=si',
     `?q=${'x'.repeat(101)}`,
     '?estado=1&estado=2',
     '?inventado=1',

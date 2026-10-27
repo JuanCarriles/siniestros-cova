@@ -9,6 +9,7 @@ import type { TipoUsuario } from '@cova/shared/schemas/enums'
 import { SiniestrosActivosBaja } from '@/components/abm/siniestros-activos-baja'
 import { useSiniestrosActivosBaja } from '@/components/abm/use-siniestros-activos-baja'
 import { Aviso } from '@/components/aviso'
+import { usePanel } from '@/components/layout/panel-context'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -39,6 +40,7 @@ export function EstadoUsuarioDialog({
   onDesactualizado: () => void
   elementoAlCerrar: () => HTMLElement | null
 }) {
+  const { basePath } = usePanel()
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [casosServidor, setCasosServidor] = useState<number | null>(null)
@@ -135,7 +137,12 @@ export function EstadoUsuarioDialog({
           </Aviso>
         )}
         {cambio?.tipo === 'baja' && !sinPermiso && (
-          <SiniestrosActivosBaja consulta={consulta} nombre={nombre} onAbrir={onCerrar} />
+          <SiniestrosActivosBaja
+            consulta={consulta}
+            nombre={nombre}
+            onAbrir={onCerrar}
+            hrefListado={`${basePath}/siniestros?gestor=${usuario?.id}&activos=true`}
+          />
         )}
         <DialogFooter>
           <DialogClose asChild>

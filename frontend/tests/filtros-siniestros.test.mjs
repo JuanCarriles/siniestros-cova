@@ -7,15 +7,22 @@ import { parametrosListadoValidos } from '../../shared/src/schemas/siniestros.ts
 const validos = (consulta) => parametrosListadoValidos(new URLSearchParams(consulta))
 
 test('conserva los filtros válidos y descarta los demás', () => {
-  assert.deepEqual(validos('q=gomez&estado=3&aseguradora=2&gestor=5&bajas=true&orden=demora'), {
-    q: 'gomez',
-    estado: '3',
-    aseguradora: '2',
-    gestor: '5',
-    bajas: 'true',
-    orden: 'demora',
-  })
-  assert.deepEqual(validos('estado=abc&porPagina=30&orden=nombre&inventado=1&pagina=0'), {})
+  assert.deepEqual(
+    validos('q=gomez&estado=3&aseguradora=2&gestor=5&activos=true&bajas=true&orden=demora'),
+    {
+      q: 'gomez',
+      estado: '3',
+      aseguradora: '2',
+      gestor: '5',
+      activos: 'true',
+      bajas: 'true',
+      orden: 'demora',
+    },
+  )
+  assert.deepEqual(
+    validos('estado=abc&activos=si&porPagina=30&orden=nombre&inventado=1&pagina=0'),
+    {},
+  )
 })
 
 test('una búsqueda de más de 100 caracteres no se envía ni se muestra como aplicada', () => {

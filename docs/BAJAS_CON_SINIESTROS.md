@@ -2,7 +2,9 @@
 
 En Usuarios o Ajustadores, elegir **Dar de baja** consulta los siniestros actuales. Activo significa: sin baja lógica y con un estado cuya bandera `esCierre` es falsa. Un cerrado o dado de baja no bloquea, aunque conserve la asociación histórica.
 
-El modal muestra número, aseguradora y estado de cada caso, en páginas de cinco, con **Ver siniestro** para abrir su ficha. **Actualizar casos** vuelve a consultar y permite comprobar si ya se resolvieron o reasignaron. La lista no tiene un scroll interno: usa el desplazamiento del modal para facilitar la lectura con zoom o letra grande. La indicación para cerrar o reasignar los casos es visible, y los enlaces a las fichas respetan el `basePath` del panel. No se reasignan casos automáticamente ni se da de baja sin confirmar.
+En **Usuarios**, el modal muestra la cantidad de casos y un botón **Ver siniestros activos**, que abre `/siniestros?gestor=<id>&activos=true` respetando el panel actual. El servidor filtra por el usuario elegido, sin baja lógica y con `esCierre=false`; los filtros se muestran en la pantalla y pueden quitarse. No se despliega el detalle dentro del modal.
+
+En **Ajustadores**, el modal muestra número, aseguradora y estado de cada caso, en páginas de cinco, con **Ver siniestro** para abrir su ficha. **Actualizar casos** vuelve a consultar y permite comprobar si ya se resolvieron o reasignaron. La lista no tiene un scroll interno: usa el desplazamiento del modal para facilitar la lectura con zoom o letra grande. La indicación para cerrar o reasignar los casos es visible, y los enlaces a las fichas respetan el `basePath` del panel. No se reasignan casos automáticamente ni se da de baja sin confirmar.
 
 **Dependencia pendiente:** esta historia no implementa la edición ni la reasignación de siniestros desde la ficha. Esas operaciones dependen de su propia historia. Hasta que esté disponible, la preparación de casos resueltos o reasignados para la prueba debe hacerla el equipo técnico en una base de desarrollo, conservando los datos reales.
 
