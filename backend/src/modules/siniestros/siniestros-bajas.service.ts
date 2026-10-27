@@ -27,7 +27,7 @@ export function crearServicioBajasSiniestros(deps: {
     if (actor.tipoUsuario !== 'ADMINISTRADOR' && actor.tipoUsuario !== 'SUPER_ADMINISTRADOR') {
       throw new HttpError(
         403,
-        'Solo un administrador o superadministrador puede dar de baja o eliminar siniestros.',
+        'Solo un administrador o superadministrador puede dar de baja, reactivar o eliminar siniestros.',
       )
     }
     return actor
@@ -43,6 +43,8 @@ export function crearServicioBajasSiniestros(deps: {
         eliminado: true,
         eliminacionEnCurso: true,
         idDireccion: true,
+        idUsuario: true,
+        idAjustador: true,
         estadoSiniestro: { select: { nombre: true, esCierre: true } },
       },
     })
@@ -55,6 +57,14 @@ export function crearServicioBajasSiniestros(deps: {
         { campo: 'numeroSiniestro' },
       )
     }
+  }
+  function exigirBaja(fila: { eliminado: boolean }) {
+    if (!fila.eliminado)
+      throw new HttpError(
+        409,
+        'Primero tenés que dar de baja el siniestro para eliminarlo definitivamente. Actualizá el listado.',
+        { codigo: 'SINIESTRO_NO_DADO_DE_BAJA' },
+      )
   }
   function exigirCierre(estado: { esCierre: boolean }) {
     if (!esCierreEnviado(estado)) {
@@ -167,7 +177,8 @@ export function crearServicioBajasSiniestros(deps: {
         const actor = await autorizar(tx, usuario.id)
         const fila = await buscar(tx, id)
         if (!fila) throw new HttpError(404, 'El siniestro no existe.')
-        if (fila.eliminacionEnCurso)
+        // Un borrado pendiente anterior a esta regla puede recibir la baja para completar su eliminación.
+        if (fila.eliminacionEnCurso && fila.eliminado)
           throw new HttpError(
             409,
             'Este siniestro tiene una eliminación definitiva pendiente. Reintentá la eliminación desde el listado.',
@@ -188,6 +199,57 @@ export function crearServicioBajasSiniestros(deps: {
         })
       })
     },
+    async reactivar(usuario: SesionUsuario, id: number) {
+      await base.transaccion(async (tx) => {
+        const actor = await autorizar(tx, usuario.id)
+        const fila = await buscar(tx, id)
+        if (!fila) throw new HttpError(404, 'El siniestro no existe.')
+        if (fila.eliminacionEnCurso)
+          throw new HttpError(
+            409,
+            'No se puede reactivar: la eliminación definitiva ya comenzó y puede haber archivos borrados. Reintentá la eliminación para completarla.',
+          )
+        if (!fila.eliminado) return
+        // No reintroducir un caso activo en un usuario o ajustador que ya fue dado de baja.
+        if (!fila.estadoSiniestro.esCierre) {
+          await tx.$queryRaw`SELECT "id" FROM "Usuario" WHERE "id" = ${fila.idUsuario} FOR UPDATE`
+          const asignado = await tx.usuario.findUnique({
+            where: { id: fila.idUsuario },
+            select: { eliminado: true },
+          })
+          if (!asignado || asignado.eliminado)
+            throw new HttpError(
+              409,
+              'Primero reactivá al usuario asignado antes de reactivar este siniestro.',
+            )
+          if (fila.idAjustador !== null) {
+            await tx.$queryRaw`SELECT "id" FROM "Ajustador" WHERE "id" = ${fila.idAjustador} FOR UPDATE`
+            const ajustador = await tx.ajustador.findUnique({
+              where: { id: fila.idAjustador },
+              select: { eliminado: true },
+            })
+            if (!ajustador || ajustador.eliminado)
+              throw new HttpError(
+                409,
+                'Primero reactivá al ajustador asignado antes de reactivar este siniestro.',
+              )
+          }
+        }
+        const ahora = reloj()
+        await tx.siniestro.update({
+          where: { id },
+          data: { eliminado: false, fechaBaja: null, fechaUltimoMovimiento: ahora },
+        })
+        await tx.historialSiniestro.create({
+          data: {
+            idSiniestro: id,
+            idUsuario: actor.id,
+            fechaEvento: ahora,
+            ...eventoHistorial.reactivacionSiniestro(actor, ahora),
+          },
+        })
+      })
+    },
     async eliminar(usuario: SesionUsuario, id: number, entrada: ConfirmarSiniestro) {
       const confirmacion = confirmarSiniestroSchema.parse(entrada)
       const inicial = await base.transaccion(async (tx) => {
@@ -196,6 +258,7 @@ export function crearServicioBajasSiniestros(deps: {
         if (!fila) return null
         confirmar(fila.numeroSiniestro, confirmacion)
         exigirCierre(fila.estadoSiniestro)
+        exigirBaja(fila)
         const claves = await clavesDocumentos(tx, id)
         await tx.siniestro.update({ where: { id }, data: { eliminacionEnCurso: true } })
         return claves
@@ -209,6 +272,7 @@ export function crearServicioBajasSiniestros(deps: {
         if (!fila) return
         confirmar(fila.numeroSiniestro, confirmacion)
         exigirCierre(fila.estadoSiniestro)
+        exigirBaja(fila)
         if (!fila.eliminacionEnCurso)
           throw new HttpError(409, 'El siniestro cambió. Actualizá el listado antes de reintentar.')
         // Una carga pudo pasar su última comprobación justo antes de marcar el caso.

@@ -95,7 +95,7 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
           const obtener = (s) => tx.siniestro.findUniqueOrThrow({ where: { id: s.id } })
           const s = await caso()
           const docBaja = await documento(s, 'se-conserva.pdf')
-          for (const accion of ['darDeBaja', 'eliminar']) {
+          for (const accion of ['darDeBaja', 'reactivar', 'eliminar']) {
             await assert.rejects(servicio[accion](gestor, s.id, confirmar(s)), { status: 403 })
             await assert.rejects(
               servicio[accion]({ ...admin, id: 2147483647 }, s.id, confirmar(s)),
@@ -154,7 +154,95 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
             false,
           )
           await assert.rejects(servicio.eliminar(admin, s.id, confirmar(s)), { status: 409 })
+          // Reactivar conserva el expediente, quita la baja y deja un único evento por transición.
+          await servicio.reactivar(admin, s.id)
+          assert.equal((await obtener(s)).eliminado, false)
+          assert.equal((await obtener(s)).fechaBaja, null)
+          assert.equal((await obtener(s)).fechaUltimoMovimiento.toISOString(), ahora.toISOString())
+          const reactivacion = await tx.historialSiniestro.findFirstOrThrow({
+            where: { idSiniestro: s.id, tipoEvento: 'REACTIVACION_SINIESTRO' },
+          })
+          assert.equal(reactivacion.idUsuario, admin.id)
+          assert.match(reactivacion.descripcion, /Ana Prueba reactivó el siniestro/)
+          await servicio.reactivar(superadmin, s.id)
+          assert.equal(
+            await tx.historialSiniestro.count({
+              where: { idSiniestro: s.id, tipoEvento: 'REACTIVACION_SINIESTRO' },
+            }),
+            1,
+          )
+          assert.ok(await tx.documentoSiniestro.findUnique({ where: { id: docBaja.id } }))
+          assert.equal(llamadas.length, 0, 'reactivar no modifica R2')
+          assert.equal(
+            (await lectura.listar(gestor, filtros)).siniestros.some((f) => f.id === s.id),
+            true,
+          )
+          await assert.rejects(servicio.reactivar(admin, 2147483647), { status: 404 })
+          await servicio.darDeBaja(admin, s.id)
+          await tx.usuario.update({
+            where: { id: gestor.id },
+            data: { eliminado: true, fechaBaja: ahora },
+          })
+          await assert.rejects(
+            servicio.reactivar(admin, s.id),
+            (e) => e.status === 409 && /usuario asignado/.test(e.message),
+          )
+          await tx.usuario.update({
+            where: { id: gestor.id },
+            data: { eliminado: false, fechaBaja: null },
+          })
+          const ajustador = await tx.ajustador.create({
+            data: {
+              nombres: 'Ajustador',
+              apellidos: 'Prueba',
+              telefono: '0',
+              email: `ajustador.bajas.${marca}@example.invalid`,
+              idAseguradora: aseguradora.id,
+              eliminado: true,
+              fechaBaja: ahora,
+            },
+          })
+          await tx.siniestro.update({ where: { id: s.id }, data: { idAjustador: ajustador.id } })
+          await assert.rejects(
+            servicio.reactivar(admin, s.id),
+            (e) => e.status === 409 && /ajustador asignado/.test(e.message),
+          )
+          await tx.ajustador.update({
+            where: { id: ajustador.id },
+            data: { eliminado: false, fechaBaja: null },
+          })
+          await servicio.reactivar(admin, s.id)
           const cierreConOtroNombre = await caso({ idEstadoSiniestro: otroCierre.id })
+          await documento(cierreConOtroNombre, 'cierre-sin-baja.pdf')
+          await assert.rejects(
+            servicio.eliminar(admin, cierreConOtroNombre.id, confirmar(cierreConOtroNombre)),
+            (e) => e.status === 409 && e.details.codigo === 'SINIESTRO_NO_DADO_DE_BAJA',
+          )
+          assert.equal(llamadas.length, 0, 'sin baja previa no se borra ningún archivo')
+          assert.equal((await obtener(cierreConOtroNombre)).eliminacionEnCurso, false)
+          await servicio.darDeBaja(admin, cierreConOtroNombre.id)
+          const otroActivo = await caso({ idUsuario: admin.id })
+          const bajasFiltro = await caso({ eliminado: true, fechaBaja: ahora })
+          const cerradosFiltro = await caso({ idEstadoSiniestro: cierre.id })
+          const soloActivos = await lectura.listar(
+            admin,
+            filtrosSiniestrosSchema.parse({
+              aseguradora: String(aseguradora.id),
+              gestor: String(gestor.id),
+              activos: 'true',
+              bajas: 'true',
+            }),
+          )
+          assert.deepEqual(
+            soloActivos.siniestros.map((f) => f.id),
+            [s.id],
+          )
+          assert.equal(soloActivos.resumen.bajas, 0)
+          assert.ok(
+            !soloActivos.siniestros.some((f) =>
+              [otroActivo.id, bajasFiltro.id, cerradosFiltro.id].includes(f.id),
+            ),
+          )
           await servicio.eliminar(admin, cierreConOtroNombre.id, confirmar(cierreConOtroNombre))
           assert.equal(
             await tx.siniestro.findUnique({ where: { id: cierreConOtroNombre.id } }),
@@ -173,6 +261,7 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
             idEstadoSiniestro: cierre.id,
             idDireccion: admin.idDireccion,
           })
+          await servicio.darDeBaja(admin, objetivo.id)
           const ajeno = await caso()
           const exclusivo = await tx.vehiculo.create({ data: { dominio: 'PRU123' } })
           const compartido = await tx.vehiculo.create({ data: { dominio: 'COM456' } })
@@ -255,6 +344,10 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
           await assert.rejects(servicio.darDeBaja(admin, objetivo.id), {
             status: 409,
           })
+          await assert.rejects(
+            servicio.reactivar(admin, objetivo.id),
+            (e) => e.status === 409 && /eliminación definitiva ya comenzó/.test(e.message),
+          )
           claveFallida = null
           agregarTarde = () => documento(objetivo, 'tarde.pdf')
           await assert.rejects(
@@ -306,6 +399,7 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
 
           // Número vigente y estado se vuelven a controlar después de R2.
           const cambiante = await caso({ idEstadoSiniestro: cierre.id })
+          await servicio.darDeBaja(admin, cambiante.id)
           await documento(cambiante, 'cambia.pdf')
           agregarTarde = () =>
             tx.siniestro.update({
@@ -328,6 +422,7 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
           await servicio.eliminar(admin, sinArchivos.id, confirmar(sinArchivos))
           assert.equal(await tx.siniestro.findUnique({ where: { id: sinArchivos.id } }), null)
           const fueraCarpeta = await caso({ idEstadoSiniestro: cierre.id })
+          await servicio.darDeBaja(admin, fueraCarpeta.id)
           await documento(fueraCarpeta, 'incorrecto.pdf', {
             urlArchivoSinDominio: 'plantillas/no-tocar.pdf',
           })
@@ -337,6 +432,28 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
           })
           assert.equal((await obtener(fueraCarpeta)).eliminacionEnCurso, false)
           assert.equal(llamadas.length, previas)
+          // Si la baja cambia durante R2, el segundo control evita borrar los registros.
+          const bajaCambiante = await caso({
+            idEstadoSiniestro: cierre.id,
+            eliminado: true,
+            fechaBaja: ahora,
+          })
+          await documento(bajaCambiante, 'cambia-baja.pdf')
+          agregarTarde = () =>
+            tx.siniestro.update({
+              where: { id: bajaCambiante.id },
+              data: { eliminado: false, fechaBaja: null },
+            })
+          await assert.rejects(
+            servicio.eliminar(admin, bajaCambiante.id, confirmar(bajaCambiante)),
+            (e) => e.status === 409 && e.details.codigo === 'SINIESTRO_NO_DADO_DE_BAJA',
+          )
+          assert.ok(await obtener(bajaCambiante))
+          // Compatibilidad con un borrado pendiente iniciado antes de exigir la baja previa.
+          await servicio.darDeBaja(admin, bajaCambiante.id)
+          assert.equal((await obtener(bajaCambiante)).eliminado, true)
+          await servicio.eliminar(admin, bajaCambiante.id, confirmar(bajaCambiante))
+          assert.equal(await tx.siniestro.findUnique({ where: { id: bajaCambiante.id } }), null)
           throw rollback
         },
         { timeout: 30000 },

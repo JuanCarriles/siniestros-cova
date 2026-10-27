@@ -159,11 +159,12 @@ export function crearServicioSiniestros(
           : filtros.gestor
             ? { idUsuario: filtros.gestor }
             : {}),
+        ...(filtros.activos ? { eliminado: false, estadoSiniestro: { esCierre: false } } : {}),
         ...(filtros.estado ? { idEstadoSiniestro: filtros.estado } : {}),
         ...(filtros.aseguradora ? { idAseguradora: filtros.aseguradora } : {}),
         ...(ids ? { id: { in: ids } } : {}),
       }
-      const conBajas = filtros.bajas && !esGestor(usuario)
+      const conBajas = filtros.bajas && !filtros.activos && !esGestor(usuario)
       const where: Prisma.SiniestroWhereInput = conBajas ? base : { ...base, eliminado: false }
 
       // RF-19: demorado = abierto y sin movimientos en 72 h (o sin movimientos desde la asignación)
@@ -182,7 +183,9 @@ export function crearServicioSiniestros(
             ],
           },
         }),
-        esGestor(usuario) ? 0 : prisma.siniestro.count({ where: { ...base, eliminado: true } }),
+        esGestor(usuario) || filtros.activos
+          ? 0
+          : prisma.siniestro.count({ where: { ...base, eliminado: true } }),
       ])
 
       // Una página que ya no existe (p. ej. después de filtrar) muestra la última

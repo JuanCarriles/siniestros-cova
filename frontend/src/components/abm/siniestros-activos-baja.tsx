@@ -10,10 +10,13 @@ export function SiniestrosActivosBaja({
   consulta,
   nombre,
   onAbrir,
+  hrefListado,
 }: {
   consulta: ConsultaSiniestrosActivosBaja
   nombre: string
   onAbrir: () => void
+  /** En Usuarios se ofrece el listado filtrado, sin desplegar los casos dentro del modal. */
+  hrefListado?: string
 }) {
   const { basePath } = usePanel()
   const { datos, cargando, error } = consulta
@@ -50,10 +53,16 @@ export function SiniestrosActivosBaja({
       ) : (
         <>
           <p role="status">
-            Para dar de baja a <strong>{nombre}</strong>, primero cerrá o reasigná estos siniestros.
-            Después tocá <strong>Actualizar casos</strong>.
+            Para dar de baja a <strong>{nombre}</strong>, primero cerrá o reasigná sus siniestros
+            activos. Después tocá <strong>Actualizar casos</strong>.
           </p>
-          {siniestros.length ? (
+          {hrefListado ? (
+            <Button asChild className="justify-self-start">
+              <Link to={hrefListado} onClick={onAbrir}>
+                Ver siniestros activos <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          ) : siniestros.length ? (
             <ul className="grid gap-3 rounded-lg border p-3">
               {siniestros.map((caso) => (
                 <li
@@ -77,7 +86,7 @@ export function SiniestrosActivosBaja({
           ) : (
             <p>Los casos cambiaron mientras consultabas. Usá «Actualizar casos» para verlos.</p>
           )}
-          {(casosActivos > porPagina || pagina > 1) && (
+          {!hrefListado && (casosActivos > porPagina || pagina > 1) && (
             <nav
               aria-label="Páginas de siniestros asociados"
               className="flex flex-wrap items-center justify-between gap-2"
