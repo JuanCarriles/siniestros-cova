@@ -53,7 +53,7 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
             tipoUsuario: 'ADMINISTRADOR',
           }
           const abogado = await tx.abogado.create({
-            data: { nombreCompleto: `Dra. Paula Sánchez ${marca}`, numeroMatricula: 54120 },
+            data: { nombreCompleto: `Dra. Paula Sánchez ${marca}`, numeroMatricula: '54120' },
           })
 
           const siniestro = (numero, idUsuario, extra = {}) =>

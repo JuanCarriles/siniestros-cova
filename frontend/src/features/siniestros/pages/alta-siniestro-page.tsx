@@ -20,10 +20,13 @@ import {
   datosCasoVacios,
   guardarBorrador,
   leerBorrador,
+  type AbogadoBorrador,
   type DatosCasoFormulario,
   type PersonaExternaBorrador,
   type VehiculoBorrador,
 } from '../borrador-alta'
+import { limpiarRepresentados } from '../abogados-alta'
+import { AbogadosAlta } from '../components/abogados-alta'
 import { DatosCasoForm } from '../components/datos-caso-form'
 import { PasosAlta } from '../components/pasos-alta'
 import { PersonasExternasAlta } from '../components/personas-externas-alta'
@@ -38,8 +41,9 @@ const fechaHora = (iso: string) =>
     minute: '2-digit',
   })
 
-// CU-09: alta de siniestro en cinco pasos (E4-04 el primero; E4-05 los vehículos del segundo). Lo cargado se guarda en este navegador a
-// medida que se escribe; el siniestro recién se crea al confirmar el último paso.
+// CU-09: alta de siniestro en cinco pasos (E4-04 datos del caso; E4-05 a E4-07 vehículos y personas; E4-08
+// abogados). Lo cargado se guarda en este navegador a medida que se escribe; el siniestro recién se crea al
+// confirmar el último paso.
 export function AltaSiniestroPage() {
   const { idUsuario, opciones } = useLoaderData<typeof cargarAltaSiniestro>()
   const { basePath } = usePanel()
@@ -66,40 +70,56 @@ export function AltaSiniestroPage() {
   const [personasExternas, setPersonasExternas] = useState<PersonaExternaBorrador[]>(
     inicial?.personasExternas ?? [],
   )
+  const [abogados, setAbogados] = useState<AbogadoBorrador[]>(inicial?.abogados ?? [])
+  const [faltanRepresentados, setFaltanRepresentados] = useState(false)
+  const involucrados = { vehiculos, personasExternas }
 
   const alCambiar = useCallback(
     (valores: DatosCasoFormulario) => {
       ultimos.current = valores
-      guardarBorrador(idUsuario, { paso: 1, datosCaso: valores, vehiculos, personasExternas })
+      guardarBorrador(idUsuario, {
+        paso: 1,
+        datosCaso: valores,
+        vehiculos,
+        personasExternas,
+        abogados,
+      })
     },
-    [idUsuario, vehiculos, personasExternas],
+    [idUsuario, vehiculos, personasExternas, abogados],
   )
-  function cambiarVehiculos(nuevos: VehiculoBorrador[]) {
-    setVehiculos(nuevos)
+  // Si se quita a una persona del paso 2, deja de figurar en su abogado
+  function cambiarPersonas(cambio: Partial<typeof involucrados>) {
+    const nuevas = { ...involucrados, ...cambio }
+    const nuevosAbogados = limpiarRepresentados(abogados, nuevas)
+    setVehiculos(nuevas.vehiculos)
+    setPersonasExternas(nuevas.personasExternas)
+    setAbogados(nuevosAbogados)
     guardarBorrador(idUsuario, {
       paso,
       datosCaso: ultimos.current,
-      vehiculos: nuevos,
-      personasExternas,
+      ...nuevas,
+      abogados: nuevosAbogados,
     })
   }
-  function cambiarPersonasExternas(nuevas: PersonaExternaBorrador[]) {
-    setPersonasExternas(nuevas)
+  function cambiarAbogados(nuevos: AbogadoBorrador[]) {
+    setAbogados(nuevos)
+    setFaltanRepresentados(false)
     guardarBorrador(idUsuario, {
       paso,
       datosCaso: ultimos.current,
-      vehiculos,
-      personasExternas: nuevas,
+      ...involucrados,
+      abogados: nuevos,
     })
   }
   function irAlPaso(numero: number) {
     setDatosCaso(ultimos.current)
     setPaso(numero)
+    setFaltanRepresentados(false)
     guardarBorrador(idUsuario, {
       paso: numero,
       datosCaso: ultimos.current,
-      vehiculos,
-      personasExternas,
+      ...involucrados,
+      abogados,
     })
     window.scrollTo({ top: 0 })
   }
@@ -160,13 +180,13 @@ export function AltaSiniestroPage() {
           <VehiculosAlta
             vehiculos={vehiculos}
             personasExternas={personasExternas}
-            onCambiar={cambiarVehiculos}
+            onCambiar={(nuevos) => cambiarPersonas({ vehiculos: nuevos })}
             opciones={opciones}
             idAseguradoraSiniestro={String(datosCaso.idAseguradora ?? '')}
           />
           <PersonasExternasAlta
             personas={personasExternas}
-            onCambiar={cambiarPersonasExternas}
+            onCambiar={(nuevas) => cambiarPersonas({ personasExternas: nuevas })}
             vehiculos={vehiculos}
             opciones={opciones}
           />
@@ -178,6 +198,48 @@ export function AltaSiniestroPage() {
               </Button>
             </div>
             <Button type="button" size="lg" onClick={() => irAlPaso(3)}>
+              Continuar
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          </div>
+        </section>
+      ) : paso === 3 ? (
+        <section className="grid gap-6">
+          <ResumenCaso
+            numero={String(datosCaso.numeroSiniestro)}
+            aseguradora={
+              opciones.aseguradoras.find((a) => String(a.id) === String(datosCaso.idAseguradora))
+                ?.nombre
+            }
+            onModificar={() => irAlPaso(1)}
+          />
+          {faltanRepresentados && (
+            <Aviso tipo="error" enfocar>
+              Hay abogados sin personas a las que representan. Elegí a quién representa cada uno o
+              quitalos para continuar.
+            </Aviso>
+          )}
+          <AbogadosAlta
+            abogados={abogados}
+            onCambiar={cambiarAbogados}
+            involucrados={involucrados}
+          />
+          <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid gap-3 sm:flex sm:flex-wrap">
+              {cancelar}
+              <Button type="button" size="lg" variant="outline" onClick={() => irAlPaso(2)}>
+                Volver a vehículos y personas
+              </Button>
+            </div>
+            <Button
+              type="button"
+              size="lg"
+              onClick={() =>
+                abogados.some((a) => a.representados.length === 0)
+                  ? setFaltanRepresentados(true)
+                  : irAlPaso(4)
+              }
+            >
               Continuar
               <ArrowRight aria-hidden="true" />
             </Button>

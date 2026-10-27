@@ -327,7 +327,7 @@ model Abogado {
   id              Int       @id @default(autoincrement())
   nombreCompleto  String
   telefono        String?
-  numeroMatricula Int?
+  numeroMatricula String?
   email           String?
   eliminado       Boolean   @default(false)
   fechaBaja       DateTime? @db.Timestamptz(3)

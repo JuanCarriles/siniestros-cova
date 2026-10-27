@@ -1,4 +1,5 @@
 import type {
+  AbogadoAltaData,
   DatosCasoInput,
   OcupanteAltaData,
   PersonaExternaAltaData,
@@ -33,6 +34,8 @@ export type TitularBorrador = TitularAltaData & { clave: string }
 export type OcupanteBorrador = OcupanteAltaData & { clave: string }
 /** Peatón, testigo, dueño de una propiedad…: no iba en ningún vehículo */
 export type PersonaExternaBorrador = PersonaExternaAltaData & { clave: string }
+/** Abogado ya validado del paso 3; representados son claves de personas del paso 2 */
+export type AbogadoBorrador = AbogadoAltaData & { clave: string }
 
 /** Vehículo ya validado del paso 2, con su titular (uno o ninguno todavía) y sus ocupantes. */
 export type VehiculoBorrador = VehiculoAltaData & {
@@ -59,12 +62,13 @@ export const vehiculoVacio: VehiculoAltaInput = {
 }
 
 export type BorradorAlta = {
-  version: 4
+  version: 5
   /** Paso en el que quedó (1 = datos del caso) */
   paso: number
   datosCaso: DatosCasoFormulario
   vehiculos: VehiculoBorrador[]
   personasExternas: PersonaExternaBorrador[]
+  abogados: AbogadoBorrador[]
   /** ISO: cuándo se guardó por última vez */
   guardado: string
 }
@@ -82,10 +86,16 @@ export function leerBorrador(idUsuario: number): BorradorAlta | null {
     }
     if (typeof borrador?.datosCaso !== 'object' || !borrador.datosCaso) return null
     // Las versiones anteriores se retoman igual: la 1 sin vehículos, la 2 con vehículos sin personas, la 3 sin
-    // personas fuera de los vehículos
+    // personas fuera de los vehículos, la 4 sin abogados
     if (borrador.version === 1)
-      return { ...borrador, version: 4, vehiculos: [], personasExternas: [] } as BorradorAlta
-    if (!Array.isArray(borrador.vehiculos) || ![2, 3, 4].includes(borrador.version ?? 0))
+      return {
+        ...borrador,
+        version: 5,
+        vehiculos: [],
+        personasExternas: [],
+        abogados: [],
+      } as BorradorAlta
+    if (!Array.isArray(borrador.vehiculos) || ![2, 3, 4, 5].includes(borrador.version ?? 0))
       return null
     const vehiculos = borrador.vehiculos.map((v) => ({
       ...v,
@@ -95,7 +105,8 @@ export function leerBorrador(idUsuario: number): BorradorAlta | null {
     const personasExternas = Array.isArray(borrador.personasExternas)
       ? borrador.personasExternas
       : []
-    return { ...borrador, version: 4, vehiculos, personasExternas } as BorradorAlta
+    const abogados = Array.isArray(borrador.abogados) ? borrador.abogados : []
+    return { ...borrador, version: 5, vehiculos, personasExternas, abogados } as BorradorAlta
   } catch {
     return null
   }
@@ -103,9 +114,9 @@ export function leerBorrador(idUsuario: number): BorradorAlta | null {
 
 export function guardarBorrador(
   idUsuario: number,
-  datos: Pick<BorradorAlta, 'paso' | 'datosCaso' | 'vehiculos' | 'personasExternas'>,
+  datos: Omit<BorradorAlta, 'version' | 'guardado'>,
 ) {
-  const borrador: BorradorAlta = { version: 4, ...datos, guardado: new Date().toISOString() }
+  const borrador: BorradorAlta = { version: 5, ...datos, guardado: new Date().toISOString() }
   try {
     localStorage.setItem(clave(idUsuario), JSON.stringify(borrador))
   } catch {
