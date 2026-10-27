@@ -59,3 +59,26 @@ test('sin rol elegido (los botones de opción mandan null) el mensaje es el prop
     ['Elegí si el vehículo es del asegurado o de un tercero'],
   )
 })
+
+test('un dominio sin letras ni números ("---") no identifica a ningún vehículo', () => {
+  const mensajes = (dominio) =>
+    (
+      vehiculoAltaSchema.safeParse({ ...vacio, rolAccidente: 'TERCERO', dominio }).error?.issues ??
+      []
+    ).map((i) => i.message)
+  assert.deepEqual(mensajes('---'), ['Ingresá un dominio válido'])
+  assert.deepEqual(mensajes(' - - '), ['Ingresá un dominio válido'])
+  assert.deepEqual(mensajes('AE-123-CD'), [])
+})
+
+test('volver a "Sin especificar" (vacío) borra el uso y la aseguradora elegidos', () => {
+  const datos = vehiculoAltaSchema.parse({
+    ...vacio,
+    rolAccidente: 'TERCERO',
+    dominio: 'AE 123 CD',
+    uso: '',
+    idAseguradora: '',
+  })
+  assert.equal(datos.uso, null)
+  assert.equal(datos.idAseguradora, null)
+})

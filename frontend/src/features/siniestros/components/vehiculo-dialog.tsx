@@ -29,9 +29,6 @@ import {
 } from '@/components/ui/dialog'
 import { vehiculoVacio, type VehiculoBorrador } from '../borrador-alta'
 
-// "Sin seguro o no se sabe": Radix no admite una opción con valor vacío; se guarda sin aseguradora
-const SIN_SEGURO = 'ninguna'
-
 const aFormulario = (v: VehiculoBorrador): VehiculoAltaInput => ({
   rolAccidente: v.rolAccidente,
   marca: v.marca ?? '',
@@ -261,6 +258,7 @@ export function VehiculoDialog({
                 <SelectField
                   label="Uso del vehículo"
                   placeholder="Elegir uso…"
+                  opcionVacia="Sin especificar"
                   opciones={Object.entries(USOS_VEHICULO).map(([valor, etiqueta]) => ({
                     valor,
                     etiqueta,
@@ -295,14 +293,12 @@ export function VehiculoDialog({
                 <SelectField
                   label="Aseguradora del vehículo"
                   placeholder="Elegir aseguradora…"
-                  opciones={[
-                    { valor: SIN_SEGURO, etiqueta: 'Sin seguro o no se sabe' },
-                    ...aseguradoras.map((a) => ({ valor: String(a.id), etiqueta: a.nombre })),
-                  ]}
+                  opcionVacia="Sin seguro o no se sabe"
+                  opciones={aseguradoras.map((a) => ({ valor: String(a.id), etiqueta: a.nombre }))}
                   value={String(field.value ?? '')}
                   onChange={(valor) => {
                     propuesta.current = false
-                    field.onChange(valor === SIN_SEGURO ? '' : valor)
+                    field.onChange(valor)
                   }}
                   onBlur={field.onBlur}
                   ref={field.ref}
