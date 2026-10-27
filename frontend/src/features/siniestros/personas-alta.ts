@@ -1,4 +1,7 @@
-import { normalizarDocumento } from '@cova/shared/schemas/siniestros-alta'
+import {
+  normalizarDocumento,
+  type OpcionesAltaSiniestro,
+} from '@cova/shared/schemas/siniestros-alta'
 import type { PersonaExternaBorrador, VehiculoBorrador } from './borrador-alta'
 
 /** Todas las personas del paso 2: las de cada vehículo y las que no iban en ninguno (E4-06 y E4-07). */
@@ -34,8 +37,8 @@ export function nombresPersonas(involucrados: Involucrados): Map<string, string>
 }
 
 /**
- * Dónde está cargada otra persona con el mismo documento, sin contar puntos ni espacios. Se avisa sin bloquear:
- * la misma persona o empresa puede ser titular de dos vehículos del siniestro.
+ * Dónde está cargada otra persona con el mismo documento, sin contar puntos ni espacios. No se puede guardar: el
+ * usuario corrige el documento o cancela la carga (CU-09 13.b y 16.a).
  */
 export function documentoRepetido(
   involucrados: Involucrados,
@@ -51,4 +54,17 @@ export function documentoRepetido(
       normalizarDocumento(persona.documento) === buscado,
   )
   return otra?.donde ?? null
+}
+
+/**
+ * País a mostrar en el domicilio de una persona. La dirección guarda la provincia, no el país: con provincia, el
+ * de ella; sin provincia, el único país disponible (si hay más de uno, queda para elegir).
+ */
+export function paisDelDomicilio(
+  idProvincia: number | null | undefined,
+  { paises, provincias }: Pick<OpcionesAltaSiniestro, 'paises' | 'provincias'>,
+): string {
+  const provincia = provincias.find((p) => p.id === idProvincia)
+  if (provincia) return String(provincia.idPais)
+  return paises.length === 1 ? String(paises[0].id) : ''
 }

@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Check, Plus, TriangleAlert } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
 import type { TipoLesion } from '@cova/shared/schemas/enums'
 import {
   CONDUCTOR,
@@ -43,7 +43,7 @@ import type {
   TitularBorrador,
   VehiculoBorrador,
 } from '../borrador-alta'
-import { documentoRepetido, type Involucrados } from '../personas-alta'
+import { documentoRepetido, paisDelDomicilio, type Involucrados } from '../personas-alta'
 
 /** titular y ocupante, de un vehículo; externa, alguien que no iba en ninguno (peatón, testigo…) */
 export type ModoPersona = 'titular' | 'ocupante' | 'externa'
@@ -111,11 +111,8 @@ const esquemas = {
 }
 
 const texto = (valor: string | null | undefined) => valor ?? ''
-function aFormulario(
-  p: PersonaBorrador,
-  provincias: OpcionesAltaSiniestro['provincias'],
-): PersonaFormulario {
-  const provincia = provincias.find((x) => x.id === p.domicilio.idProvincia)
+function aFormulario(p: PersonaBorrador, opciones: OpcionesAltaSiniestro): PersonaFormulario {
+  const provincia = opciones.provincias.find((x) => x.id === p.domicilio.idProvincia)
   return {
     ibaEnVehiculo: 'ibaEnVehiculo' in p ? p.ibaEnVehiculo : true,
     rolSinVehiculo: 'rolSinVehiculo' in p ? p.rolSinVehiculo : '',
@@ -132,7 +129,7 @@ function aFormulario(
     fechaVencimientoCarnet: 'fechaVencimientoCarnet' in p ? texto(p.fechaVencimientoCarnet) : '',
     telefono: texto(p.telefono),
     email: texto(p.email),
-    pais: provincia ? String(provincia.idPais) : '',
+    pais: paisDelDomicilio(p.domicilio.idProvincia, opciones),
     domicilio: {
       idProvincia: provincia ? String(provincia.id) : '',
       localidad: texto(p.domicilio.localidad),
@@ -148,7 +145,7 @@ function aFormulario(
 // CU-09 pasos 11-22 (E4-06 y E4-07). El titular empieza por si iba en el vehículo; el ocupante, por dónde iba (y,
 // si manejaba, su relación con el titular); la persona fuera de los vehículos, por su rol en el siniestro, lo único
 // obligatorio, y no tiene permiso de conducir. Las lesiones quedan detrás de "¿Tuvo lesiones?". Un documento que
-// ya está en el alta se avisa sin bloquear. Se monta mientras está abierto.
+// ya está en el alta no se puede guardar (CU-09 13.b y 16.a). Se monta mientras está abierto.
 export function PersonaDialog({
   modo,
   vehiculo,
@@ -176,18 +173,19 @@ export function PersonaDialog({
   const [agregado, setAgregado] = useState<string | null>(null)
   const vacia = {
     ...personaVacia,
-    pais: opciones.paises.length === 1 ? String(opciones.paises[0].id) : '',
+    pais: paisDelDomicilio(null, opciones),
   }
   const {
     control,
     register,
     handleSubmit,
     reset,
+    setFocus,
     setValue,
     formState: { errors, isSubmitted },
   } = useForm<PersonaFormulario, unknown, PersonaData>({
     resolver: zodResolver(esquemas[modo]),
-    defaultValues: persona ? aFormulario(persona, opciones.provincias) : vacia,
+    defaultValues: persona ? aFormulario(persona, opciones) : vacia,
   })
   const iba = useWatch({ control, name: 'ibaEnVehiculo' })
   const lugar = useWatch({ control, name: 'lugar' })
@@ -208,6 +206,8 @@ export function PersonaDialog({
 
   const guardar = (seguir: boolean) =>
     handleSubmit((datos) => {
+      // Documento repetido: el error ya está a la vista en el campo; se corrige o se cancela
+      if (repetido) return setFocus('documento')
       onGuardar(datos)
       if (!seguir) return onCerrar()
       reset(vacia)
@@ -334,6 +334,7 @@ export function PersonaDialog({
                     render={({ field }) => (
                       <SelectField
                         label="Lugar en el vehículo"
+                        opcionVacia="Sin especificar"
                         placeholder={elegir('lugar')}
                         opciones={LUGARES_EN_VEHICULO.map((l) => ({ valor: l, etiqueta: l }))}
                         value={String(field.value ?? '')}
@@ -388,6 +389,7 @@ export function PersonaDialog({
                 render={({ field }) => (
                   <SelectField
                     label="Tipo de documento"
+                    opcionVacia="Sin especificar"
                     placeholder={elegir('tipo')}
                     opciones={opciones.tiposDocumento.map((t) => ({
                       valor: String(t.id),
@@ -401,32 +403,25 @@ export function PersonaDialog({
                   />
                 )}
               />
-              <div className="grid content-start gap-2">
-                <TextField
-                  label="Número de documento"
-                  autoComplete="off"
-                  maxLength={30}
-                  error={errors.documento?.message}
-                  aria-describedby={repetido ? 'documento-repetido' : undefined}
-                  {...register('documento')}
-                />
-                {repetido && (
-                  <p
-                    id="documento-repetido"
-                    className="flex items-start gap-2 rounded-md border-2 border-warning-ink bg-warning-bg px-3 py-2 text-sm font-semibold text-warning-ink"
-                  >
-                    <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                    Este documento ya está cargado como {repetido}. Podés guardarlo igual si
-                    corresponde.
-                  </p>
-                )}
-              </div>
+              <TextField
+                label="Número de documento"
+                autoComplete="off"
+                maxLength={30}
+                error={
+                  errors.documento?.message ??
+                  (repetido
+                    ? `Esta persona ya está cargada como ${repetido}. Corregí el documento o cancelá la carga.`
+                    : undefined)
+                }
+                {...register('documento')}
+              />
               <Controller
                 control={control}
                 name="estadoCivil"
                 render={({ field }) => (
                   <SelectField
                     label="Estado civil"
+                    opcionVacia="Sin especificar"
                     placeholder={elegir('estado civil')}
                     opciones={ESTADOS_CIVILES.map((e) => ({ valor: e, etiqueta: e }))}
                     value={String(field.value ?? '')}
@@ -442,6 +437,7 @@ export function PersonaDialog({
                 render={({ field }) => (
                   <SelectField
                     label="Sexo"
+                    opcionVacia="Sin especificar"
                     placeholder={elegir('sexo')}
                     opciones={SEXOS.map((s) => ({ valor: s, etiqueta: s }))}
                     value={String(field.value ?? '')}
@@ -506,6 +502,7 @@ export function PersonaDialog({
                 render={({ field }) => (
                   <SelectField
                     label="País"
+                    opcionVacia="Sin especificar"
                     placeholder={elegir('país')}
                     opciones={opciones.paises.map((p) => ({
                       valor: String(p.id),
@@ -527,6 +524,7 @@ export function PersonaDialog({
                 render={({ field }) => (
                   <SelectField
                     label="Provincia"
+                    opcionVacia="Sin especificar"
                     placeholder={pais ? elegir('provincia') : 'Primero elegí el país'}
                     disabled={!pais}
                     opciones={provincias.map((p) => ({ valor: String(p.id), etiqueta: p.nombre }))}

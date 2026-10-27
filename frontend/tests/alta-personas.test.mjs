@@ -6,7 +6,11 @@ import {
   personaExternaAltaSchema,
   titularAltaSchema,
 } from '../../shared/src/schemas/siniestros-alta.ts'
-import { documentoRepetido, nombresPersonas } from '../src/features/siniestros/personas-alta.ts'
+import {
+  documentoRepetido,
+  nombresPersonas,
+  paisDelDomicilio,
+} from '../src/features/siniestros/personas-alta.ts'
 
 // Alta de siniestro, paso 2 (E4-06): titular y ocupantes de cada vehículo.
 const vacia = {
@@ -180,4 +184,60 @@ test('fuera de los vehículos: siguen la numeración de Desconocido y entran en 
     documentoRepetido(involucrados, '30111222', 't1'),
     'persona fuera de los vehículos (Peatón)',
   )
+})
+
+test('documento repetido: dice dónde está cargada la otra persona, para corregirlo o cancelar (CU-09 13.b, 16.a)', () => {
+  const vehiculos = [
+    {
+      clave: 'v1',
+      dominio: 'AE 123 CD',
+      titular: { clave: 't1', nombreCompletoRazonSocial: 'Ana Ruiz', documento: '30.111.222' },
+      ocupantes: [{ clave: 'o1', nombreCompletoRazonSocial: null, documento: '27 444 555' }],
+    },
+  ]
+  const involucrados = { vehiculos, personasExternas: [] }
+  assert.equal(documentoRepetido(involucrados, '30111222', null), 'titular del vehículo AE 123 CD')
+  assert.equal(
+    documentoRepetido(involucrados, '27.444.555', 't1'),
+    'ocupante del vehículo AE 123 CD',
+  )
+  assert.equal(
+    documentoRepetido(involucrados, '30111222', 't1'),
+    null,
+    'al modificarla, no choca consigo misma',
+  )
+  assert.equal(documentoRepetido(involucrados, '99999999', null), null)
+})
+
+test('el país del domicilio se conserva aunque no se elija provincia', () => {
+  const unPais = {
+    paises: [{ id: 1, nombre: 'Argentina' }],
+    provincias: [{ id: 7, nombre: 'Córdoba', idPais: 1 }],
+  }
+  assert.equal(paisDelDomicilio(7, unPais), '1', 'con provincia, el de la provincia')
+  assert.equal(paisDelDomicilio(null, unPais), '1', 'sin provincia, el único país')
+  const dosPaises = {
+    paises: [...unPais.paises, { id: 2, nombre: 'Uruguay' }],
+    provincias: [...unPais.provincias, { id: 30, nombre: 'Montevideo', idPais: 2 }],
+  }
+  assert.equal(paisDelDomicilio(30, dosPaises), '2')
+  assert.equal(paisDelDomicilio(null, dosPaises), '', 'con varios países y sin provincia, se elige')
+})
+
+test('volver a "Sin especificar" (vacío) borra lo que se había elegido en cada lista', () => {
+  const sinEspecificar = {
+    idTipoDocumento: '',
+    estadoCivil: '',
+    sexo: '',
+    domicilio: { ...vacia.domicilio, idProvincia: '' },
+  }
+  const t = titularAltaSchema.parse(titular({ ...sinEspecificar, lugar: '' }))
+  const o = ocupanteAltaSchema.parse(ocupante({ ...sinEspecificar, lugar: '' }))
+  for (const datos of [t, o]) {
+    assert.equal(datos.idTipoDocumento, null)
+    assert.equal(datos.estadoCivil, null)
+    assert.equal(datos.sexo, null)
+    assert.equal(datos.domicilio.idProvincia, null)
+    assert.equal(datos.lugar, null)
+  }
 })

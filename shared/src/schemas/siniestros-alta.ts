@@ -118,7 +118,10 @@ export const vehiculoAltaSchema = z.strictObject({
   marca: libre(60),
   modelo: libre(60),
   version: libre(100),
-  dominio: obligatorio('Ingresá el dominio', 15).transform((dominio) => dominio.toUpperCase()),
+  // Sin letras ni números ("---") no identifica a ningún vehículo: normalizado quedaría vacío
+  dominio: obligatorio('Ingresá el dominio', 15)
+    .refine((dominio) => !dominio || /[a-z0-9]/i.test(dominio), 'Ingresá un dominio válido')
+    .transform((dominio) => dominio.toUpperCase()),
   numeroChasis: libre(40).transform((valor) => valor?.toUpperCase() ?? valor),
   numeroMotor: libre(40).transform((valor) => valor?.toUpperCase() ?? valor),
   anio: opcional(
