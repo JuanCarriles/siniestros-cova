@@ -177,7 +177,8 @@ export function AbogadosAlta({
                   {a.representados.length === 0 ? (
                     <p className="inline-flex items-center gap-1.5 font-semibold text-warning-ink">
                       <TriangleAlert className="size-4" aria-hidden="true" />
-                      Falta a quién representa: las personas que tenía se quitaron del alta.
+                      Este abogado no tiene personas asignadas. Asignale alguna o quitalo para
+                      continuar.
                     </p>
                   ) : (
                     <ul className="flex flex-wrap gap-2">
