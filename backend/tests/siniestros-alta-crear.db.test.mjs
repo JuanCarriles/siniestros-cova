@@ -3,6 +3,7 @@ import test from 'node:test'
 import { crearSiniestroSchema } from '@cova/shared/schemas/siniestros-alta'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
 import { crearServicioCrearSiniestro } from '../src/modules/siniestros/siniestros-alta-crear.service.ts'
+import { HttpError } from '../src/utils/httpError.ts'
 
 // CU-09 paso 36 (E4-10): crear el siniestro con todo lo cargado en el alta, en una sola transacción.
 test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno y mail', async () => {
@@ -39,14 +40,18 @@ test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno 
           })
 
           const avisos = []
-          const r2 = { fallaCopia: false, borradas: [] }
+          // faltan: claves que ya no están en R2; fallaCopiaEn: la copia número N falla (R2 caído)
+          const r2 = { faltan: new Set(), fallaCopiaEn: 0, copias: 0, borradas: [] }
           let mailFalla = false
           const servicio = crearServicioCrearSiniestro({
             transaccion: (trabajo) => trabajo(tx),
             // R2 simulado: al crear, los documentos del alta se copian a la carpeta del siniestro
             almacenamiento: () => ({
+              comprobarExistencia: async (clave) => {
+                if (r2.faltan.has(clave)) throw new HttpError(404, 'No está')
+              },
               copiar: async (clave, carpeta) => {
-                if (r2.fallaCopia) throw new Error('R2 caído')
+                if (++r2.copias === r2.fallaCopiaEn) throw new Error('R2 caído')
                 return `${carpeta}/${clave.split('/').pop()}`
               },
               eliminar: async (clave) => {
@@ -284,21 +289,52 @@ test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno 
           assert.equal(sinMail.correoEnviado, false)
           assert.ok(await tx.siniestro.findUnique({ where: { id: sinMail.id } }))
 
-          // Si R2 no puede copiar, el documento sigue apuntando a altas/: el archivo existe y no se borra
-          r2.fallaCopia = true
-          r2.borradas.length = 0
-          const sinCopia = await servicio.crear(
-            admin,
-            crearSiniestroSchema.parse({
-              ...entrada,
-              datosCaso: { ...entrada.datosCaso, numeroSiniestro: `${numero}-D` },
-            }),
+          // Un archivo del alta que ya no está en R2 (la regla de 30 días lo borró): no se crea nada y se dice
+          // cuál volver a cargar
+          r2.faltan.add(`altas/${admin.id}/doc.pdf`)
+          await assert.rejects(
+            servicio.crear(
+              admin,
+              crearSiniestroSchema.parse({
+                ...entrada,
+                datosCaso: { ...entrada.datosCaso, numeroSiniestro: `${numero}-D` },
+              }),
+            ),
+            (error) =>
+              error.status === 409 &&
+              error.details?.campo === 'documentos' &&
+              error.message.startsWith('«Denuncia.pdf» ya no está disponible'),
           )
-          const documento = await tx.documentoSiniestro.findFirstOrThrow({
-            where: { idSiniestro: sinCopia.id },
-          })
-          assert.equal(documento.urlArchivoSinDominio, `altas/${admin.id}/doc.pdf`)
-          assert.deepEqual(r2.borradas, [])
+          assert.equal(await tx.siniestro.count({ where: { numeroSiniestro: `${numero}-D` } }), 0)
+          r2.faltan.clear()
+
+          // Si R2 falla a mitad de las copias, el alta no se crea (503), se borran las copias ya hechas y los
+          // originales quedan para reintentar. (Acá la transacción es la de la prueba: lo insertado antes del
+          // error no se revierte; en el servicio real, sí.)
+          const dos = [
+            entrada.documentos[0],
+            {
+              ...entrada.documentos[0],
+              clave: `altas/${admin.id}/otro.pdf`,
+              nombreOriginal: 'Fotos.pdf',
+            },
+          ]
+          r2.copias = 0
+          r2.fallaCopiaEn = 2
+          r2.borradas.length = 0
+          await assert.rejects(
+            servicio.crear(
+              admin,
+              crearSiniestroSchema.parse({
+                ...entrada,
+                datosCaso: { ...entrada.datosCaso, numeroSiniestro: `${numero}-E` },
+                documentos: dos,
+              }),
+            ),
+            { status: 503 },
+          )
+          assert.equal(r2.borradas.length, 1)
+          assert.match(r2.borradas[0], /^siniestros\/\d+\/doc\.pdf$/)
 
           throw rollback
         },
@@ -307,6 +343,104 @@ test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno 
       (error) => error === rollback,
     )
   } finally {
+    await disconnectPrisma()
+  }
+})
+
+// Dos altas simultáneas con el mismo número y aseguradora: las dos pasan la consulta previa y la base frena a la
+// segunda con el índice único (migración numero_siniestro_unico). Transacciones reales: se limpian al final.
+test('PostgreSQL: dos altas simultáneas con el mismo número, solo se crea una', async () => {
+  const prisma = getPrisma()
+  const marca = Date.now()
+  const aseguradora = await prisma.aseguradora.create({ data: { nombre: `Simultanea ${marca}` } })
+  const usuario = await prisma.usuario.create({
+    data: {
+      nombres: 'Admin',
+      apellidos: `Simultanea ${marca}`,
+      documento: '0',
+      telefono: '0',
+      email: `simultanea.${marca}@example.invalid`,
+      contrasena: '-',
+      tipoUsuario: 'ADMINISTRADOR',
+      idDireccion: (await prisma.direccion.create({ data: {} })).id,
+    },
+  })
+  try {
+    // Barrera: ninguna inserta el siniestro hasta que las dos pasaron la consulta del número repetido
+    let llegaron = 0
+    let soltar
+    const barrera = new Promise((r) => (soltar = r))
+    const enlazar = (objeto, clave) =>
+      typeof objeto[clave] === 'function' ? objeto[clave].bind(objeto) : objeto[clave]
+    const conBarrera = (tx) =>
+      new Proxy(tx, {
+        get: (base, clave) =>
+          clave !== 'siniestro'
+            ? enlazar(base, clave)
+            : new Proxy(base.siniestro, {
+                get: (delegado, metodo) =>
+                  metodo !== 'create'
+                    ? enlazar(delegado, metodo)
+                    : async (args) => {
+                        if (++llegaron === 2) soltar()
+                        await barrera
+                        return delegado.create(args)
+                      },
+              }),
+      })
+    const servicio = crearServicioCrearSiniestro({
+      transaccion: (trabajo) =>
+        prisma.$transaction((tx) => trabajo(conBarrera(tx)), { timeout: 20_000 }),
+      almacenamiento: () => ({}),
+      enviarAvisoAsignacion: async () => {},
+      urlSistema: 'https://cova.example/',
+    })
+    const alta = (numero) =>
+      crearSiniestroSchema.parse({
+        datosCaso: {
+          numeroSiniestro: numero,
+          numeroPoliza: 'POL-1',
+          inicioVigencia: '',
+          idAseguradora: aseguradora.id,
+          sucursal: 'Centro',
+          idAjustador: '',
+          fechaOcurrencia: '',
+          horaOcurrencia: '',
+          menorEdadInvolucrado: false,
+          causa: '',
+          lugar: { idProvincia: '', localidad: '', calle: '', codigoPostal: '' },
+        },
+        vehiculos: [],
+        personasExternas: [],
+        abogados: [],
+        peritos: [],
+        documentos: [],
+        idUsuarioAsignado: usuario.id,
+      })
+
+    // El mismo número salvo mayúsculas también es repetido
+    const resultados = await Promise.allSettled([
+      servicio.crear(usuario, alta(`SIM-${marca}`)),
+      servicio.crear(usuario, alta(`sim-${marca}`)),
+    ])
+    const rechazados = resultados.filter((r) => r.status === 'rejected')
+    assert.equal(resultados.length - rechazados.length, 1, 'se crea una sola')
+    assert.equal(rechazados[0]?.reason.status, 409)
+    assert.equal(rechazados[0]?.reason.details?.campo, 'numeroSiniestro')
+    assert.equal(await prisma.siniestro.count({ where: { idAseguradora: aseguradora.id } }), 1)
+  } finally {
+    const ids = (
+      await prisma.siniestro.findMany({
+        where: { idAseguradora: aseguradora.id },
+        select: { id: true },
+      })
+    ).map((s) => s.id)
+    await prisma.notificacion.deleteMany({ where: { idSiniestro: { in: ids } } })
+    await prisma.historialSiniestro.deleteMany({ where: { idSiniestro: { in: ids } } })
+    await prisma.siniestro.deleteMany({ where: { id: { in: ids } } })
+    await prisma.usuario.delete({ where: { id: usuario.id } })
+    await prisma.direccion.delete({ where: { id: usuario.idDireccion } })
+    await prisma.aseguradora.delete({ where: { id: aseguradora.id } })
     await disconnectPrisma()
   }
 })

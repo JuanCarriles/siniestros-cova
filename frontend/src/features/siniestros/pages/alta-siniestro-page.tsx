@@ -90,6 +90,8 @@ export function AltaSiniestroPage() {
   const [faltanRepresentados, setFaltanRepresentados] = useState(false)
   const [faltaAsignar, setFaltaAsignar] = useState(false)
   const [creando, setCreando] = useState(false)
+  // Documentos que se están cargando o quitando: mientras haya alguno, no se crea el siniestro
+  const [documentosPendientes, setDocumentosPendientes] = useState(0)
   const [errorCrear, setErrorCrear] = useState<string | null>(null)
   const grupoAsignacion = useRef<HTMLFieldSetElement>(null)
 
@@ -138,6 +140,10 @@ export function AltaSiniestroPage() {
   // Paso 36: crea el siniestro con todo lo cargado y vuelve al listado con el aviso
   async function crear() {
     setErrorCrear(null)
+    if (documentosPendientes > 0)
+      return setErrorCrear(
+        'Esperá a que terminen de cargarse o quitarse los documentos antes de crear el siniestro.',
+      )
     if (!idUsuarioAsignado) {
       setFaltaAsignar(true)
       grupoAsignacion.current?.focus()
@@ -149,7 +155,10 @@ export function AltaSiniestroPage() {
       )
     setCreando(true)
     try {
-      const creado = await crearSiniestro(armarAlta({ datosCaso: ultimos.current, ...partes }))
+      // Lo último guardado, no lo de este render: un documento pudo terminar de cargarse recién
+      const creado = await crearSiniestro(
+        armarAlta({ datosCaso: ultimos.current, ...actuales.current }),
+      )
       borrarBorrador(idUsuario)
       void navigate(`${basePath}/siniestros`, {
         replace: true,
@@ -166,7 +175,13 @@ export function AltaSiniestroPage() {
   }
 
   const cancelar = (
-    <Button type="button" variant="outline" size="lg" onClick={() => setCancelando(true)}>
+    <Button
+      type="button"
+      variant="outline"
+      size="lg"
+      disabled={creando}
+      onClick={() => setCancelando(true)}
+    >
       Cancelar alta
     </Button>
   )
@@ -310,7 +325,8 @@ export function AltaSiniestroPage() {
           </div>
         </section>
       ) : (
-        <section className="grid gap-6">
+        // Mientras se crea el siniestro, nada lo puede cambiar: el fieldset deshabilita todos los controles
+        <fieldset disabled={creando} className="grid min-w-0 gap-6">
           <ResumenCaso
             numero={String(datosCaso.numeroSiniestro)}
             aseguradora={
@@ -321,7 +337,9 @@ export function AltaSiniestroPage() {
           />
           <DocumentosAlta
             documentos={documentos}
-            onCambiar={(nuevos) => cambiar({ documentos: nuevos })}
+            onCambiar={(cambio) => cambiar({ documentos: cambio(actuales.current.documentos) })}
+            onPendientes={(cambio) => setDocumentosPendientes((n) => n + cambio)}
+            bloqueado={creando}
           />
           <AsignacionAlta
             usuarios={opciones.usuarios}
@@ -353,10 +371,10 @@ export function AltaSiniestroPage() {
             </div>
             <Button type="button" size="lg" loading={creando} onClick={() => void crear()}>
               <CircleCheck aria-hidden="true" />
-              Crear siniestro
+              {creando ? 'Creando siniestro…' : 'Crear siniestro'}
             </Button>
           </div>
-        </section>
+        </fieldset>
       )}
 
       <Dialog open={cancelando} onOpenChange={setCancelando}>

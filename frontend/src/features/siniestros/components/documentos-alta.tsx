@@ -17,17 +17,28 @@ import { BotonQuitar } from './tarjeta-persona'
 // Paso 5 del alta (CU-09 pasos 32-34, E4-10): documentos del siniestro, de a uno. Cada uno se sube a R2 al
 // elegirlo; si el formato o el tamaño no sirven (33.a, 33.b) o R2 falla (34.a), se avisa y se puede reintentar o
 // seguir sin él. Se puede crear el siniestro sin documentos (32.a).
+// Se pueden cargar y quitar varios a la vez: cada respuesta cambia la lista que haya en ese momento (no la que había
+// al empezar), así una no deshace a otra. La página sabe cuántas operaciones siguen en curso para no crear el
+// siniestro con un documento a medio cargar o a medio quitar.
 export function DocumentosAlta({
   documentos,
   onCambiar,
+  onPendientes,
+  bloqueado = false,
 }: {
   documentos: DocumentoAlta[]
-  onCambiar: (documentos: DocumentoAlta[]) => void
+  /** Recibe el cambio a aplicar sobre la lista más reciente */
+  onCambiar: (cambio: (actuales: DocumentoAlta[]) => DocumentoAlta[]) => void
+  /** +1 al empezar una carga o un borrado, -1 al terminar */
+  onPendientes: (cambio: 1 | -1) => void
+  /** Mientras se crea el siniestro no se agrega ni se quita nada */
+  bloqueado?: boolean
 }) {
   const id = useId()
   const selector = useRef<HTMLInputElement>(null)
   const [arrastrando, setArrastrando] = useState(false)
   const [subiendo, setSubiendo] = useState<string | null>(null)
+  const [quitando, setQuitando] = useState<ReadonlySet<string>>(new Set())
   const [error, setError] = useState<{ mensaje: string; reintentar?: File } | null>(null)
   const [mensaje, setMensaje] = useState<string | null>(null)
 
@@ -37,9 +48,10 @@ export function DocumentosAlta({
     if (invalido) return setError({ mensaje: `«${archivo.name}»: ${invalido}` })
     setError(null)
     setSubiendo(archivo.name)
+    onPendientes(1)
     try {
       const documento = await subirDocumentoAlta(archivo)
-      onCambiar([...documentos, documento])
+      onCambiar((actuales) => [...actuales, documento])
       setMensaje(`Se cargó «${documento.nombreOriginal}».`)
     } catch (err) {
       const servidor = err instanceof ApiError
@@ -50,10 +62,11 @@ export function DocumentosAlta({
       })
     } finally {
       setSubiendo(null)
+      onPendientes(-1)
     }
   }
   function elegir(archivos: FileList | null) {
-    if (!archivos?.length || subiendo) return
+    if (!archivos?.length || subiendo || bloqueado) return
     if (archivos.length > 1)
       return setError({
         mensaje: 'Los documentos se cargan de a uno: arrastrá o elegí un solo archivo.',
@@ -61,16 +74,26 @@ export function DocumentosAlta({
     void subir(archivos[0])
   }
   async function quitar(documento: DocumentoAlta) {
+    if (quitando.has(documento.clave) || bloqueado) return
     setMensaje(null)
     setError(null)
+    setQuitando((actuales) => new Set(actuales).add(documento.clave))
+    onPendientes(1)
     try {
       await quitarDocumentoAlta(documento.clave)
-      onCambiar(documentos.filter((d) => d.clave !== documento.clave))
+      onCambiar((actuales) => actuales.filter((d) => d.clave !== documento.clave))
       setMensaje(`Se quitó «${documento.nombreOriginal}».`)
     } catch (err) {
       setError({
         mensaje: `No se pudo quitar «${documento.nombreOriginal}»: ${err instanceof ApiError ? err.message : 'revisá la conexión'}. Probá de nuevo.`,
       })
+    } finally {
+      setQuitando((actuales) => {
+        const quedan = new Set(actuales)
+        quedan.delete(documento.clave)
+        return quedan
+      })
+      onPendientes(-1)
     }
   }
 
@@ -103,7 +126,7 @@ export function DocumentosAlta({
         )}
         onDragOver={(e) => {
           e.preventDefault()
-          if (!subiendo) setArrastrando(true)
+          if (!subiendo && !bloqueado) setArrastrando(true)
         }}
         onDragLeave={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastrando(false)
@@ -120,6 +143,7 @@ export function DocumentosAlta({
           type="button"
           variant="outline"
           loading={!!subiendo}
+          disabled={bloqueado}
           aria-describedby={`${id}-formatos`}
           onClick={() => selector.current?.click()}
         >
@@ -181,8 +205,12 @@ export function DocumentosAlta({
                 <span className="font-semibold break-all">{d.nombreOriginal}</span>
                 <span className="text-muted-foreground">{formatoTamanoArchivo(d.tamanoBytes)}</span>
               </span>
-              <BotonQuitar etiqueta={`Quitar ${d.nombreOriginal}`} onClick={() => void quitar(d)}>
-                Quitar
+              <BotonQuitar
+                etiqueta={`Quitar ${d.nombreOriginal}`}
+                cargando={quitando.has(d.clave)}
+                onClick={() => void quitar(d)}
+              >
+                {quitando.has(d.clave) ? 'Quitando…' : 'Quitar'}
               </BotonQuitar>
             </li>
           ))}

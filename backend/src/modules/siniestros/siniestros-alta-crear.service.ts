@@ -26,10 +26,21 @@ const horaDelDia = (hora: string) => new Date(`1970-01-01T${hora}Z`)
 
 const carpetaDe = (actor: Actor) => `altas/${actor.id}`
 
+const MENSAJE_DUPLICADO =
+  'Ya existe un siniestro con este número para esta aseguradora. Corregilo en el paso 1.'
+const errorAlmacenamiento = () =>
+  new HttpError(
+    503,
+    'No se pudieron guardar los documentos en el almacenamiento. Probá de nuevo en unos minutos: lo cargado no se pierde.',
+  )
+const esNumeroRepetido = (error: unknown) =>
+  !!error && typeof error === 'object' && 'code' in error && error.code === 'P2002'
+
 // CU-09 pasos 32-36 (E4-10). Los documentos se suben a R2 a medida que se eligen, a la carpeta del alta de quien
-// la carga (todavía no hay siniestro); al confirmar se crea todo en una sola transacción, los documentos pasan a la
-// carpeta del siniestro y se avisa al asignado. altas/ es temporal: una regla de R2 borra lo que tenga más de 30
-// días (altas abandonadas), ver DEPLOY.md.
+// la carga (todavía no hay siniestro). Al confirmar se crea todo en una sola transacción, que además copia cada
+// documento a la carpeta del siniestro: el siniestro solo existe con sus documentos ya guardados en su lugar
+// definitivo. Después se borran los originales y se avisa al asignado. altas/ es temporal: una regla de R2 borra lo
+// que tenga más de 30 días (altas abandonadas), ver DEPLOY.md.
 export function crearServicioCrearSiniestro(deps: {
   transaccion: <T>(trabajo: (tx: Prisma.TransactionClient) => Promise<T>) => Promise<T>
   almacenamiento: () => AlmacenamientoR2
@@ -39,41 +50,24 @@ export function crearServicioCrearSiniestro(deps: {
 }) {
   const { transaccion, almacenamiento, enviarAvisoAsignacion, urlSistema } = deps
 
-  // Los documentos del alta pasan a siniestros/{id}, donde se cargan los que se suban después. Copiar, registrar la
-  // clave nueva y recién entonces borrar el original: si algo falla, el documento sigue apuntando a un archivo que
-  // existe. Lo que quede en altas/ lo borra la regla de 30 días.
-  async function moverAlSiniestro(
-    idSiniestro: number,
-    documentos: { id: number; clave: string }[],
-  ) {
+  // Antes de crear: un borrador retomado después de 30 días puede listar archivos que la regla de altas/ ya borró.
+  // Se avisan todos juntos para volver a cargarlos; si R2 no responde, no se crea nada y se puede reintentar.
+  async function exigirDocumentos(documentos: DocumentoAlta[]) {
+    const faltan: string[] = []
     for (const d of documentos) {
-      let nueva: string
       try {
-        nueva = await almacenamiento().copiar(d.clave, `siniestros/${idSiniestro}`)
-      } catch {
-        console.error(`Documento ${d.id} sin mover: sigue en ${d.clave}`)
-        continue
+        await almacenamiento().comprobarExistencia(d.clave)
+      } catch (error) {
+        if (error instanceof HttpError && error.status === 404) faltan.push(d.nombreOriginal)
+        else throw errorAlmacenamiento()
       }
-      try {
-        await transaccion((tx) =>
-          tx.documentoSiniestro.update({
-            where: { id: d.id },
-            data: { urlArchivoSinDominio: nueva },
-          }),
-        )
-      } catch {
-        console.error(`Documento ${d.id} sin mover: sigue en ${d.clave}`)
-        await almacenamiento()
-          .eliminar(nueva)
-          .catch(() => console.error(`Copia sobrante en R2: ${nueva}`))
-        continue
-      }
-      await almacenamiento()
-        .eliminar(d.clave)
-        .catch(() =>
-          console.error(`Original sobrante en R2 (lo borra la regla de altas/): ${d.clave}`),
-        )
     }
+    if (faltan.length)
+      throw new HttpError(
+        409,
+        `${faltan.map((n) => `«${n}»`).join(', ')} ya no ${faltan.length === 1 ? 'está disponible' : 'están disponibles'}: ${faltan.length === 1 ? 'quitalo y volvé a cargarlo' : 'quitalos y volvé a cargarlos'} en el paso 5.`,
+        { campo: 'documentos' },
+      )
   }
 
   // Un documento del alta es de quien lo subió: nadie puede asociar ni borrar los de otro
@@ -122,6 +116,8 @@ export function crearServicioCrearSiniestro(deps: {
       for (const d of alta.documentos) comprobarPropio(actor, d.clave)
       const { datosCaso: caso } = alta
 
+      // Copias ya hechas en la carpeta del siniestro: si la transacción no se confirma, se borran
+      const copias: string[] = []
       const creado = await transaccion(async (tx) => {
         const error = (status: number, mensaje: string, campo?: string) =>
           new HttpError(status, mensaje, campo ? { campo } : undefined)
@@ -149,12 +145,7 @@ export function crearServicioCrearSiniestro(deps: {
           },
           select: { id: true },
         })
-        if (duplicado)
-          throw error(
-            409,
-            'Ya existe un siniestro con este número para esta aseguradora. Corregilo en el paso 1.',
-            'numeroSiniestro',
-          )
+        if (duplicado) throw error(409, MENSAJE_DUPLICADO, 'numeroSiniestro')
         if (
           caso.idAjustador &&
           !(await tx.ajustador.findFirst({
@@ -174,15 +165,9 @@ export function crearServicioCrearSiniestro(deps: {
             'El usuario elegido ya no está disponible. Elegí a quién asignar el siniestro.',
             'idUsuarioAsignado',
           )
-
-        // Un archivo del alta se registra una sola vez (por ejemplo, si el alta se manda dos veces)
-        if (
-          alta.documentos.length &&
-          (await tx.documentoSiniestro.count({
-            where: { urlArchivoSinDominio: { in: alta.documentos.map((d) => d.clave) } },
-          }))
-        )
-          throw error(409, 'Un documento de esta alta ya pertenece a un siniestro creado.')
+        // Después del número repetido: si el alta se mandó dos veces, el motivo es el número, no los archivos
+        // (la primera ya los copió y borró los originales)
+        await exigirDocumentos(alta.documentos)
 
         // El primer estado abierto del catálogo: "En tratamiento"
         const estado = await tx.estadoSiniestro.findFirst({
@@ -243,27 +228,33 @@ export function crearServicioCrearSiniestro(deps: {
               ).id
             : null
 
-        const siniestro = await tx.siniestro.create({
-          data: {
-            numeroSiniestro: caso.numeroSiniestro,
-            numeroPoliza: caso.numeroPoliza,
-            inicioVigencia: caso.inicioVigencia ?? null,
-            sucursal: caso.sucursal,
-            causa: caso.causa ?? null,
-            menorEdadInvolucrado: caso.menorEdadInvolucrado,
-            fechaOcurrencia: caso.fechaOcurrencia ? dia(caso.fechaOcurrencia) : null,
-            horaOcurrencia: caso.horaOcurrencia ? horaDelDia(caso.horaOcurrencia) : null,
-            idAseguradora: caso.idAseguradora,
-            idAjustador: caso.idAjustador ?? null,
-            idDireccion: await direccion(caso.lugar),
-            idEstadoSiniestro: estado.id,
-            idUsuario: asignado.id,
-            fechaAsignacion: ahora,
-            fechaUltimoMovimiento: ahora,
-            demorado: false,
-          },
-          select: { id: true, numeroSiniestro: true },
-        })
+        const siniestro = await tx.siniestro
+          .create({
+            data: {
+              numeroSiniestro: caso.numeroSiniestro,
+              numeroPoliza: caso.numeroPoliza,
+              inicioVigencia: caso.inicioVigencia ?? null,
+              sucursal: caso.sucursal,
+              causa: caso.causa ?? null,
+              menorEdadInvolucrado: caso.menorEdadInvolucrado,
+              fechaOcurrencia: caso.fechaOcurrencia ? dia(caso.fechaOcurrencia) : null,
+              horaOcurrencia: caso.horaOcurrencia ? horaDelDia(caso.horaOcurrencia) : null,
+              idAseguradora: caso.idAseguradora,
+              idAjustador: caso.idAjustador ?? null,
+              idDireccion: await direccion(caso.lugar),
+              idEstadoSiniestro: estado.id,
+              idUsuario: asignado.id,
+              fechaAsignacion: ahora,
+              fechaUltimoMovimiento: ahora,
+              demorado: false,
+            },
+            select: { id: true, numeroSiniestro: true },
+          })
+          .catch((e: unknown) => {
+            // Dos altas simultáneas con el mismo número pasan las dos la consulta de arriba: el índice único de la
+            // base (migración numero_siniestro_unico) frena a la segunda
+            throw esNumeroRepetido(e) ? error(409, MENSAJE_DUPLICADO, 'numeroSiniestro') : e
+          })
         const idSiniestro = siniestro.id
 
         // Abogados primero: cada persona guarda el suyo (a lo sumo uno)
@@ -368,21 +359,27 @@ export function crearServicioCrearSiniestro(deps: {
             },
           })
 
-        const documentos: { id: number; clave: string }[] = []
+        // Cada documento se copia a la carpeta del siniestro y se registra con esa clave: si R2 falla, no se crea
+        // nada. Los originales de altas/ se borran después de confirmar.
         for (const d of alta.documentos) {
-          const { id } = await tx.documentoSiniestro.create({
+          let clave: string
+          try {
+            clave = await almacenamiento().copiar(d.clave, `siniestros/${idSiniestro}`)
+          } catch {
+            throw errorAlmacenamiento()
+          }
+          copias.push(clave)
+          await tx.documentoSiniestro.create({
             data: {
               idSiniestro,
               idUsuario: actor.id,
               nombreOriginal: d.nombreOriginal,
-              urlArchivoSinDominio: d.clave,
+              urlArchivoSinDominio: clave,
               tipoExtension: d.tipoExtension,
               mimeType: d.mimeType,
               tamanoBytes: BigInt(d.tamanoBytes),
             },
-            select: { id: true },
           })
-          documentos.push({ id, clave: d.clave })
           await tx.historialSiniestro.create({
             data: {
               idSiniestro,
@@ -410,10 +407,22 @@ export function crearServicioCrearSiniestro(deps: {
             revisada: false,
           },
         })
-        return { siniestro, asignado, autor, aseguradora: aseguradora.nombre, documentos }
+        return { siniestro, asignado, autor, aseguradora: aseguradora.nombre }
+      }).catch(async (error: unknown) => {
+        for (const copia of copias)
+          await almacenamiento()
+            .eliminar(copia)
+            .catch(() => console.error(`Copia sobrante en R2 (el alta no se creó): ${copia}`))
+        throw error
       })
 
-      await moverAlSiniestro(creado.siniestro.id, creado.documentos)
+      // El siniestro ya tiene sus copias: si algún original no se puede borrar, lo limpia la regla de altas/
+      for (const d of alta.documentos)
+        await almacenamiento()
+          .eliminar(d.clave)
+          .catch(() =>
+            console.error(`Original sobrante en R2 (lo borra la regla de altas/): ${d.clave}`),
+          )
 
       // El mail va después de confirmar: si falla, el siniestro y el aviso interno ya quedaron (36.a)
       let correoEnviado = true
