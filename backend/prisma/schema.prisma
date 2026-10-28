@@ -429,7 +429,7 @@ model Siniestro {
   menorEdadInvolucrado  Boolean
   idEstadoSiniestro     Int
   idAseguradora         Int
-  idUsuario             Int
+  idUsuario             Int?
   fechaOcurrencia       DateTime? @db.Date
   horaOcurrencia        DateTime? @db.Time
   inicioVigencia        String?
@@ -446,7 +446,7 @@ model Siniestro {
 
   estadoSiniestro      EstadoSiniestro      @relation(fields: [idEstadoSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   aseguradora          Aseguradora          @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  usuario              Usuario              @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario              Usuario?             @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   ajustador            Ajustador?           @relation(fields: [idAjustador], references: [id], onDelete: Restrict, onUpdate: Restrict)
   direccion            Direccion?           @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
   notificaciones       Notificacion[]

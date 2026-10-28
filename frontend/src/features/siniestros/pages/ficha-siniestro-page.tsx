@@ -45,7 +45,7 @@ export function FichaSiniestroPage() {
         </div>
         <div>
           <dt className="text-sm text-muted-foreground">Gestor</dt>
-          <dd className="font-semibold">{siniestro.gestor.nombre}</dd>
+          <dd className="font-semibold">{siniestro.gestor?.nombre ?? 'Sin gestor responsable'}</dd>
         </div>
         <div>
           <dt className="text-sm text-muted-foreground">Estado</dt>

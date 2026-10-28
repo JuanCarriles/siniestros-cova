@@ -288,6 +288,7 @@ export function PanelLayout({ usuario, basePath }: PanelBase) {
   const main = useRef<HTMLElement>(null)
   const previousPath = useRef(pathname)
   const section = pathname.slice(basePath.length + 1).split('/')[0]
+  const dashboardAdministrativo = section === 'dashboard' && usuario.tipo !== 'GESTOR'
   // Una sección que el rol no puede abrir tampoco se nombra en el encabezado ni en el título de la pestaña
   const current = canOpenSection(usuario.tipo, section) ? sections[section] : null
   useEffect(() => {
@@ -337,7 +338,10 @@ export function PanelLayout({ usuario, basePath }: PanelBase) {
           ref={main}
           id="panel-contenido"
           tabIndex={-1}
-          className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-7 focus-visible:outline-offset-[-3px] sm:px-8 sm:py-10 lg:px-6"
+          className={cn(
+            'mx-auto w-full max-w-[90rem] flex-1 px-4 py-7 focus-visible:outline-offset-[-3px] sm:px-8 sm:py-10 lg:px-6',
+            dashboardAdministrativo && 'py-4 sm:py-5',
+          )}
         >
           <Outlet context={{ usuario, basePath, menuLateral } satisfies PanelContext} />
         </main>
