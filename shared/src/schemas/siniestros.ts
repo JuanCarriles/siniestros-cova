@@ -71,6 +71,9 @@ export const filtrosSiniestrosSchema = z.strictObject({
   estado: z.preprocess(vacioComoAusente, idSchema.optional()),
   aseguradora: z.preprocess(vacioComoAusente, idSchema.optional()),
   gestor: z.preprocess(vacioComoAusente, idSchema.optional()),
+  activos: z
+    .preprocess(vacioComoAusente, z.enum(['true', 'false']).optional())
+    .transform((valor) => valor === 'true'),
   bajas: z
     .preprocess(vacioComoAusente, z.enum(['true', 'false']).optional())
     .transform((valor) => valor === 'true'),
@@ -86,6 +89,7 @@ export const PARAMETROS_LISTADO = [
   'estado',
   'aseguradora',
   'gestor',
+  'activos',
   'bajas',
   'orden',
 ] as const
@@ -214,4 +218,11 @@ export type ConfirmarSiniestro = z.output<typeof confirmarSiniestroSchema>
 // La regla usa la bandera del catálogo; cambiar el texto visible no cambia los permisos.
 export function esCierreEnviado(estado: { esCierre: boolean }): boolean {
   return estado.esCierre
+}
+
+/** El borrado definitivo exige la baja previa y el estado de cierre. El servidor lo vuelve a verificar. */
+export function puedeEliminarSiniestro(
+  siniestro: Pick<SiniestroListado, 'eliminado' | 'estado'>,
+): boolean {
+  return siniestro.eliminado && esCierreEnviado(siniestro.estado)
 }

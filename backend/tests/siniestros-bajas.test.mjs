@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import express from 'express'
 import cookieParser from 'cookie-parser'
-import { esCierreEnviado } from '../../shared/src/schemas/siniestros.ts'
+import { esCierreEnviado, puedeEliminarSiniestro } from '../../shared/src/schemas/siniestros.ts'
 import { crearSiniestrosRouter } from '../src/modules/siniestros/siniestros.routes.ts'
 import { crearRequerirSesion } from '../src/middlewares/autenticar.ts'
 import { errorHandler } from '../src/middlewares/errorHandler.ts'
@@ -40,6 +40,7 @@ test('HTTP baja y borrado: sesión, rol, id y confirmación estricta antes de ej
       servicio: {},
       operaciones: {
         darDeBaja: async (...args) => llamadas.push(['baja', ...args]),
+        reactivar: async (...args) => llamadas.push(['reactivar', ...args]),
         eliminar: async (...args) => {
           if (args[1] === 9) throw Object.assign(new Error('FK de prueba'), { code: 'P2003' })
           llamadas.push(['eliminar', ...args])
@@ -67,6 +68,7 @@ test('HTTP baja y borrado: sesión, rol, id y confirmación estricta antes de ej
     })
   for (const [method, ruta] of [
     ['PATCH', '/8/baja'],
+    ['PATCH', '/8/reactivacion'],
     ['DELETE', '/8'],
   ]) {
     for (const [quien, status] of [
@@ -99,11 +101,14 @@ test('HTTP baja y borrado: sesión, rol, id y confirmación estricta antes de ej
     400,
   )
   assert.equal(llamadas.length, 0)
+  assert.equal((await pedir('admin', 'PATCH', '/8/reactivacion')).status, 204)
+  assert.equal((await pedir('super', 'PATCH', '/abc/reactivacion')).status, 400)
   assert.equal((await pedir('admin', 'PATCH', '/8/baja')).status, 204)
   assert.equal((await pedir('super', 'DELETE', '/8', { numeroSiniestro: '2026-001' })).status, 204)
   assert.deepEqual(
     llamadas.map(([accion, actor, id, body]) => [accion, actor.id, id, body]),
     [
+      ['reactivar', 1, 8, undefined],
       ['baja', 1, 8, undefined],
       ['eliminar', 2, 8, { numeroSiniestro: '2026-001' }],
     ],
@@ -114,6 +119,15 @@ test('HTTP baja y borrado: sesión, rol, id y confirmación estricta antes de ej
   assert.equal(fallo.status, 500, 'una FK inesperada no debe presentarse como un conflicto 409')
   assert.equal((await fallo.json()).error, 'Error interno del servidor')
   assert.equal(registro.mock.calls[0].arguments[0].code, 'P2003')
+})
+
+test('eliminar exige baja previa y cierre; reactivar no habilita el borrado', () => {
+  for (const eliminado of [false, true])
+    for (const esCierre of [false, true])
+      assert.equal(
+        puedeEliminarSiniestro({ eliminado, estado: { esCierre } }),
+        eliminado && esCierre,
+      )
 })
 
 test('cierre: la regla depende de esCierre y no del nombre visible', () => {

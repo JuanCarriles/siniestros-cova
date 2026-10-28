@@ -8,10 +8,10 @@ import {
   useRouteLoaderData,
   useSearchParams,
 } from 'react-router'
-import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, Trash2 } from 'lucide-react'
+import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, RotateCcw, Trash2 } from 'lucide-react'
 import {
   DIAS_ALERTA,
-  esCierreEnviado,
+  puedeEliminarSiniestro,
   DIAS_DEMORADO,
   parametrosListadoValidos,
   POR_PAGINA,
@@ -47,7 +47,7 @@ import { mensajeAltaCreada } from '../crear-alta'
 import type { cargarPanel } from '@/features/auth/sesion'
 import type { cargarSiniestros } from '../loader'
 
-const FILTROS = ['q', 'estado', 'aseguradora', 'gestor', 'bajas'] as const
+const FILTROS = ['q', 'estado', 'aseguradora', 'gestor', 'activos', 'bajas'] as const
 
 // CU-09 paso 2 y 2.a (E4-01): listado de siniestros. Filtros, búsqueda, orden y página van en la dirección y los
 // resuelve el servidor; la tabla muestra la página pedida.
@@ -170,7 +170,7 @@ export function SiniestrosPage() {
     ...(esGestor
       ? []
       : [
-          ...(!s.eliminado && !s.eliminacionEnCurso
+          ...(!s.eliminado
             ? [
                 {
                   etiqueta: 'Dar de baja',
@@ -180,7 +180,17 @@ export function SiniestrosPage() {
                 },
               ]
             : []),
-          ...(esCierreEnviado(s.estado)
+          ...(s.eliminado && !s.eliminacionEnCurso
+            ? [
+                {
+                  etiqueta: 'Reactivar',
+                  icono: <RotateCcw aria-hidden="true" />,
+                  onSelect: (origen: HTMLButtonElement | null) =>
+                    abrirOperacion('reactivar', s, origen),
+                },
+              ]
+            : []),
+          ...(puedeEliminarSiniestro(s)
             ? [
                 {
                   etiqueta: s.eliminacionEnCurso ? 'Reintentar eliminación' : 'Eliminar',
@@ -213,7 +223,10 @@ export function SiniestrosPage() {
     filtroDe('aseguradora', 'Aseguradora', opciones.aseguradoras),
     // El servidor no aplica estos dos para el gestor (RF-17): no se muestran
     esGestor ? null : filtroDe('gestor', 'Gestor', opciones.gestores),
-    !esGestor && validos.bajas === 'true'
+    validos.activos === 'true'
+      ? { clave: 'activos', etiqueta: 'Casos', valor: 'solo activos' }
+      : null,
+    !esGestor && validos.bajas === 'true' && validos.activos !== 'true'
       ? { clave: 'bajas', etiqueta: 'Incluye', valor: 'dados de baja' }
       : null,
   ].filter((f): f is FiltroActivo => f !== null)
@@ -276,9 +289,12 @@ export function SiniestrosPage() {
             />
           </>
         }
-        mostrarBajas={esGestor ? undefined : params.get('bajas') === 'true'}
+        mostrarBajas={esGestor ? undefined : validos.bajas === 'true' && validos.activos !== 'true'}
         onMostrarBajas={
-          esGestor ? undefined : (mostrar) => cambiar({ bajas: mostrar ? 'true' : null })
+          esGestor
+            ? undefined
+            : (mostrar) =>
+                cambiar({ bajas: mostrar ? 'true' : null, ...(mostrar ? { activos: null } : {}) })
         }
         etiquetaBajas="Mostrar dados de baja"
         etiquetaAlta={

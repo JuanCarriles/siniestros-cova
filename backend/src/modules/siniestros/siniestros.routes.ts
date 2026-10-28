@@ -16,7 +16,7 @@ import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts
 import type { crearServicioSiniestros } from './siniestros.service.ts'
 
 // CU-09. Todos los roles; el servicio limita al gestor a sus siniestros (RF-17).
-// GET /api/siniestros?pagina=&porPagina=&q=&estado=&aseguradora=&gestor=&bajas=&orden=
+// GET /api/siniestros?pagina=&porPagina=&q=&estado=&aseguradora=&gestor=&activos=&bajas=&orden=
 // GET /api/siniestros/opciones
 // GET /api/siniestros/:id
 // GET /api/siniestros/:id/partes
@@ -82,6 +82,11 @@ export function crearSiniestrosRouter(deps: {
       res.status(204).end()
     },
   )
+  router.patch('/:id/reactivacion', soloAdministracion, async (req, res) => {
+    confirmarBajaSiniestroSchema.parse(req.body ?? {})
+    await operaciones.reactivar(usuarioDeSesion(req), idSchema.parse(req.params.id))
+    res.status(204).end()
+  })
   router.delete('/:id', requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'), async (req, res) => {
     await operaciones.eliminar(
       usuarioDeSesion(req),

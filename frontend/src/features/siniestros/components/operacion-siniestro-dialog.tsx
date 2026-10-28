@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { CircleMinus, Trash2, TriangleAlert } from 'lucide-react'
+import { CircleMinus, RotateCcw, Trash2, TriangleAlert } from 'lucide-react'
 import { confirmarSiniestroSchema, type SiniestroListado } from '@cova/shared/schemas/siniestros'
 import { Aviso } from '@/components/aviso'
 import { TextField } from '@/components/text-field'
@@ -13,9 +13,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { ApiError } from '@/lib/api'
-import { darDeBajaSiniestro, eliminarSiniestro } from '../api/siniestros.api'
+import { darDeBajaSiniestro, eliminarSiniestro, reactivarSiniestro } from '../api/siniestros.api'
 
-export type OperacionSiniestro = { tipo: 'baja' | 'eliminar'; siniestro: SiniestroListado }
+export type OperacionSiniestro = {
+  tipo: 'baja' | 'reactivar' | 'eliminar'
+  siniestro: SiniestroListado
+}
 export function OperacionSiniestroDialog({
   operacion,
   onCerrar,
@@ -31,6 +34,7 @@ export function OperacionSiniestroDialog({
 }) {
   const { tipo, siniestro } = operacion
   const permanente = tipo === 'eliminar'
+  const reactivacion = tipo === 'reactivar'
   const [numero, setNumero] = useState('')
   const [revisado, setRevisado] = useState(false)
   const [enviando, setEnviando] = useState(false)
@@ -47,12 +51,15 @@ export function OperacionSiniestroDialog({
     setError(null)
     try {
       if (permanente && datos.success) await eliminarSiniestro(siniestro.id, datos.data)
+      else if (reactivacion) await reactivarSiniestro(siniestro.id)
       else await darDeBajaSiniestro(siniestro.id)
       completado.current = true
       onHecho(
         permanente
           ? `Se eliminó definitivamente el siniestro ${siniestro.numeroSiniestro}, sus registros asociados y sus archivos.`
-          : `Se dio de baja el siniestro ${siniestro.numeroSiniestro}. La fecha y el usuario quedaron registrados en el historial.`,
+          : reactivacion
+            ? `Se reactivó el siniestro ${siniestro.numeroSiniestro}. Volvió al listado habitual y la operación quedó registrada en el historial.`
+            : `Se dio de baja el siniestro ${siniestro.numeroSiniestro}. La fecha y el usuario quedaron registrados en el historial.`,
       )
     } catch (fallo) {
       const codigo =
@@ -100,7 +107,11 @@ export function OperacionSiniestroDialog({
             <TriangleAlert className="size-6" aria-hidden="true" />
           </span>
           <DialogTitle>
-            {permanente ? '¿Eliminar definitivamente el siniestro?' : '¿Dar de baja el siniestro?'}
+            {permanente
+              ? '¿Eliminar definitivamente el siniestro?'
+              : reactivacion
+                ? '¿Reactivar el siniestro?'
+                : '¿Dar de baja el siniestro?'}
           </DialogTitle>
           <DialogDescription>
             Siniestro <strong className="dato">{siniestro.numeroSiniestro}</strong> ·{' '}
@@ -117,15 +128,26 @@ export function OperacionSiniestroDialog({
               </p>
             </div>
             <p>
-              El siniestro está en estado <strong>{siniestro.estado.nombre}</strong>. Confirmá
-              únicamente si querés borrar todo el expediente.
+              El siniestro está dado de baja y en estado <strong>{siniestro.estado.nombre}</strong>.
+              Confirmá únicamente si querés borrar todo el expediente.
             </p>
           </>
+        ) : reactivacion ? (
+          <p>
+            El siniestro volverá al listado habitual con sus datos y archivos conservados. No se
+            cambia su estado de gestión. Se registrarán el usuario y la fecha de reactivación en el
+            historial.
+          </p>
+        ) : siniestro.eliminacionEnCurso ? (
+          <p>
+            Este siniestro ya tiene una eliminación definitiva pendiente. La baja permitirá
+            reintentar el borrado; no podrá reactivarse porque puede haber archivos eliminados.
+          </p>
         ) : (
           <p>
             Se conservarán sus datos y archivos, pero dejará de aparecer en el listado habitual.
-            Podrás consultarlo con <strong>Mostrar dados de baja</strong>. Se registrarán el usuario
-            y la fecha en el historial.
+            Podrás consultarlo y reactivarlo con <strong>Mostrar dados de baja</strong>. Se
+            registrarán el usuario y la fecha en el historial.
           </p>
         )}
         <form
@@ -169,12 +191,18 @@ export function OperacionSiniestroDialog({
             </Button>
             <Button
               type="submit"
-              variant="destructive"
+              variant={reactivacion ? 'default' : 'destructive'}
               disabled={permanente && !coincide}
               loading={enviando}
             >
-              {permanente ? <Trash2 aria-hidden="true" /> : <CircleMinus aria-hidden="true" />}
-              {permanente ? 'Eliminar definitivamente' : 'Dar de baja'}
+              {permanente ? (
+                <Trash2 aria-hidden="true" />
+              ) : reactivacion ? (
+                <RotateCcw aria-hidden="true" />
+              ) : (
+                <CircleMinus aria-hidden="true" />
+              )}
+              {permanente ? 'Eliminar definitivamente' : reactivacion ? 'Reactivar' : 'Dar de baja'}
             </Button>
           </DialogFooter>
         </form>
