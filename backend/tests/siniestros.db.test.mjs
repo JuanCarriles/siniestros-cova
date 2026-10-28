@@ -243,7 +243,7 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
           // Ficha: el gestor abre los suyos; los ajenos y los dados de baja dan 403; el administrador, todos
           const ficha = await servicio.obtener(gestorA, s1.id)
           assert.deepEqual(
-            [ficha.numeroSiniestro, ficha.aseguradora.id, ficha.gestor.id],
+            [ficha.numeroSiniestro, ficha.aseguradora.id, ficha.asignado.id],
             [s1.numeroSiniestro, aseguradora.id, gestorA.id],
           )
           await assert.rejects(servicio.obtener(gestorB, s1.id), (e) => {

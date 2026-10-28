@@ -6,13 +6,19 @@ import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
 import { cargarAjustadores } from '@/features/ajustadores/loader'
 import { AjustadoresPage } from '@/features/ajustadores/pages/ajustadores-page'
 import { cargarAseguradoras } from '@/features/aseguradoras/loader'
-import {
-  cargarAltaSiniestro,
-  cargarFichaSiniestro,
-  cargarSiniestros,
-} from '@/features/siniestros/loader'
+import { cargarAltaSiniestro, cargarSiniestros } from '@/features/siniestros/loader'
 import { AltaSiniestroPage } from '@/features/siniestros/pages/alta-siniestro-page'
-import { FichaSiniestroPage } from '@/features/siniestros/pages/ficha-siniestro-page'
+import { cargarFicha, cargarPestana, RUTA_FICHA } from '@/features/siniestros/ficha/loader'
+import { FichaSiniestroPage } from '@/features/siniestros/ficha/pages/ficha-siniestro-page'
+import { PestanaAbogados } from '@/features/siniestros/ficha/pages/pestana-abogados'
+import { PestanaChat } from '@/features/siniestros/ficha/pages/pestana-chat'
+import { PestanaDatosCaso } from '@/features/siniestros/ficha/pages/pestana-datos-caso'
+import { PestanaDocumentos } from '@/features/siniestros/ficha/pages/pestana-documentos'
+import { PestanaHistorial } from '@/features/siniestros/ficha/pages/pestana-historial'
+import { PestanaNovedades } from '@/features/siniestros/ficha/pages/pestana-novedades'
+import { PestanaPeritos } from '@/features/siniestros/ficha/pages/pestana-peritos'
+import { PestanaVehiculos } from '@/features/siniestros/ficha/pages/pestana-vehiculos'
+import { ErrorPestana } from '@/features/siniestros/ficha/components/pestana-ficha'
 import { SiniestrosPage } from '@/features/siniestros/pages/siniestros-page'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
@@ -103,9 +109,50 @@ export const router = createBrowserRouter([
                 Component: AltaSiniestroPage,
               },
               {
+                // Ficha (CU-10, E5-01): cada pestaña con su dirección, su loader y su error adentro de la ficha
+                id: RUTA_FICHA,
                 path: 'siniestros/:idSiniestro',
-                loader: cargarFichaSiniestro,
+                loader: cargarFicha,
                 Component: FichaSiniestroPage,
+                children: [
+                  { index: true, Component: PestanaDatosCaso },
+                  {
+                    errorElement: <ErrorPestana />,
+                    children: [
+                      {
+                        path: 'vehiculos',
+                        loader: cargarPestana('vehiculos'),
+                        Component: PestanaVehiculos,
+                      },
+                      {
+                        path: 'abogados',
+                        loader: cargarPestana('abogados'),
+                        Component: PestanaAbogados,
+                      },
+                      {
+                        path: 'peritos',
+                        loader: cargarPestana('peritos'),
+                        Component: PestanaPeritos,
+                      },
+                      {
+                        path: 'novedades',
+                        loader: cargarPestana('novedades'),
+                        Component: PestanaNovedades,
+                      },
+                      {
+                        path: 'documentos',
+                        loader: cargarPestana('documentos'),
+                        Component: PestanaDocumentos,
+                      },
+                      { path: 'chat', Component: PestanaChat },
+                      {
+                        path: 'historial',
+                        loader: cargarPestana('historial'),
+                        Component: PestanaHistorial,
+                      },
+                    ],
+                  },
+                ],
               },
               ...Object.entries(secciones).map(([seccion, Component]): RouteObject => ({
                 path: seccion,
