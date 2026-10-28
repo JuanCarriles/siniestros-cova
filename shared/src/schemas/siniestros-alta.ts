@@ -171,6 +171,15 @@ export function normalizarDocumento(documento: string): string {
   return documento.replace(/[^0-9a-z]/gi, '').toUpperCase()
 }
 
+// Vacío es "sin email"; cualquier otra cosa tiene que ser un email (si no, el mensaje genérico sería en inglés)
+const emailOpcional = z
+  .union([z.literal(''), emailSchema.pipe(z.string().max(120))], {
+    error: 'Ingresá un email válido',
+  })
+  .transform((email) => email || null)
+  .nullable()
+  .optional()
+
 // Todo es opcional: se carga lo que se sepa. Una persona sin nombre se muestra como "Desconocido 1, 2…".
 const datosPersona = {
   nombreCompletoRazonSocial: libre(150),
@@ -182,14 +191,7 @@ const datosPersona = {
     fechaSchema.refine((fecha) => fecha <= hoyArgentina(), 'La fecha no puede ser posterior a hoy'),
   ),
   telefono: libre(50),
-  // Vacío es "sin email"; cualquier otra cosa tiene que ser un email (si no, el mensaje genérico sería en inglés)
-  email: z
-    .union([z.literal(''), emailSchema.pipe(z.string().max(120))], {
-      error: 'Ingresá un email válido',
-    })
-    .transform((email) => email || null)
-    .nullable()
-    .optional(),
+  email: emailOpcional,
   domicilio: z.strictObject({
     idProvincia: opcional(idSchema),
     localidad: libre(100),
@@ -300,3 +302,20 @@ export const personaExternaAltaSchema = z
 
 export type PersonaExternaAltaInput = z.input<typeof personaExternaAltaSchema>
 export type PersonaExternaAltaData = z.output<typeof personaExternaAltaSchema>
+
+// ------------------------------------------------------------------ Paso 3: abogados (CU-09 pasos 23-27, E4-08)
+
+// Solo el nombre y a quién representa son obligatorios (25.b). Representa a una o varias personas del alta (25.a),
+// que todavía no tienen id: se guardan sus claves. Cada persona tiene a lo sumo un abogado.
+export const abogadoAltaSchema = z.strictObject({
+  nombreCompleto: obligatorio('Ingresá el nombre completo', 150),
+  numeroMatricula: libre(40),
+  telefono: libre(50),
+  email: emailOpcional,
+  representados: z
+    .array(z.string().min(1))
+    .min(1, 'Elegí al menos una persona a la que representa'),
+})
+
+export type AbogadoAltaInput = z.input<typeof abogadoAltaSchema>
+export type AbogadoAltaData = z.output<typeof abogadoAltaSchema>

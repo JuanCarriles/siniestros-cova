@@ -188,7 +188,7 @@ export type PartesSiniestro = {
   abogados: {
     id: number
     nombreCompleto: string
-    numeroMatricula: number | null
+    numeroMatricula: string | null
     telefono: string | null
     email: string | null
     representa: string[]
