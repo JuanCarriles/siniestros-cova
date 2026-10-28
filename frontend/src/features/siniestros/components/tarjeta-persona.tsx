@@ -93,16 +93,20 @@ export function BotonPersona({
 export function BotonQuitar({
   etiqueta,
   onClick,
+  cargando = false,
   children,
 }: {
   etiqueta: string
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void
+  /** Mientras se quita (p. ej. un documento en R2) */
+  cargando?: boolean
   children: ReactNode
 }) {
   return (
     <Button
       variant="ghost"
       className="text-danger-ink hover:bg-danger-bg hover:text-danger-ink"
+      loading={cargando}
       onClick={onClick}
       aria-label={etiqueta}
     >

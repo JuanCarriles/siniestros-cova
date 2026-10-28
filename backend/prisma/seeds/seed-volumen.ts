@@ -164,6 +164,7 @@ try {
                 anio: entero(2008, 2025),
                 rolAccidente: rol,
                 uso: UsoVehiculo.PARTICULAR,
+                idSiniestro: siniestro.id,
               },
             })
           }

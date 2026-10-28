@@ -144,6 +144,24 @@ En el panel de Cloudflare, **R2**:
 Así, si el token de la app se filtra, no alcanza para borrar los backups. El ID de la cuenta (`R2_ACCOUNT_ID`) está en la
 página principal de R2.
 
+**Regla de limpieza de `altas/`** (en `siniestros-cova` y también en `siniestro-cova-dev`). Durante el alta de un
+siniestro los documentos se suben a `altas/{usuario}/`, porque el siniestro todavía no existe; al crearlo pasan a
+`siniestros/{id}/`. Lo que queda en `altas/` es de altas abandonadas (se cerró el navegador y nunca se retomaron) o un
+original que no se pudo borrar después de moverlo. En el bucket → **Settings** → **Object lifecycle rules** →
+**Add rule**:
+
+| Campo      | Valor                                |
+| ---------- | ------------------------------------ |
+| Nombre     | `altas-abandonadas`                  |
+| Alcance    | Prefijo `altas/` (no todo el bucket) |
+| Acción     | Borrar objetos                       |
+| Después de | 30 días desde que se subieron        |
+
+El prefijo es importante: una regla sobre todo el bucket borraría los documentos de los siniestros. Un siniestro nunca
+depende de `altas/`: al crearlo, sus documentos se copian a `siniestros/{id}/` dentro de la misma operación, y si alguno
+falta o R2 falla, no se crea. Un alta que se retome después de 30 días avisa qué documentos ya no están para volver a
+cargarlos.
+
 **No** agregar reglas de borrado automático (lifecycle) a todo el bucket de backups: borrarían de
 `backups/documentos/actual/` documentos que siguen existiendo. La limpieza de lo viejo ya la hace el servicio de
 backup. Si se quiere un Bucket Lock, que aplique solo a `backups/db/`.

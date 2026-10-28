@@ -4,7 +4,7 @@ import { HttpError } from '../../utils/httpError.ts'
 
 type BaseAlta = Pick<
   Prisma.TransactionClient,
-  'siniestro' | 'aseguradora' | 'ajustador' | 'pais' | 'provincia' | 'tipoDocumento'
+  'siniestro' | 'aseguradora' | 'ajustador' | 'pais' | 'provincia' | 'tipoDocumento' | 'usuario'
 >
 
 // Mismo criterio que el listado y las bajas: no dado de baja y en un estado que no es de cierre.
@@ -18,40 +18,54 @@ const siniestroActivo = {
 export function crearServicioAltaSiniestros(prisma: BaseAlta) {
   return {
     async opciones(): Promise<OpcionesAltaSiniestro> {
-      const [aseguradoras, ajustadores, paises, provincias, tiposDocumento] = await Promise.all([
-        prisma.aseguradora.findMany({
-          where: { eliminado: false },
-          select: { id: true, nombre: true },
-          orderBy: { nombre: 'asc' },
-        }),
-        prisma.ajustador.findMany({
-          where: { eliminado: false, aseguradora: { eliminado: false } },
-          select: {
-            id: true,
-            nombres: true,
-            apellidos: true,
-            idAseguradora: true,
-            _count: { select: { siniestros: { where: siniestroActivo } } },
-          },
-          orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
-        }),
-        prisma.pais.findMany({
-          where: { eliminado: false },
-          select: { id: true, nombre: true },
-          orderBy: { nombre: 'asc' },
-        }),
-        prisma.provincia.findMany({
-          where: { eliminado: false, pais: { eliminado: false } },
-          select: { id: true, nombre: true, idPais: true },
-          orderBy: { nombre: 'asc' },
-        }),
-        // En el orden del catálogo: "DNI Tarjeta" primero, "Otro" al final
-        prisma.tipoDocumento.findMany({
-          where: { eliminado: false },
-          select: { id: true, nombre: true },
-          orderBy: { id: 'asc' },
-        }),
-      ])
+      const [aseguradoras, ajustadores, paises, provincias, tiposDocumento, usuarios] =
+        await Promise.all([
+          prisma.aseguradora.findMany({
+            where: { eliminado: false },
+            select: { id: true, nombre: true },
+            orderBy: { nombre: 'asc' },
+          }),
+          prisma.ajustador.findMany({
+            where: { eliminado: false, aseguradora: { eliminado: false } },
+            select: {
+              id: true,
+              nombres: true,
+              apellidos: true,
+              idAseguradora: true,
+              _count: { select: { siniestros: { where: siniestroActivo } } },
+            },
+            orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
+          }),
+          prisma.pais.findMany({
+            where: { eliminado: false },
+            select: { id: true, nombre: true },
+            orderBy: { nombre: 'asc' },
+          }),
+          prisma.provincia.findMany({
+            where: { eliminado: false, pais: { eliminado: false } },
+            select: { id: true, nombre: true, idPais: true },
+            orderBy: { nombre: 'asc' },
+          }),
+          // En el orden del catálogo: "DNI Tarjeta" primero, "Otro" al final
+          prisma.tipoDocumento.findMany({
+            where: { eliminado: false },
+            select: { id: true, nombre: true },
+            orderBy: { id: 'asc' },
+          }),
+          // Paso 5: todos los usuarios activos se pueden asignar (gestores, administradores y superadministradores),
+          // con sus casos activos para repartir la carga
+          prisma.usuario.findMany({
+            where: { eliminado: false },
+            select: {
+              id: true,
+              nombres: true,
+              apellidos: true,
+              tipoUsuario: true,
+              _count: { select: { siniestros: { where: siniestroActivo } } },
+            },
+            orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
+          }),
+        ])
       return {
         aseguradoras,
         ajustadores: ajustadores.map(({ _count, nombres, apellidos, ...a }) => ({
@@ -62,6 +76,11 @@ export function crearServicioAltaSiniestros(prisma: BaseAlta) {
         paises,
         provincias,
         tiposDocumento,
+        usuarios: usuarios.map(({ _count, nombres, apellidos, ...u }) => ({
+          ...u,
+          nombre: `${nombres} ${apellidos}`,
+          casosActivos: _count.siniestros,
+        })),
       }
     },
 

@@ -274,3 +274,15 @@ test('documentos: si empieza la eliminación del caso durante la subida, compens
   assert.equal(guardado, false)
   assert.equal(eliminado, 'siniestros/2/nuevo.pdf')
 })
+
+test('copiar: misma clave UUID en la carpeta nueva; el original queda hasta borrarlo', async () => {
+  const { almacenamiento, comandos } = almacenamientoPrueba()
+  const nueva = await almacenamiento.copiar('altas/3/abc-123.pdf', 'siniestros/57')
+  assert.equal(nueva, 'siniestros/57/abc-123.pdf')
+  assert.equal(comandos.length, 1, 'solo copia: no borra el original')
+  assert.equal(comandos[0].constructor.name, 'CopyObjectCommand')
+  assert.equal(comandos[0].input.Key, 'siniestros/57/abc-123.pdf')
+  assert.equal(comandos[0].input.CopySource, 'bucket-prueba/altas/3/abc-123.pdf')
+  await assert.rejects(almacenamiento.copiar('altas/3/abc.pdf', 'otra-carpeta'))
+  await assert.rejects(almacenamiento.copiar('../fuera.pdf', 'siniestros/57'))
+})

@@ -113,10 +113,13 @@ async function idsQueCoinciden(prisma: BaseSiniestros, texto: string): Promise<n
        OR unaccent(s."numeroPoliza") ILIKE unaccent(${patron}::text)
        OR EXISTS (
          SELECT 1 FROM "PersonaInvolucrada" p
-         LEFT JOIN "Vehiculo" v ON v."id" = p."idVehiculo"
          WHERE p."idSiniestro" = s."id" AND p."eliminado" = false
-           AND (unaccent(p."nombreCompletoRazonSocial") ILIKE unaccent(${patron}::text)
-                OR regexp_replace(v."dominio", '[[:space:]-]', '', 'g') ILIKE ${patronPatente}::text)
+           AND unaccent(p."nombreCompletoRazonSocial") ILIKE unaccent(${patron}::text)
+       )
+       OR EXISTS (
+         SELECT 1 FROM "Vehiculo" v
+         WHERE v."idSiniestro" = s."id" AND v."eliminado" = false
+           AND regexp_replace(v."dominio", '[[:space:]-]', '', 'g') ILIKE ${patronPatente}::text
        )`
   return filas.map((f) => f.id)
 }
