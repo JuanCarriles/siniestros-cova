@@ -467,6 +467,9 @@ model Siniestro {
   @@index([idAjustador])
   @@index([idDireccion])
   @@index([numeroSiniestro])
+  // Único por aseguradora sin distinguir mayúsculas: índice "Siniestro_idAseguradora_numeroSiniestro_key" sobre
+  // (idAseguradora, lower(numeroSiniestro)), creado a mano en la migración 20261028120000_numero_siniestro_unico
+  // (Prisma no declara índices sobre expresiones). Un alta repetida falla con P2002.
 }
 
 /// Una recuperación vigente por usuario. Sólo hashes de desafíos/tokens y del código vinculado al desafío.

@@ -28,6 +28,7 @@
     "test:usuarios:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/usuarios.db.test.mjs tests/usuarios.jerarquia.db.test.mjs",
     "test:siniestros": "node --experimental-strip-types --test tests/siniestros.test.mjs",
     "test:siniestros:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros.db.test.mjs tests/siniestros-alta.db.test.mjs tests/siniestros-alta-crear.db.test.mjs",
+    "test:migraciones:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/migraciones.db.test.mjs",
     "test:r2": "node --experimental-strip-types --test tests/r2.test.mjs",
     "r2:smoke": "tsx --env-file=.env src/scripts/probar-r2.ts",
     "r2:demo": "tsx --env-file=.env src/dev/r2-demo/server.ts",

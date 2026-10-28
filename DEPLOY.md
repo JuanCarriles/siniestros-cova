@@ -157,8 +157,9 @@ original que no se pudo borrar después de moverlo. En el bucket → **Settings*
 | Acción     | Borrar objetos                       |
 | Después de | 30 días desde que se subieron        |
 
-El prefijo es importante: una regla sobre todo el bucket borraría los documentos de los siniestros. Un alta que se retome
-después de 30 días pierde sus documentos (el borrador los sigue listando, pero ya no están en R2): hay que volver a
+El prefijo es importante: una regla sobre todo el bucket borraría los documentos de los siniestros. Un siniestro nunca
+depende de `altas/`: al crearlo, sus documentos se copian a `siniestros/{id}/` dentro de la misma operación, y si alguno
+falta o R2 falla, no se crea. Un alta que se retome después de 30 días avisa qué documentos ya no están para volver a
 cargarlos.
 
 **No** agregar reglas de borrado automático (lifecycle) a todo el bucket de backups: borrarían de
