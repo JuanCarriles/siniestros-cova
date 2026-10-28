@@ -11,9 +11,11 @@ import {
 import {
   rolAccidenteSchema,
   tipoLesionSchema,
+  tipoPeritoSchema,
   usoVehiculoSchema,
   type RolAccidente,
   type TipoLesion,
+  type TipoPerito,
 } from './enums.ts'
 
 // ------------------------------------------------------------------ Alta de siniestro (CU-09 pasos 4-5, E4-04)
@@ -319,3 +321,39 @@ export const abogadoAltaSchema = z.strictObject({
 
 export type AbogadoAltaInput = z.input<typeof abogadoAltaSchema>
 export type AbogadoAltaData = z.output<typeof abogadoAltaSchema>
+
+// ------------------------------------------------------------------ Paso 4: peritos (CU-09 pasos 28-31, E4-09)
+
+export const TIPOS_PERITO: Record<TipoPerito, string> = {
+  CESVI: 'CESVI',
+  MEDICO: 'Médico',
+}
+
+const fechaHastaHoy = fechaSchema.refine(
+  (fecha) => fecha <= hoyArgentina(),
+  'La fecha no puede ser posterior a hoy',
+)
+
+// Un perito CESVI y uno médico como máximo: el paso 4 tiene un lugar para cada uno. El nombre y la fecha de
+// solicitud son obligatorios (así está la base). Sin fecha de cierre la pericia queda pendiente (29.a): cerrado se
+// deduce de la fecha, no se carga aparte.
+export const peritoAltaSchema = z
+  .strictObject({
+    tipoPerito: tipoPeritoSchema,
+    nombre: obligatorio('Ingresá el nombre del perito', 150),
+    telefono: libre(50),
+    email: emailOpcional,
+    fechaSolicitud: z
+      .string({ error: 'Ingresá la fecha de solicitud' })
+      .min(1, 'Ingresá la fecha de solicitud')
+      .pipe(fechaHastaHoy),
+    fechaCierre: opcional(fechaHastaHoy),
+  })
+  .refine((p) => !p.fechaCierre || p.fechaCierre >= p.fechaSolicitud, {
+    message: 'El cierre no puede ser anterior a la solicitud',
+    path: ['fechaCierre'],
+  })
+  .transform((p) => ({ ...p, cerrado: !!p.fechaCierre }))
+
+export type PeritoAltaInput = z.input<typeof peritoAltaSchema>
+export type PeritoAltaData = z.output<typeof peritoAltaSchema>
