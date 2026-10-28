@@ -39,7 +39,7 @@ export const sections: Record<PanelSection, { label: string; description: string
 }
 
 const navigation: Record<TipoUsuario, readonly PanelSection[]> = {
-  GESTOR: ['siniestros', 'plantillas'],
+  GESTOR: ['dashboard', 'siniestros', 'plantillas'],
   // CU-05: los administradores cargan y eliminan plantillas; el gestor solo las descarga (CU-06)
   ADMINISTRADOR: [
     'dashboard',

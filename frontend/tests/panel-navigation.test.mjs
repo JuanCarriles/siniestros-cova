@@ -6,13 +6,13 @@ import {
   navigationFor,
 } from '../src/components/layout/panel-navigation.ts'
 
-test('gestor: sólo siniestros, plantillas y perfil; bloquea direcciones administrativas', () => {
-  assert.deepEqual(navigationFor('GESTOR'), ['siniestros', 'plantillas'])
-  for (const path of ['siniestros', 'plantillas', 'perfil'])
+test('gestor: dashboard, siniestros, plantillas y perfil; bloquea direcciones administrativas', () => {
+  assert.deepEqual(navigationFor('GESTOR'), ['dashboard', 'siniestros', 'plantillas'])
+  for (const path of ['dashboard', 'siniestros', 'plantillas', 'perfil'])
     assert.equal(canOpenSection('GESTOR', path), true)
-  for (const path of ['dashboard', 'aseguradoras', 'ajustadores', 'usuarios', 'informes'])
+  for (const path of ['aseguradoras', 'ajustadores', 'usuarios', 'informes'])
     assert.equal(canOpenSection('GESTOR', path), false)
-  assert.equal(initialSection('GESTOR'), 'siniestros')
+  assert.equal(initialSection('GESTOR'), 'dashboard')
 })
 
 test('administrador y superadministrador tienen las siete secciones y perfil', () => {
