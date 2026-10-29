@@ -36,7 +36,7 @@ export const dashboardGestorSchema = z.strictObject({
 
 export type DashboardGestor = z.output<typeof dashboardGestorSchema>
 
-export const bloqueDashboardSchema = z.enum(['demorados', 'sin-asignar', 'actividad'])
+export const bloqueDashboardSchema = z.enum(['demorados', 'actividad'])
 export type BloqueDashboard = z.output<typeof bloqueDashboardSchema>
 export const consultaDashboardAdministradorSchema = z.strictObject({
   ver: bloqueDashboardSchema.optional(),
@@ -49,10 +49,9 @@ const casoDashboardSchema = z.strictObject({
   numeroSiniestro: z.string(),
   aseguradora: z.string(),
   estado: z.string(),
-  gestor: personaDashboardSchema.nullable(),
+  gestor: personaDashboardSchema,
   fechaAsignacion: fechaHoraSchema,
   diasSinMovimiento: cantidad,
-  diasSinAsignar: cantidad,
 })
 const paginaDashboard = <T extends z.ZodType>(item: T) =>
   z.strictObject({
@@ -68,7 +67,6 @@ export const dashboardAdministradorSchema = z.strictObject({
     z.strictObject({ id: idSchema, nombre: z.string(), esCierre: z.boolean(), cantidad }),
   ),
   demorados: paginaDashboard(casoDashboardSchema),
-  sinAsignar: paginaDashboard(casoDashboardSchema),
   actividad: paginaDashboard(
     z.strictObject({
       id: idSchema,
@@ -79,8 +77,6 @@ export const dashboardAdministradorSchema = z.strictObject({
     }),
   ),
 })
-export const gestoresDashboardSchema = z.array(personaDashboardSchema)
-export const asignarGestorDashboardSchema = z.strictObject({ idUsuario: idSchema })
 export type DashboardAdministrador = z.output<typeof dashboardAdministradorSchema>
 export type CasoDashboard = z.output<typeof casoDashboardSchema>
 export type ConsultaDashboardAdministrador = z.output<typeof consultaDashboardAdministradorSchema>

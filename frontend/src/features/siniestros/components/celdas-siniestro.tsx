@@ -154,9 +154,9 @@ export function CeldaAseguradora({
 export function CeldaGestor({ siniestro }: { siniestro: SiniestroListado }) {
   return (
     <div className="grid gap-0.5">
-      <span className="line-clamp-2">{siniestro.gestor?.nombre ?? 'Sin gestor responsable'}</span>
+      <span className="line-clamp-2">{siniestro.gestor.nombre}</span>
       <span className="text-sm text-muted-foreground">
-        <span className="sr-only">{siniestro.gestor ? 'Asignado el ' : 'Ingresado el '}</span>
+        <span className="sr-only">Asignado el </span>
         {/* Cifras de ancho fijo pero en la letra normal: la monoespaciada ensanchaba la columna */}
         <span className="whitespace-nowrap tabular-nums">
           {fecha.format(new Date(siniestro.fechaAsignacion))}
@@ -255,13 +255,11 @@ export function DiasSinMovimiento({
   dias,
   cerrado,
   conTexto = false,
-  className,
 }: {
   dias: number
   cerrado: boolean
   /** En las tarjetas: "4 días sin movimiento" a la vista */
   conTexto?: boolean
-  className?: string
 }) {
   const tono = tonoDemora(dias, cerrado)
   const Icono = tono === 'alerta' ? TriangleAlert : tono === 'demorado' ? Clock : null
@@ -276,7 +274,6 @@ export function DiasSinMovimiento({
       className={cn(
         'inline-flex min-h-8 min-w-11 items-center justify-center gap-1 rounded-md px-2 font-bold whitespace-nowrap',
         tonos[tono],
-        className,
       )}
     >
       {Icono && <Icono className="size-4" aria-hidden="true" />}

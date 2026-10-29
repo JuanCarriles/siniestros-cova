@@ -6,12 +6,10 @@ import type {
 import { DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
-import { eventoHistorial } from '../historial/historial.textos.ts'
 
 type Trabajo<T> = (tx: Prisma.TransactionClient) => Promise<T>
 export type BaseDashboardAdministrador = {
   lectura: <T>(trabajo: Trabajo<T>) => Promise<T>
-  transaccion: <T>(trabajo: Trabajo<T>) => Promise<T>
 }
 const DIA = 86_400_000
 const nombre = (p: { nombres: string; apellidos: string }) => `${p.nombres} ${p.apellidos}`
@@ -64,7 +62,6 @@ export function crearServicioDashboardAdministrador(
           { fechaUltimoMovimiento: null, fechaAsignacion: { lte: limite } },
         ],
       } satisfies Prisma.SiniestroWhereInput
-      const sinAsignar = { ...activo, idUsuario: null } satisfies Prisma.SiniestroWhereInput
       // La actividad de casos de baja sigue en su historial; este panel solo enlaza casos disponibles.
       const actividad = {
         eliminado: false,
@@ -78,10 +75,9 @@ export function crearServicioDashboardAdministrador(
         aseguradora: s.aseguradora.nombre,
         asegurado: s.personasInvolucradas[0]?.nombreCompletoRazonSocial?.trim() || null,
         estado: s.estadoSiniestro.nombre,
-        gestor: s.usuario ? { id: s.usuario.id, nombre: nombre(s.usuario) } : null,
+        gestor: { id: s.usuario.id, nombre: nombre(s.usuario) },
         fechaAsignacion: s.fechaAsignacion.toISOString(),
         diasSinMovimiento: dias(s.fechaUltimoMovimiento ?? s.fechaAsignacion),
-        diasSinAsignar: dias(s.fechaAsignacion),
       })
       return base.lectura(async (tx) => {
         const grupos = await tx.siniestro.groupBy({
@@ -95,7 +91,6 @@ export function crearServicioDashboardAdministrador(
           orderBy: { id: 'asc' },
         })
         const totalDemorados = await tx.siniestro.count({ where: demora })
-        const totalSinAsignar = await tx.siniestro.count({ where: sinAsignar })
         const totalActividad = await tx.historialSiniestro.count({ where: actividad })
         const paginar = (bloque: string, total: number) => {
           const porPagina = consulta.ver === bloque ? (25 as const) : (5 as const)
@@ -106,7 +101,6 @@ export function crearServicioDashboardAdministrador(
           return { total, porPagina, pagina }
         }
         const pd = paginar('demorados', totalDemorados)
-        const ps = paginar('sin-asignar', totalSinAsignar)
         const pa = paginar('actividad', totalActividad)
         // COALESCE ordena correctamente también los casos que nunca tuvieron un movimiento.
         const ids = await tx.$queryRaw<{ id: number }[]>`
@@ -121,13 +115,6 @@ export function crearServicioDashboardAdministrador(
           select: detalle,
         })
         const porId = new Map(filasDemoradas.map((s) => [s.id, s]))
-        const filasSinAsignar = await tx.siniestro.findMany({
-          where: sinAsignar,
-          select: detalle,
-          orderBy: [{ fechaAsignacion: 'asc' }, { id: 'asc' }],
-          take: ps.porPagina,
-          skip: (ps.pagina - 1) * ps.porPagina,
-        })
         const eventos = await tx.historialSiniestro.findMany({
           where: actividad,
           orderBy: [{ fechaEvento: 'desc' }, { id: 'desc' }],
@@ -147,7 +134,6 @@ export function crearServicioDashboardAdministrador(
           totalSiniestros: grupos.reduce((n, g) => n + g._count._all, 0),
           estados: estados.map((e) => ({ ...e, cantidad: cantidades.get(e.id) ?? 0 })),
           demorados: { ...pd, items: ids.map((s) => mapear(porId.get(s.id)!)) },
-          sinAsignar: { ...ps, items: filasSinAsignar.map(mapear) },
           actividad: {
             ...pa,
             items: eventos.map((e) => ({
@@ -159,72 +145,6 @@ export function crearServicioDashboardAdministrador(
             })),
           },
         }
-      })
-    },
-    async gestores(actor: SesionUsuario) {
-      exigirAdministrador(actor)
-      return base.lectura(async (tx) =>
-        (
-          await tx.usuario.findMany({
-            where: { tipoUsuario: 'GESTOR', eliminado: false },
-            select: { id: true, nombres: true, apellidos: true },
-            orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }, { id: 'asc' }],
-          })
-        ).map((u) => ({ id: u.id, nombre: nombre(u) })),
-      )
-    },
-    async asignar(actor: SesionUsuario, id: number, idUsuario: number) {
-      exigirAdministrador(actor)
-      return base.transaccion(async (tx) => {
-        const autor = await tx.usuario.findFirst({ where: { id: actor.id, eliminado: false } })
-        if (!autor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
-        exigirAdministrador(autor)
-        // Mismo orden que baja/reactivación: primero el caso y después el destinatario.
-        await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${id} FOR UPDATE`
-        const siniestro = await tx.siniestro.findUnique({
-          where: { id },
-          select: { id: true, numeroSiniestro: true },
-        })
-        if (!siniestro)
-          throw new HttpError(404, 'El siniestro ya no existe. Actualizá el dashboard.')
-        await tx.$queryRaw`SELECT "id" FROM "Usuario" WHERE "id" = ${idUsuario} FOR UPDATE`
-        const gestor = await tx.usuario.findFirst({
-          where: { id: idUsuario, eliminado: false, tipoUsuario: 'GESTOR' },
-        })
-        if (!gestor)
-          throw new HttpError(
-            409,
-            'El usuario elegido ya no es un gestor activo. Actualizá y elegí otro.',
-          )
-        const ahora = reloj()
-        const cambio = await tx.siniestro.updateMany({
-          where: { id, ...activo, idUsuario: null },
-          data: { idUsuario, fechaUltimoMovimiento: ahora, demorado: false },
-        })
-        if (cambio.count !== 1)
-          throw new HttpError(
-            409,
-            'Este siniestro ya tiene gestor, está cerrado o fue dado de baja. Actualizá el dashboard.',
-          )
-        await tx.historialSiniestro.create({
-          data: {
-            idSiniestro: id,
-            idUsuario: autor.id,
-            fechaEvento: ahora,
-            ...eventoHistorial.asignacion(gestor, ahora),
-          },
-        })
-        await tx.notificacion.create({
-          data: {
-            idSiniestro: id,
-            idUsuario,
-            tipoNotificacion: 'ASIGNACION_SINIESTRO',
-            mensaje: `Se te asignó el siniestro ${siniestro.numeroSiniestro}.`,
-            leida: false,
-            revisada: false,
-            fechaCreacion: ahora,
-          },
-        })
       })
     },
   }

@@ -212,18 +212,16 @@ export function crearServicioBajasSiniestros(deps: {
         if (!fila.eliminado) return
         // No reintroducir un caso activo en un usuario o ajustador que ya fue dado de baja.
         if (!fila.estadoSiniestro.esCierre) {
-          if (fila.idUsuario !== null) {
-            await tx.$queryRaw`SELECT "id" FROM "Usuario" WHERE "id" = ${fila.idUsuario} FOR UPDATE`
-            const asignado = await tx.usuario.findUnique({
-              where: { id: fila.idUsuario },
-              select: { eliminado: true },
-            })
-            if (!asignado || asignado.eliminado)
-              throw new HttpError(
-                409,
-                'Primero reactivá al usuario asignado antes de reactivar este siniestro.',
-              )
-          }
+          await tx.$queryRaw`SELECT "id" FROM "Usuario" WHERE "id" = ${fila.idUsuario} FOR UPDATE`
+          const asignado = await tx.usuario.findUnique({
+            where: { id: fila.idUsuario },
+            select: { eliminado: true },
+          })
+          if (!asignado || asignado.eliminado)
+            throw new HttpError(
+              409,
+              'Primero reactivá al usuario asignado antes de reactivar este siniestro.',
+            )
           if (fila.idAjustador !== null) {
             await tx.$queryRaw`SELECT "id" FROM "Ajustador" WHERE "id" = ${fila.idAjustador} FOR UPDATE`
             const ajustador = await tx.ajustador.findUnique({

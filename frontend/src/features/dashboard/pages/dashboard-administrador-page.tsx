@@ -1,31 +1,21 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useRevalidator } from 'react-router'
 import { ArrowLeft, ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react'
-import type {
-  BloqueDashboard,
-  CasoDashboard,
-  DashboardAdministrador,
-} from '@cova/shared/schemas/dashboard'
-import { DIAS_ALERTA, DIAS_DEMORADO, tonoDemora } from '@cova/shared/schemas/siniestros'
+import type { BloqueDashboard, DashboardAdministrador } from '@cova/shared/schemas/dashboard'
+import { DIAS_ALERTA, DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
 import { Aviso } from '@/components/aviso'
 import { usePanel } from '@/components/layout/panel-context'
 import { Paginacion } from '@/components/paginacion'
 import { Button } from '@/components/ui/button'
 import { tonoDeEstado } from '@/lib/estados-visuales'
 import { cn } from '@/lib/utils'
-import { AsignarGestorDialog } from '../components/asignar-gestor-dialog'
+import { DiasSinMovimiento } from '@/features/siniestros/components/celdas-siniestro'
+import { SectionHeading } from '@/components/layout/section-heading'
+import { fechaDe, fechaHoraDe } from '@/features/siniestros/ficha/formato'
 
-const fecha = (iso: string) =>
-  new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(
-    new Date(iso),
-  )
-const hora = (iso: string) =>
-  new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(
-    new Date(iso),
-  )
+const fecha = fechaDe
 const titulos = {
   demorados: 'Casos demorados',
-  'sin-asignar': 'Casos sin asignar',
   actividad: 'Actividad reciente',
 }
 const coloresEstado = {
@@ -42,30 +32,12 @@ function tiempoDesde(iso: string, ahora: string) {
   if (minutos < 60) return relativo.format(-minutos, 'minute')
   if (minutos < 1440) return relativo.format(-Math.floor(minutos / 60), 'hour')
   const dias = Math.floor(minutos / 1440)
-  return dias === 1 ? `Ayer, ${hora(iso)}` : relativo.format(-dias, 'day')
+  return relativo.format(-dias, 'day')
 }
 function iniciales(nombre: string) {
   const partes = nombre.trim().split(/\s+/)
   return `${partes[0]?.[0] ?? ''}${partes.length > 1 ? (partes.at(-1)?.[0] ?? '') : ''}`.toLocaleUpperCase(
     'es-AR',
-  )
-}
-function Semaforo({ dias }: { dias: number }) {
-  const tono = tonoDemora(dias, false)
-  return (
-    <span
-      className="inline-flex items-center justify-end gap-2 font-semibold whitespace-nowrap"
-      aria-label={`${dias} días sin movimiento. ${tono === 'alerta' ? 'Alerta' : 'Demorado'}.`}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'size-2.5 shrink-0 rounded-full',
-          tono === 'alerta' ? 'bg-danger-ink' : 'bg-warning-ink',
-        )}
-      />
-      <span className="dato">{dias}</span> días
-    </span>
   )
 }
 function Bloque({
@@ -145,25 +117,23 @@ export function DashboardAdministradorPage({
 }) {
   const { basePath } = usePanel()
   const revalidator = useRevalidator()
-  const [asignando, setAsignando] = useState<CasoDashboard | null>(null)
-  const [mensaje, setMensaje] = useState<string | null>(null)
   const actualizando = revalidator.state === 'loading'
   const ficha = (id: number) => `${basePath}/siniestros/${id}`
   return (
     <div className="space-y-4">
-      {ver ? (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <Button variant="link" asChild className="px-0">
-            <Link to={`${basePath}/dashboard`}>
-              <ArrowLeft aria-hidden="true" />
-              Volver al dashboard
-            </Link>
-          </Button>
-          <h1 className="text-xl font-bold text-primary">{titulos[ver]}</h1>
-        </div>
-      ) : (
-        <h1 className="sr-only">Dashboard del administrador</h1>
+      {ver && (
+        <Button variant="link" asChild className="px-0">
+          <Link to={`${basePath}/dashboard`}>
+            <ArrowLeft aria-hidden="true" />
+            Volver al dashboard
+          </Link>
+        </Button>
       )}
+      <SectionHeading
+        section="dashboard"
+        titulo={ver ? titulos[ver] : 'Dashboard del estudio'}
+        descripcion="Totales por estado, casos que necesitan atención y actividad reciente del estudio."
+      />
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <p className="text-sm text-muted-foreground">
           Resumen del estudio <span aria-hidden="true">·</span>{' '}
@@ -172,9 +142,7 @@ export function DashboardAdministradorPage({
         </p>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <p role="status" className="text-sm text-muted-foreground">
-            {actualizando
-              ? 'Actualizando…'
-              : `Actualizado ${fecha(dashboard.actualizadoEn)}, ${hora(dashboard.actualizadoEn)}`}
+            {actualizando ? 'Actualizando…' : `Actualizado ${fechaHoraDe(dashboard.actualizadoEn)}`}
           </p>
           <Button
             variant="ghost"
@@ -193,11 +161,6 @@ export function DashboardAdministradorPage({
           </Button>
         </div>
       </div>
-      {mensaje && (
-        <Aviso tipo="exito" enfocar>
-          {mensaje}
-        </Aviso>
-      )}
       {!ver && (
         <section
           aria-label="Totales por estado"
@@ -235,7 +198,7 @@ export function DashboardAdministradorPage({
         </section>
       )}
 
-      <div className={cn('grid items-stretch gap-4', !ver && 'xl:grid-cols-[1.1fr_1fr]')}>
+      <div className="grid gap-4">
         {(!ver || ver === 'demorados') && (
           <Bloque
             bloque="demorados"
@@ -261,71 +224,23 @@ export function DashboardAdministradorPage({
                     <span
                       className={cn(
                         'min-w-0 break-words',
-                        caso.gestor ? 'text-muted-foreground' : 'font-semibold text-warning-ink',
+                        'text-muted-foreground',
                         'max-xl:col-start-1 max-xl:row-start-3',
                       )}
                     >
-                      {caso.gestor?.nombre ?? 'Sin asignar'}
+                      {caso.gestor.nombre}
                     </span>
                     <span className="justify-self-end max-xl:col-start-2 max-xl:row-span-3 max-xl:row-start-1">
-                      <Semaforo dias={caso.diasSinMovimiento} />
+                      <DiasSinMovimiento dias={caso.diasSinMovimiento} cerrado={false} />{' '}
+                      <span aria-hidden="true">días</span>
                     </span>
                   </Link>
-                </li>
-              ))}
-            </ul>
-          </Bloque>
-        )}
-        {(!ver || ver === 'sin-asignar') && (
-          <Bloque
-            bloque="sin-asignar"
-            datos={dashboard.sinAsignar}
-            ver={ver}
-            descripcion={`${dashboard.sinAsignar.total} en total`}
-            vacio="Todos los casos activos tienen un gestor asignado."
-          >
-            <ul className="divide-y">
-              {dashboard.sinAsignar.items.map((caso) => (
-                <li
-                  key={caso.id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-2"
-                >
-                  <Link
-                    to={ficha(caso.id)}
-                    className="grid min-h-12 min-w-0 gap-x-3 gap-y-0.5 rounded text-sm hover:underline xl:grid-cols-[minmax(6.5rem,0.85fr)_minmax(0,1.15fr)] xl:items-center 2xl:grid-cols-[minmax(6.75rem,0.8fr)_minmax(0,1fr)_minmax(0,1.15fr)] 2xl:items-center"
-                    aria-label={`Ver siniestro ${caso.numeroSiniestro}. ${caso.asegurado ?? 'Sin asegurado'}.`}
-                  >
-                    <span className="dato font-bold break-all text-primary">
-                      {caso.numeroSiniestro}
-                    </span>
-                    <span className="min-w-0 font-semibold break-words">
-                      {caso.asegurado ?? 'Sin asegurado'}
-                    </span>
-                    <span className="min-w-0 break-words text-muted-foreground xl:col-span-2 2xl:col-span-1">
-                      {caso.aseguradora} <span aria-hidden="true">·</span>{' '}
-                      <time dateTime={caso.fechaAsignacion} title={fecha(caso.fechaAsignacion)}>
-                        {tiempoDesde(caso.fechaAsignacion, dashboard.actualizadoEn)}
-                      </time>
-                    </span>
-                  </Link>
-                  <Button
-                    size="sm"
-                    className="text-sm"
-                    onClick={() => {
-                      setMensaje(null)
-                      setAsignando(caso)
-                    }}
-                    aria-label={`Asignar gestor al siniestro ${caso.numeroSiniestro}`}
-                  >
-                    Asignar
-                  </Button>
                 </li>
               ))}
             </ul>
           </Bloque>
         )}
       </div>
-
       {(!ver || ver === 'actividad') && (
         <Bloque
           bloque="actividad"
@@ -364,8 +279,8 @@ export function DashboardAdministradorPage({
                     </span>
                     <time
                       dateTime={evento.fecha}
-                      title={`${fecha(evento.fecha)}, ${hora(evento.fecha)}`}
-                      aria-label={`${fecha(evento.fecha)}, ${hora(evento.fecha)}`}
+                      title={fechaHoraDe(evento.fecha)}
+                      aria-label={fechaHoraDe(evento.fecha)}
                       className="shrink-0 text-muted-foreground"
                     >
                       {tiempoDesde(evento.fecha, dashboard.actualizadoEn)}
@@ -380,21 +295,6 @@ export function DashboardAdministradorPage({
             ))}
           </ol>
         </Bloque>
-      )}
-      {asignando && (
-        <AsignarGestorDialog
-          key={asignando.id}
-          caso={asignando}
-          onCerrar={() => setAsignando(null)}
-          onDesactualizado={() => {
-            void revalidator.revalidate()
-          }}
-          onHecho={(texto) => {
-            setAsignando(null)
-            setMensaje(texto)
-            void revalidator.revalidate()
-          }}
-        />
       )}
     </div>
   )

@@ -20,7 +20,7 @@ export const siniestroSchema = z.strictObject({
   menorEdadInvolucrado: booleanoSchema,
   idEstadoSiniestro: idSchema,
   idAseguradora: idSchema,
-  idUsuario: opcional(idSchema),
+  idUsuario: idSchema,
   fechaOcurrencia: opcional(fechaSchema),
   horaOcurrencia: opcional(horaSchema),
   inicioVigencia: opcional(textoSchema),
@@ -128,7 +128,7 @@ export type SiniestroListado = {
   terceros: ParteResumen[]
   aseguradora: { id: number; nombre: string }
   ajustador: ParteResumen | null
-  gestor: ParteResumen | null
+  gestor: ParteResumen
   fechaAsignacion: string
   estado: { id: number; nombre: string; descripcion: string; esCierre: boolean }
   /** El perito más reciente de cada tipo, si hay */
@@ -161,7 +161,7 @@ export type SiniestroResumen = {
   numeroPoliza: string
   aseguradora: { id: number; nombre: string }
   estado: { id: number; nombre: string }
-  gestor: ParteResumen | null
+  gestor: ParteResumen
 }
 
 /** Datos de contacto de las partes (GET /api/siniestros/:id/partes), para los modales del listado (CU-09 3.b y 3.c). */

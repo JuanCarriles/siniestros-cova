@@ -90,7 +90,7 @@ function aListado(fila: FilaListado, ahora: Date): SiniestroListado {
       .map((p) => ({ id: p.id, nombre: nombrePersona(p) })),
     aseguradora: fila.aseguradora,
     ajustador: fila.ajustador && { id: fila.ajustador.id, nombre: nombreDe(fila.ajustador) },
-    gestor: fila.usuario ? { id: fila.usuario.id, nombre: nombreDe(fila.usuario) } : null,
+    gestor: { id: fila.usuario.id, nombre: nombreDe(fila.usuario) },
     fechaAsignacion: fila.fechaAsignacion.toISOString(),
     estado: fila.estadoSiniestro,
     pericias: { cesvi: pericia('CESVI'), medico: pericia('MEDICO') },
@@ -265,7 +265,7 @@ export function crearServicioSiniestros(
         numeroPoliza: fila.numeroPoliza,
         aseguradora: fila.aseguradora,
         estado: fila.estadoSiniestro,
-        gestor: fila.usuario ? { id: fila.usuario.id, nombre: nombreDe(fila.usuario) } : null,
+        gestor: { id: fila.usuario.id, nombre: nombreDe(fila.usuario) },
       }
     },
 
