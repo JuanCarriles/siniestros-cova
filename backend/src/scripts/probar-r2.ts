@@ -5,6 +5,7 @@ import { leerConfiguracionR2 } from '../config/r2.ts'
 import { crearAlmacenamientoR2 } from '../lib/r2.ts'
 import { disconnectPrisma, getPrisma } from '../lib/prisma.ts'
 import { crearServicioDocumentos } from '../modules/documentos/documentos.service.ts'
+import { crearServicioPlantillas } from '../modules/plantillas/plantillas.service.ts'
 import { HttpError } from '../utils/httpError.ts'
 
 // Ejecutar únicamente en desarrollo. No imprime credenciales ni URLs firmadas.
@@ -73,7 +74,7 @@ try {
               telefono: 'PRUEBA',
               email: `${randomUUID()}@r2-test.invalid`,
               contrasena: '!CUENTA-DE-PRUEBA-SIN-LOGIN',
-              tipoUsuario: 'GESTOR',
+              tipoUsuario: 'ADMINISTRADOR',
               direccion: { create: {} },
             },
           })
@@ -96,32 +97,49 @@ try {
             almacenamiento: registrado,
             autorizar: (acceso) => {
               assert.equal(acceso.idUsuario, usuario.id)
-              if (acceso.destino.tipo === 'siniestro')
-                assert.equal(acceso.destino.idSiniestro, siniestro.id)
+              assert.equal(acceso.destino.idSiniestro, siniestro.id)
               return Promise.resolve()
             },
           })
-          for (const destino of [
-            { tipo: 'siniestro' as const, idSiniestro: siniestro.id },
-            { tipo: 'plantilla' as const },
-          ]) {
-            paso = `subida y registro de ${destino.tipo}`
-            const documento = await servicio.subir({ idUsuario: usuario.id, destino, archivo })
-            paso = `lectura de la clave de ${destino.tipo}`
+          const plantillas = crearServicioPlantillas({
+            prisma: tx,
+            almacenamiento: () => registrado,
+          })
+          for (const tipo of ['siniestro', 'plantilla'] as const) {
+            paso = `subida y registro de ${tipo}`
+            const documento =
+              tipo === 'siniestro'
+                ? await servicio.subir({
+                    idUsuario: usuario.id,
+                    destino: { tipo, idSiniestro: siniestro.id },
+                    archivo,
+                  })
+                : await plantillas.subir(
+                    usuario.id,
+                    {
+                      encabezado: 'Prueba R2',
+                      descripcion: 'Documento sintético; se revierte al finalizar',
+                    },
+                    archivo,
+                  )
+            paso = `lectura de la clave de ${tipo}`
             const claveGuardada =
-              destino.tipo === 'siniestro'
+              tipo === 'siniestro'
                 ? (await tx.documentoSiniestro.findUniqueOrThrow({ where: { id: documento.id } }))
                     .urlArchivoSinDominio
                 : (await tx.documentoPlantilla.findUniqueOrThrow({ where: { id: documento.id } }))
                     .urlArchivo
             assert.ok(claves.includes(claveGuardada))
             assert.ok(!claveGuardada.includes('://') && !claveGuardada.includes('?'))
-            descarga = await servicio.descargar({
-              idUsuario: usuario.id,
-              tipo: destino.tipo,
-              idDocumento: documento.id,
-            })
-            paso = `comprobación de descarga de ${destino.tipo}`
+            descarga =
+              tipo === 'siniestro'
+                ? await servicio.descargar({
+                    idUsuario: usuario.id,
+                    tipo,
+                    idDocumento: documento.id,
+                  })
+                : await plantillas.descargar(usuario.id, documento.id)
+            paso = `comprobación de descarga de ${tipo}`
             await comprobarDescarga(descarga)
           }
           throw rollback

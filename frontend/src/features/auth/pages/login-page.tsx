@@ -6,7 +6,8 @@ import { rutaInicio, rutaVolverSegura } from '../sesion'
 
 // Por qué se llegó al login, cuando no fue por elección propia
 const motivos: Record<string, string> = {
-  'contrasena-actualizada': 'Tu contraseña se actualizó. Ingresá con la nueva contraseña.',
+  'contrasena-actualizada':
+    'Tu contraseña se actualizó y se cerraron todas tus sesiones. Ingresá con la nueva contraseña.',
   'sesion-vencida':
     'Tu sesión se cerró después de 7 horas sin actividad. Volvé a ingresar para seguir.',
   salida: 'Cerraste la sesión.',
@@ -29,6 +30,13 @@ export function LoginPage() {
           {motivo}
         </Aviso>
       )}
+      {params.get('motivo') === 'contrasena-actualizada' &&
+        params.get('aviso') === 'correo-no-enviado' && (
+          <Aviso tipo="info" className="mb-5">
+            No se pudo enviar el aviso por correo. Tu contraseña ya cambió y tus sesiones se
+            cerraron.
+          </Aviso>
+        )}
       <LoginForm
         onIngreso={(usuario) =>
           void navigate(volver ?? rutaInicio(usuario.tipoUsuario), { replace: true })

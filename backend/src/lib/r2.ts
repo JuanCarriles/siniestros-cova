@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -22,7 +25,10 @@ const nombreArchivoSchema = z
 
 const archivoSchema = z.strictObject({
   nombreOriginal: nombreArchivoSchema,
-  contenido: z.instanceof(Uint8Array),
+  contenido: z.custom<Uint8Array>(
+    (value) => value instanceof Uint8Array,
+    'Contenido de archivo inválido',
+  ),
 })
 
 export type ArchivoEntrada = z.input<typeof archivoSchema>
@@ -36,7 +42,10 @@ const tiposMime = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 } as const
 
-const carpetaSchema = z.string().regex(/^(plantillas|pruebas|siniestros\/[1-9]\d*)$/)
+// altas/{idUsuario}: documentos subidos durante el alta, antes de que exista el siniestro (CU-09 34)
+const carpetaSchema = z
+  .string()
+  .regex(/^(plantillas|pruebas|siniestros\/[1-9]\d*|altas\/[1-9]\d*)$/)
 
 function errorR2(mensaje: string, error: unknown): HttpError {
   const fallo = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } } | null
@@ -108,7 +117,7 @@ export function crearAlmacenamientoR2(
       }
       const tipoExtension = extension as keyof typeof tiposMime
       const mimeType = tiposMime[tipoExtension]
-      const contenido = Buffer.from(archivo.contenido)
+      const contenido = archivo.contenido
       const clave = claveArchivoSchema.parse(`${prefijo}/${randomUUID()}.${tipoExtension}`)
       try {
         await s3.send(
@@ -131,6 +140,31 @@ export function crearAlmacenamientoR2(
         tipoExtension,
         mimeType,
         tamanoBytes: BigInt(contenido.byteLength),
+      }
+    },
+
+    // Una firma se genera localmente: no demuestra que el objeto exista en R2.
+    // Comprobar solo después de autorizar y resolver la clave desde la base.
+    async comprobarExistencia(clave: string) {
+      const key = claveArchivoSchema.parse(clave)
+      try {
+        await s3.send(new HeadObjectCommand({ Bucket: config.R2_BUCKET, Key: key }))
+      } catch (error) {
+        const nombre = (error as { name?: unknown } | null)?.name
+        if (nombre === 'NotFound' || nombre === 'NoSuchKey') {
+          // HEAD puede devolver un 404 genérico también si falta el bucket.
+          // Solo confirmar ausencia del archivo si el bucket sigue accesible.
+          try {
+            await s3.send(new HeadBucketCommand({ Bucket: config.R2_BUCKET }))
+          } catch (errorBucket) {
+            throw errorR2('No se pudo comprobar la disponibilidad del bucket de R2', errorBucket)
+          }
+          throw new HttpError(
+            404,
+            'El archivo de esta plantilla no está disponible en el almacenamiento. Pedile a un administrador que vuelva a cargarlo.',
+          )
+        }
+        throw errorR2('No se pudo comprobar la disponibilidad del archivo en R2', error)
       }
     },
 
@@ -162,7 +196,28 @@ export function crearAlmacenamientoR2(
       }
     },
 
-    // Compensación de altas fallidas y limpieza de pruebas; no usar para bajas lógicas.
+    // Copia un objeto a otra carpeta con el mismo nombre (UUID.ext); el original queda. Sirve para mover: copiar,
+    // registrar la clave nueva y recién entonces borrar el original. Devuelve la clave nueva.
+    async copiar(clave: string, carpeta: string) {
+      const origen = claveArchivoSchema.parse(clave)
+      const destino = claveArchivoSchema.parse(
+        `${carpetaSchema.parse(carpeta)}/${origen.split('/').pop()}`,
+      )
+      try {
+        await s3.send(
+          new CopyObjectCommand({
+            Bucket: config.R2_BUCKET,
+            Key: destino,
+            CopySource: `${config.R2_BUCKET}/${origen.split('/').map(encodeURIComponent).join('/')}`,
+          }),
+        )
+      } catch (error) {
+        throw errorR2('No se pudo copiar el objeto en R2', error)
+      }
+      return destino
+    },
+
+    // Borrado físico de plantillas autorizadas, compensación de altas y pruebas; no usar para bajas lógicas.
     async eliminar(clave: string) {
       const key = claveArchivoSchema.parse(clave)
       try {

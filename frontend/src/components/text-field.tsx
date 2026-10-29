@@ -35,7 +35,7 @@ export function TextField({
       .join(' ') || undefined
 
   return (
-    <div className={cn('grid gap-1.5', containerClassName)}>
+    <div className={cn('grid content-start gap-1.5', containerClassName)}>
       <Label htmlFor={fieldId}>
         {label}
         {/* En palabras, no con un asterisco rojo: se lee aunque no se distinga el color. El lector de pantalla

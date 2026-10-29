@@ -1,3 +1,4 @@
+import { motivoFalloCorreo } from '../../lib/correo-resend.ts'
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { hashPassword } from '../../lib/password.ts'
@@ -100,9 +101,7 @@ export function crearServicioRecuperacion(deps: {
         // El error se registra sin correo, código, tokens ni credenciales.
         // El motivo (falta la clave, Resend rechazó con tal estado, tiempo agotado) no incluye datos sensibles
         void enviarCorreo({ email: destinatario, codigo, minutos }).catch((error: unknown) => {
-          console.error(
-            `No se pudo enviar el correo de recuperación: ${error instanceof Error ? error.message : 'error desconocido'}`,
-          )
+          console.error(`No se pudo enviar el correo de recuperación: ${motivoFalloCorreo(error)}`)
         })
       }
       return desafio

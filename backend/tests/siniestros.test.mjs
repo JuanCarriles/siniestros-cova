@@ -33,11 +33,20 @@ async function servidor() {
     obtener: registrar('obtener'),
     partes: registrar('partes'),
   }
+  const alta = {
+    opciones: registrar('altaOpciones'),
+    validarDatosCaso: registrar('validarDatosCaso'),
+  }
   const app = express()
+  app.use(express.json())
   app.use(cookieParser())
   app.use(
     '/api/siniestros',
-    crearSiniestrosRouter({ servicio, requerirSesion: crearRequerirSesion(sesionesFalsas) }),
+    crearSiniestrosRouter({
+      servicio,
+      alta,
+      requerirSesion: crearRequerirSesion(sesionesFalsas),
+    }),
   )
   app.use(errorHandler)
   const http = app.listen(0, '127.0.0.1')
@@ -45,8 +54,15 @@ async function servidor() {
   const base = `http://127.0.0.1:${http.address().port}/api/siniestros`
   return {
     llamadas,
-    pedir: (quien, ruta = '') =>
-      fetch(`${base}${ruta}`, { headers: quien ? { cookie: `cova_sesion=${quien}` } : {} }),
+    pedir: (quien, ruta = '', body) =>
+      fetch(`${base}${ruta}`, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: {
+          ...(quien ? { cookie: `cova_sesion=${quien}` } : {}),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
     cerrar: () => new Promise((ok) => http.close(ok)),
   }
 }
@@ -76,12 +92,13 @@ test('filtros: valores por defecto y validación de la dirección', async (t) =>
   assert.deepEqual(api.llamadas.pop()[2], {
     pagina: 1,
     porPagina: 25,
+    activos: false,
     bajas: false,
     orden: 'asignacion',
   })
   const res = await api.pedir(
     'admin',
-    '?pagina=3&porPagina=50&q=%20R%C3%ADos%20&estado=2&aseguradora=4&gestor=5&bajas=true&orden=demora',
+    '?pagina=3&porPagina=50&q=%20R%C3%ADos%20&estado=2&aseguradora=4&gestor=5&activos=true&bajas=true&orden=demora',
   )
   assert.equal(res.status, 200)
   assert.deepEqual(api.llamadas.pop()[2], {
@@ -91,6 +108,7 @@ test('filtros: valores por defecto y validación de la dirección', async (t) =>
     estado: 2,
     aseguradora: 4,
     gestor: 5,
+    activos: true,
     bajas: true,
     orden: 'demora',
   })
@@ -103,6 +121,7 @@ test('filtros: valores por defecto y validación de la dirección', async (t) =>
     '?estado=abc',
     '?orden=nombre',
     '?bajas=si',
+    '?activos=si',
     `?q=${'x'.repeat(101)}`,
     '?estado=1&estado=2',
     '?inventado=1',
@@ -112,5 +131,78 @@ test('filtros: valores por defecto y validación de la dirección', async (t) =>
   assert.equal((await api.pedir('admin', '/abc/partes')).status, 400)
   assert.equal((await api.pedir('admin', '/abc')).status, 400)
   assert.equal((await api.pedir(null, '/7')).status, 401)
+  assert.equal(api.llamadas.length, 0)
+})
+
+// E4-04: alta, paso 1. El formato lo valida el schema compartido antes de llegar al servicio.
+const datosCaso = {
+  numeroSiniestro: ' 2026-04871 ',
+  numeroPoliza: '44-9820117',
+  inicioVigencia: '',
+  idAseguradora: '2',
+  sucursal: 'Casa central',
+  idAjustador: '',
+  fechaOcurrencia: '2026-10-01',
+  horaOcurrencia: '14:30',
+  menorEdadInvolucrado: false,
+  causa: '',
+  lugar: { idProvincia: '', localidad: '', calle: '', codigoPostal: '' },
+}
+
+test('alta: solo administración; el gestor no ve las opciones ni valida', async (t) => {
+  const api = await servidor()
+  t.after(api.cerrar)
+  assert.equal((await api.pedir(null, '/alta/opciones')).status, 401)
+  assert.equal((await api.pedir('gestor', '/alta/opciones')).status, 403)
+  assert.equal((await api.pedir('gestor', '/alta/datos-caso', datosCaso)).status, 403)
+  assert.equal(api.llamadas.length, 0)
+  assert.equal((await api.pedir('admin', '/alta/opciones')).status, 200)
+  assert.equal(api.llamadas.pop()[0], 'altaOpciones')
+})
+
+test('alta paso 1: normaliza lo cargado y rechaza lo que falta antes del servicio', async (t) => {
+  const api = await servidor()
+  t.after(api.cerrar)
+  assert.equal((await api.pedir('admin', '/alta/datos-caso', datosCaso)).status, 204)
+  assert.deepEqual(api.llamadas.pop(), [
+    'validarDatosCaso',
+    {
+      numeroSiniestro: '2026-04871',
+      numeroPoliza: '44-9820117',
+      inicioVigencia: null,
+      idAseguradora: 2,
+      sucursal: 'Casa central',
+      idAjustador: null,
+      fechaOcurrencia: '2026-10-01',
+      horaOcurrencia: '14:30',
+      menorEdadInvolucrado: false,
+      causa: null,
+      lugar: { idProvincia: null, localidad: null, calle: null, codigoPostal: null },
+    },
+  ])
+  const faltan = await api.pedir('admin', '/alta/datos-caso', {
+    ...datosCaso,
+    numeroSiniestro: '  ',
+    numeroPoliza: '',
+    idAseguradora: '',
+    sucursal: '',
+  })
+  assert.equal(faltan.status, 400)
+  assert.deepEqual(Object.keys((await faltan.json()).details).sort(), [
+    'idAseguradora',
+    'numeroPoliza',
+    'numeroSiniestro',
+    'sucursal',
+  ])
+  for (const malo of [
+    { fechaOcurrencia: '2999-01-01' },
+    { fechaOcurrencia: '', horaOcurrencia: '10:00' },
+    { menorEdadInvolucrado: 'no' },
+    { idAseguradora: 'abc' },
+    { inventado: 1 },
+  ]) {
+    const res = await api.pedir('admin', '/alta/datos-caso', { ...datosCaso, ...malo })
+    assert.equal(res.status, 400, JSON.stringify(malo))
+  }
   assert.equal(api.llamadas.length, 0)
 })

@@ -31,10 +31,12 @@ Compose ya inyecta `backend/.env` al servidor. No requiere cambiar el bucket a p
 
 `src/lib/r2.ts` crea un cliente S3 con región `auto`, sube bytes mediante
 PutObjectCommand y firma GetObjectCommand. `crearAlmacenamientoR2()` devuelve
-`subir`, `firmarDescarga`, `eliminar` y `cerrar`.
+`subir`, `comprobarExistencia`, `firmarDescarga`, `eliminar` y `cerrar`.
 
 `src/modules/documentos/documentos.service.ts` integra el almacenamiento con
-Prisma para documentos de siniestros y plantillas. Ejemplo de integración futura:
+Prisma para documentos de siniestros. Las plantillas tienen un único camino de alta
+y descarga en `src/modules/plantillas/plantillas.service.ts` (ver `docs/CARGA_PLANTILLAS.md`
+en la raíz). Ejemplo de integración futura para siniestros:
 
 ```ts
 const documentos = crearServicioDocumentos({
@@ -58,14 +60,26 @@ const descarga = await documentos.descargar({
 ```
 
 El ejemplo necesita la sesión, política de permisos y recepción multipart del
-futuro controlador; todavía no hay rutas HTTP ni formularios de archivos.
+futuro controlador de documentos de siniestros. Las plantillas sí tienen rutas HTTP
+y formulario de carga, con validación del contenido real antes de subir a R2.
 El callback de autorización es obligatorio. Se comprueba usuario activo, documento
 activo y siniestro activo; la política decide qué usuarios pueden operar sobre cada
 recurso. Nunca aceptar idUsuario o una clave de almacenamiento directamente del
 navegador como prueba de autorización.
 
-El servicio genera `siniestros/ID/UUID.ext` o `plantillas/UUID.ext`. El nombre
-original se conserva como metadato. Los campos existentes se mantienen:
+El servicio de documentos genera `siniestros/ID/UUID.ext`; el módulo de plantillas
+genera `plantillas/UUID.ext`. El nombre original se conserva como metadato.
+
+Los documentos del alta de un siniestro (CU-09, E4-10) se suben a `altas/IDUSUARIO/UUID.ext`
+mientras el siniestro no existe. Al crearlo, primero se comprueba que sigan en R2 (si falta alguno, no se crea y
+se avisa cuál volver a cargar); después, dentro de la misma transacción que crea el siniestro, cada uno se copia a
+`siniestros/ID/UUID.ext` y se registra con esa clave. Si R2 falla, no se crea nada y se borran las copias ya
+hechas. Confirmada la transacción se borran los originales; si alguno queda, lo limpia la regla de ciclo de vida
+de `altas/` (30 días, ver la sección de R2 en `DEPLOY.md`). Ningún documento de un siniestro apunta a `altas/`. El
+archivo de un siniestro se identifica siempre por `DocumentoSiniestro` (idSiniestro y clave), nunca por la
+carpeta.
+
+Los campos existentes se mantienen:
 
 | Modelo | Campo que contiene exclusivamente la clave |
 | --- | --- |
@@ -78,9 +92,10 @@ El tamaño de documentos se calcula con los bytes recibidos y se guarda como Big
 la respuesta del servicio lo convierte en texto para JSON.
 
 Se rechazan archivos vacíos, tamaños mayores al límite y extensiones no admitidas.
-El MIME se deriva de la extensión; esto **no inspecciona el contenido real ni busca
-malware**. La recepción de archivos deberá limitar el tamaño antes de acumularlos
-en memoria y completar los controles de contenido que requiera el negocio.
+El adaptador genérico de R2 deriva el MIME de la extensión y no busca malware.
+El módulo de plantillas agrega la inspección del contenido real con `file-type`,
+además del límite multipart de 10 MiB. La futura recepción de documentos de siniestros
+deberá limitar el tamaño y completar los controles de contenido de su propia historia.
 Las descargas se sirven como adjunto y con `private, no-store`.
 
 Si falla el alta en Prisma después de subir, se intenta eliminar sólo ese nuevo
@@ -92,7 +107,7 @@ hasta su vencimiento aunque luego cambien los permisos.
 
 ## Base de datos
 
-La migración `20261014000000_init` crea las 20 tablas del esquema ya existente,
+La migración `20261014033211_init` crea las 20 tablas del esquema ya existente,
 sus enums, relaciones, índices y los 20 CHECK de baja lógica. No agrega tablas
 propias de R2 ni cambia los nombres de columnas. Ejecutarla sólo contra la base
 de desarrollo correcta; nunca resetear una base con datos.

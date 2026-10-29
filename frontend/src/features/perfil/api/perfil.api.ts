@@ -1,5 +1,6 @@
 import {
   perfilSchema,
+  perfilContrasenaRespuestaSchema,
   type PerfilActualizacionData,
   type PerfilContrasenaData,
   type PerfilVerificarData,
@@ -19,6 +20,8 @@ export function verificarPerfil(datos: PerfilVerificarData): Promise<void> {
 export function guardarPerfil(datos: PerfilActualizacionData): Promise<void> {
   return api('/perfil', { method: 'PATCH', body: datos })
 }
-export function cambiarContrasenaPerfil(datos: PerfilContrasenaData): Promise<void> {
-  return api('/perfil/contrasena', { method: 'PATCH', body: datos })
+export async function cambiarContrasenaPerfil(datos: PerfilContrasenaData) {
+  return perfilContrasenaRespuestaSchema.parse(
+    await api('/perfil/contrasena', { method: 'PATCH', body: datos }),
+  )
 }

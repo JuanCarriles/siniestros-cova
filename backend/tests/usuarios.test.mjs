@@ -43,7 +43,15 @@ test('Zod: alta fuerte, datos normalizados, contrato estricto y contraseña opci
 async function servidor(t) {
   const llamadas = []
   const servicio = Object.fromEntries(
-    ['listar', 'catalogos', 'crear', 'modificar', 'darDeBaja', 'reactivar'].map((nombre) => [
+    [
+      'listar',
+      'catalogos',
+      'crear',
+      'modificar',
+      'darDeBaja',
+      'reactivar',
+      'siniestrosActivos',
+    ].map((nombre) => [
       nombre,
       async (...args) => {
         llamadas.push([nombre, ...args])
@@ -93,6 +101,7 @@ test('API: exige sesión y rol también para catálogos y escrituras', async (t)
     for (const [ruta, method, body] of [
       ['', 'GET'],
       ['/catalogos', 'GET'],
+      ['/1/siniestros-activos', 'GET'],
       ['', 'POST', datos],
       ['/1', 'PATCH', { nombres: 'Otro' }],
       ['/1/baja', 'PATCH'],
@@ -129,4 +138,25 @@ test('API: valida entradas y pasa al servicio el actor de la sesión, sin acepta
     200,
   )
   assert.equal(llamadas.at(-1)[3].contrasena, '')
+})
+
+test('API: consulta protegida y paginada de siniestros del usuario', async (t) => {
+  const { pedir, llamadas } = await servidor(t)
+  for (const ruta of [
+    '/0/siniestros-activos',
+    '/x/siniestros-activos',
+    '/1/siniestros-activos?pagina=0',
+    '/1/siniestros-activos?pagina=1.5',
+    '/1/siniestros-activos?pagina=1000001',
+    '/1/siniestros-activos?idUsuario=99',
+  ]) {
+    assert.equal((await pedir('ADMINISTRADOR', ruta)).status, 400)
+  }
+  assert.equal(llamadas.length, 0)
+  const respuesta = await pedir('ADMINISTRADOR', '/7/siniestros-activos?pagina=2')
+  assert.equal(respuesta.status, 200)
+  assert.equal(respuesta.headers.get('cache-control'), 'no-store')
+  assert.equal(llamadas.at(-1)[0], 'siniestrosActivos')
+  assert.equal(llamadas.at(-1)[1].id, 21)
+  assert.deepEqual(llamadas.at(-1).slice(2), [7, 2])
 })

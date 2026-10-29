@@ -107,25 +107,19 @@ const ASEGURADORAS = [
 const ABOGADOS = [
   {
     nombreCompleto: 'Luis Maidana',
-    numeroMatricula: 12345,
+    numeroMatricula: '12345',
     telefono: '341 555-0301',
     email: 'lmaidana@estudio.test',
   },
   {
     nombreCompleto: 'Valeria Quintana',
-    numeroMatricula: 23456,
+    numeroMatricula: 'T° 45 F° 123',
     telefono: '11 5555-0302',
     email: 'vquintana@estudio.test',
   },
 ] as const
 
 type NombreAbogado = (typeof ABOGADOS)[number]['nombreCompleto']
-
-const PLANTILLAS = [
-  { nombre: 'Modelo de denuncia administrativa.docx', subidaHaceDias: 120 },
-  { nombre: 'Planilla de daños.xlsx', subidaHaceDias: 95 },
-  { nombre: 'Formulario de cierre.pdf', subidaHaceDias: 30 },
-] as const
 
 // ------------------------------------------------------------------------------------ Siniestros
 
@@ -1067,7 +1061,6 @@ export async function seedDesarrollo(
     })
     usuarios.set(u.email, creado)
   }
-  const idAdmin = obtener(usuarios, 'admin@cova.test', 'el usuario').id
 
   // Aseguradoras y ajustadores
   const aseguradoras = new Map<string, number>()
@@ -1105,19 +1098,7 @@ export async function seedDesarrollo(
     abogados.set(ab.nombreCompleto, (await tx.abogado.create({ data: { ...ab } })).id)
   }
 
-  // Plantillas de documentos (CU05/CU06), cargadas por el administrador
-  for (const p of PLANTILLAS) {
-    const { urlArchivoSinDominio, nombreOriginal, tipoExtension } = archivo(p.nombre, 'plantillas')
-    await tx.documentoPlantilla.create({
-      data: {
-        nombreOriginal,
-        tipoExtension,
-        urlArchivo: urlArchivoSinDominio,
-        fechaCarga: haceDias(p.subidaHaceDias),
-        idUsuario: idAdmin,
-      },
-    })
-  }
+  // Las plantillas se crean únicamente al cargar archivos reales desde la aplicación.
 
   // Siniestros con todo su expediente
   for (const s of SINIESTROS) {
@@ -1190,6 +1171,7 @@ export async function seedDesarrollo(
       const vehiculo = await tx.vehiculo.create({
         data: {
           ...datos,
+          idSiniestro,
           rolAccidente: rol,
           idAseguradora: aseguradora ? obtener(aseguradoras, aseguradora, 'la aseguradora') : null,
         },

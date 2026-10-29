@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from 'express'
 import { ajustadorSchema, ajustadorUpdateSchema } from '@cova/shared/schemas/ajustadores'
+import { consultaSiniestrosAsociadosSchema } from '@cova/shared/schemas/siniestros-asociados'
 import { idSchema } from '@cova/shared/schemas/comunes'
 import { requerirRol } from '../../middlewares/autenticar.ts'
 import { HttpError } from '../../utils/httpError.ts'
@@ -27,6 +28,12 @@ export function crearAjustadoresRouter(deps: {
       throw new HttpError(400, 'El filtro incluirBajas debe ser true o false')
     }
     res.json(await servicio.listar(filtro === 'true'))
+  })
+
+  router.get('/:id/siniestros-activos', async (req, res) => {
+    const { pagina } = consultaSiniestrosAsociadosSchema.parse(req.query)
+    res.set('Cache-Control', 'no-store')
+    res.json(await servicio.siniestrosActivos(idDe(req.params), pagina))
   })
 
   router.post('/', async (req, res) => {

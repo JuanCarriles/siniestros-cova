@@ -2,11 +2,14 @@ import { useRef, useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import {
   bloqueoBajaUsuarioSchema,
-  tiposUsuarioAdministrables,
+  motivoRestriccionUsuario,
   type UsuarioListado,
 } from '@cova/shared/schemas/usuarios-abm'
 import type { TipoUsuario } from '@cova/shared/schemas/enums'
+import { SiniestrosActivosBaja } from '@/components/abm/siniestros-activos-baja'
+import { useSiniestrosActivosBaja } from '@/components/abm/use-siniestros-activos-baja'
 import { Aviso } from '@/components/aviso'
+import { usePanel } from '@/components/layout/panel-context'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -37,20 +40,26 @@ export function EstadoUsuarioDialog({
   onDesactualizado: () => void
   elementoAlCerrar: () => HTMLElement | null
 }) {
+  const { basePath } = usePanel()
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [casosServidor, setCasosServidor] = useState<number | null>(null)
   const principal = useRef<HTMLButtonElement>(null)
   const usuario = cambio?.usuario
   const nombre = usuario ? `${usuario.nombres} ${usuario.apellidos}` : ''
-  const sinPermiso = usuario
-    ? !tiposUsuarioAdministrables(rol).includes(usuario.tipoUsuario)
-    : false
-  const casos = casosServidor ?? usuario?.casosActivos ?? 0
+  const motivo = usuario ? motivoRestriccionUsuario(rol, usuario.tipoUsuario) : null
+  const sinPermiso = motivo !== null
+  const consulta = useSiniestrosActivosBaja({
+    tipo: 'usuario',
+    id: usuario?.id,
+    habilitado: cambio?.tipo === 'baja' && !sinPermiso,
+  })
+  const casos = consulta.datos?.casosActivos ?? casosServidor ?? usuario?.casosActivos ?? 0
   const conCasos = cambio?.tipo === 'baja' && casos > 0
+  const pendienteConsulta = cambio?.tipo === 'baja' && !sinPermiso && !consulta.verificada
   const bloqueada = sinPermiso || conCasos
   async function confirmar() {
-    if (!cambio || enviando || bloqueada) return
+    if (!cambio || enviando || bloqueada || pendienteConsulta) return
     setEnviando(true)
     setError(null)
     try {
@@ -62,6 +71,7 @@ export function EstadoUsuarioDialog({
       )
       if (bloqueo.success) {
         setCasosServidor(bloqueo.data.casosActivos)
+        consulta.actualizar()
         onDesactualizado()
       } else
         setError(err instanceof ApiError ? err.message : 'No se pudo completar. Probá de nuevo.')
@@ -105,7 +115,7 @@ export function EstadoUsuarioDialog({
           </DialogTitle>
           <DialogDescription>
             {sinPermiso ? (
-              'Solo podés administrar usuarios de una jerarquía inferior a la tuya.'
+              motivo
             ) : conCasos ? (
               <>
                 {nombre} tiene{' '}
@@ -126,6 +136,14 @@ export function EstadoUsuarioDialog({
             {error}
           </Aviso>
         )}
+        {cambio?.tipo === 'baja' && !sinPermiso && (
+          <SiniestrosActivosBaja
+            consulta={consulta}
+            nombre={nombre}
+            onAbrir={onCerrar}
+            hrefListado={`${basePath}/siniestros?gestor=${usuario?.id}&activos=true`}
+          />
+        )}
         <DialogFooter>
           <DialogClose asChild>
             <Button ref={principal} variant={bloqueada ? 'default' : 'outline'} disabled={enviando}>
@@ -136,6 +154,7 @@ export function EstadoUsuarioDialog({
             <Button
               variant={cambio?.tipo === 'baja' ? 'destructive' : 'default'}
               loading={enviando}
+              disabled={pendienteConsulta}
               onClick={() => void confirmar()}
             >
               {cambio?.tipo === 'baja' ? 'Dar de baja' : 'Reactivar'}

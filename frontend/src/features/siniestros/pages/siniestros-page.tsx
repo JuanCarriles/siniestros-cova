@@ -4,17 +4,25 @@ import {
   useLocation,
   useNavigate,
   useNavigation,
+  useRevalidator,
+  useRouteLoaderData,
   useSearchParams,
 } from 'react-router'
-import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, Trash2 } from 'lucide-react'
+import { CircleMinus, Eye, MoveHorizontal, PanelLeftClose, RotateCcw, Trash2 } from 'lucide-react'
 import {
   DIAS_ALERTA,
+  puedeEliminarSiniestro,
   DIAS_DEMORADO,
   parametrosListadoValidos,
   POR_PAGINA,
   type OrdenSiniestros,
   type SiniestroListado,
 } from '@cova/shared/schemas/siniestros'
+import { Aviso } from '@/components/aviso'
+import {
+  OperacionSiniestroDialog,
+  type OperacionSiniestro,
+} from '../components/operacion-siniestro-dialog'
 import { BarraAbm } from '@/components/abm/barra-abm'
 import type { AccionFila } from '@/components/abm/menu-acciones'
 import { FiltroAbm } from '@/components/abm/filtro-abm'
@@ -34,9 +42,12 @@ import { SelectorColumnas } from '../components/selector-columnas'
 import { TablaSiniestros } from '../components/tabla-siniestros'
 import { TarjetaSiniestro } from '../components/tarjeta-siniestro'
 import { useColumnasVisibles } from '../hooks/use-columnas-visibles'
+import { leerBorrador } from '../borrador-alta'
+import { mensajeAltaCreada } from '../crear-alta'
+import type { cargarPanel } from '@/features/auth/sesion'
 import type { cargarSiniestros } from '../loader'
 
-const FILTROS = ['q', 'estado', 'aseguradora', 'gestor', 'bajas'] as const
+const FILTROS = ['q', 'estado', 'aseguradora', 'gestor', 'activos', 'bajas'] as const
 
 // CU-09 paso 2 y 2.a (E4-01): listado de siniestros. Filtros, búsqueda, orden y página van en la dirección y los
 // resuelve el servidor; la tabla muestra la página pedida.
@@ -47,6 +58,9 @@ export function SiniestrosPage() {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
+  // Un alta a medio cargar en este navegador (E4-04): el botón ofrece retomarla
+  const sesion = useRouteLoaderData<typeof cargarPanel>('panel')
+  const altaEnCurso = !esGestor && !!sesion?.usuario && !!leerBorrador(sesion.usuario.id)
   const navigation = useNavigation()
   const cargando =
     navigation.state === 'loading' && navigation.location.pathname === location.pathname
@@ -57,6 +71,25 @@ export function SiniestrosPage() {
   const visibles = columnasRol.filter((c) => columnas.visible(c.id))
   const [pedido, setPedido] = useState<PedidoPartes | null>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
+  const revalidator = useRevalidator()
+  const [operacion, setOperacion] = useState<OperacionSiniestro | null>(null)
+  // Al volver de crear un siniestro (E4-10), el aviso del alta
+  const [mensaje, setMensaje] = useState<string | null>(() => mensajeAltaCreada(location.state))
+  useEffect(() => {
+    // Se muestra una vez: recargar la página no lo repite
+    if (mensajeAltaCreada(location.state))
+      void navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.state, location.pathname, location.search, navigate])
+  const origenOperacion = useRef<HTMLButtonElement | null>(null)
+  function abrirOperacion(
+    tipo: OperacionSiniestro['tipo'],
+    siniestro: SiniestroListado,
+    origen: HTMLButtonElement | null,
+  ) {
+    origenOperacion.current = origen
+    setMensaje(null)
+    setOperacion({ tipo, siniestro })
+  }
 
   // Cambia filtros en la dirección; cualquier filtro nuevo vuelve a la primera página
   function cambiar(valores: Record<string, string | null>) {
@@ -123,37 +156,48 @@ export function SiniestrosPage() {
     })
   const hrefSiniestro = (id: number) => `${basePath}/siniestros/${id}`
 
-  // Menú ⋮ (mockup "Menú de acciones de una fila"). Dar de baja y eliminar llegan en sus propias historias: por ahora
-  // se ven deshabilitadas. Eliminar solo aplica a los casos cerrados (RF-14); el gestor solo ve el detalle.
-  const sinAccion = () => undefined
+  // CU-09 3.d/3.e. El servidor vuelve a validar rol, estado y número al confirmar.
   const acciones = (s: SiniestroListado): AccionFila[] => [
-    {
-      etiqueta: 'Ver detalle',
-      icono: <Eye aria-hidden="true" />,
-      onSelect: () => void navigate(hrefSiniestro(s.id)),
-    },
+    ...(!s.eliminacionEnCurso
+      ? [
+          {
+            etiqueta: 'Ver detalle',
+            icono: <Eye aria-hidden="true" />,
+            onSelect: () => void navigate(hrefSiniestro(s.id)),
+          },
+        ]
+      : []),
     ...(esGestor
       ? []
       : [
-          ...(s.eliminado
-            ? []
-            : [
+          ...(!s.eliminado
+            ? [
                 {
                   etiqueta: 'Dar de baja',
                   icono: <CircleMinus aria-hidden="true" />,
                   peligro: true,
-                  proximamente: true,
-                  onSelect: sinAccion,
+                  onSelect: (origen: HTMLButtonElement | null) => abrirOperacion('baja', s, origen),
                 },
-              ]),
-          ...(s.estado.esCierre
+              ]
+            : []),
+          ...(s.eliminado && !s.eliminacionEnCurso
             ? [
                 {
-                  etiqueta: 'Eliminar',
+                  etiqueta: 'Reactivar',
+                  icono: <RotateCcw aria-hidden="true" />,
+                  onSelect: (origen: HTMLButtonElement | null) =>
+                    abrirOperacion('reactivar', s, origen),
+                },
+              ]
+            : []),
+          ...(puedeEliminarSiniestro(s)
+            ? [
+                {
+                  etiqueta: s.eliminacionEnCurso ? 'Reintentar eliminación' : 'Eliminar',
                   icono: <Trash2 aria-hidden="true" />,
                   peligro: true,
-                  proximamente: true,
-                  onSelect: sinAccion,
+                  onSelect: (origen: HTMLButtonElement | null) =>
+                    abrirOperacion('eliminar', s, origen),
                 },
               ]
             : []),
@@ -179,7 +223,10 @@ export function SiniestrosPage() {
     filtroDe('aseguradora', 'Aseguradora', opciones.aseguradoras),
     // El servidor no aplica estos dos para el gestor (RF-17): no se muestran
     esGestor ? null : filtroDe('gestor', 'Gestor', opciones.gestores),
-    !esGestor && validos.bajas === 'true'
+    validos.activos === 'true'
+      ? { clave: 'activos', etiqueta: 'Casos', valor: 'solo activos' }
+      : null,
+    !esGestor && validos.bajas === 'true' && validos.activos !== 'true'
       ? { clave: 'bajas', etiqueta: 'Incluye', valor: 'dados de baja' }
       : null,
   ].filter((f): f is FiltroActivo => f !== null)
@@ -242,16 +289,24 @@ export function SiniestrosPage() {
             />
           </>
         }
-        mostrarBajas={esGestor ? undefined : params.get('bajas') === 'true'}
+        mostrarBajas={esGestor ? undefined : validos.bajas === 'true' && validos.activos !== 'true'}
         onMostrarBajas={
-          esGestor ? undefined : (mostrar) => cambiar({ bajas: mostrar ? 'true' : null })
+          esGestor
+            ? undefined
+            : (mostrar) =>
+                cambiar({ bajas: mostrar ? 'true' : null, ...(mostrar ? { activos: null } : {}) })
         }
         etiquetaBajas="Mostrar dados de baja"
+        etiquetaAlta={
+          esGestor ? undefined : altaEnCurso ? 'Retomar alta de siniestro' : 'Nuevo siniestro'
+        }
+        onAlta={() => void navigate(`${basePath}/siniestros/nuevo`)}
       />
 
       <FiltrosActivos filtros={activos} onQuitar={quitarFiltro} onQuitarTodos={quitarTodos} />
 
       <ListadoAbm
+        aviso={mensaje && <Aviso tipo="exito">{mensaje}</Aviso>}
         tituloRef={titulo}
         titulo={plural(pagina.total, 'siniestro')}
         resumen={[
@@ -353,6 +408,24 @@ export function SiniestrosPage() {
         </div>
       </ListadoAbm>
 
+      {operacion && (
+        <OperacionSiniestroDialog
+          key={`${operacion.tipo}-${operacion.siniestro.id}`}
+          operacion={operacion}
+          onCerrar={() => setOperacion(null)}
+          onHecho={(texto) => {
+            setOperacion(null)
+            setMensaje(texto)
+            void revalidator.revalidate()
+          }}
+          onDesactualizado={() => void revalidator.revalidate()}
+          elementoAlCerrar={(completado) =>
+            !completado && origenOperacion.current?.isConnected
+              ? origenOperacion.current
+              : titulo.current
+          }
+        />
+      )}
       <PartesDialog pedido={pedido} onCerrar={() => setPedido(null)} />
     </>
   )

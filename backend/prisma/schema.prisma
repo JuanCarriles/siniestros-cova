@@ -33,6 +33,8 @@ enum TipoEventoHistorial {
   ASIGNACION
   REASIGNACION
   CAMBIO_ESTADO
+  BAJA_SINIESTRO
+  REACTIVACION_SINIESTRO
 }
 
 enum TipoPerito {
@@ -154,6 +156,9 @@ model Sesion {
 model DocumentoPlantilla {
   id             Int       @id @default(autoincrement())
   nombreOriginal String
+  encabezado     String
+  descripcion    String    @default("")
+  tamanoBytes    BigInt?
   /// Clave relativa de R2 (plantillas/uuid.ext), nunca una URL completa.
   urlArchivo     String
   tipoExtension  String
@@ -323,7 +328,7 @@ model Abogado {
   id              Int       @id @default(autoincrement())
   nombreCompleto  String
   telefono        String?
-  numeroMatricula Int?
+  numeroMatricula String?
   email           String?
   eliminado       Boolean   @default(false)
   fechaBaja       DateTime? @db.Timestamptz(3)
@@ -347,13 +352,17 @@ model Vehiculo {
   idAseguradora     Int?
   rolAccidente      RolAccidente?
   uso               UsoVehiculo?
+  /// El siniestro al que pertenece, aunque no tenga titular ni ocupantes cargados (CU-09 11.a)
+  idSiniestro       Int
   eliminado         Boolean       @default(false)
   fechaBaja         DateTime?     @db.Timestamptz(3)
 
   aseguradora          Aseguradora?         @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestro            Siniestro            @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   personasInvolucradas PersonaInvolucrada[]
 
   @@index([idAseguradora])
+  @@index([idSiniestro])
 }
 
 model TipoDocumento {
@@ -436,6 +445,8 @@ model Siniestro {
   idDireccion           Int?
   eliminado             Boolean   @default(false)
   fechaBaja             DateTime? @db.Timestamptz(3)
+  /// Impide nuevas operaciones mientras se eliminan los archivos externos; permite reintentar fallos.
+  eliminacionEnCurso    Boolean   @default(false)
 
   estadoSiniestro      EstadoSiniestro      @relation(fields: [idEstadoSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   aseguradora          Aseguradora          @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -446,6 +457,7 @@ model Siniestro {
   eventosHistorial     HistorialSiniestro[]
   mensajes             MensajeChat[]
   documentos           DocumentoSiniestro[]
+  vehiculos            Vehiculo[]
   novedades            NovedadSiniestro[]
   peritos              Perito[]
   personasInvolucradas PersonaInvolucrada[]
@@ -456,6 +468,9 @@ model Siniestro {
   @@index([idAjustador])
   @@index([idDireccion])
   @@index([numeroSiniestro])
+  // Único por aseguradora sin distinguir mayúsculas: índice "Siniestro_idAseguradora_numeroSiniestro_key" sobre
+  // (idAseguradora, lower(numeroSiniestro)), creado a mano en la migración 20261028120000_numero_siniestro_unico
+  // (Prisma no declara índices sobre expresiones). Un alta repetida falla con P2002.
 }
 
 /// Una recuperación vigente por usuario. Sólo hashes de desafíos/tokens y del código vinculado al desafío.

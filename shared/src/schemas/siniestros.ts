@@ -71,6 +71,9 @@ export const filtrosSiniestrosSchema = z.strictObject({
   estado: z.preprocess(vacioComoAusente, idSchema.optional()),
   aseguradora: z.preprocess(vacioComoAusente, idSchema.optional()),
   gestor: z.preprocess(vacioComoAusente, idSchema.optional()),
+  activos: z
+    .preprocess(vacioComoAusente, z.enum(['true', 'false']).optional())
+    .transform((valor) => valor === 'true'),
   bajas: z
     .preprocess(vacioComoAusente, z.enum(['true', 'false']).optional())
     .transform((valor) => valor === 'true'),
@@ -86,6 +89,7 @@ export const PARAMETROS_LISTADO = [
   'estado',
   'aseguradora',
   'gestor',
+  'activos',
   'bajas',
   'orden',
 ] as const
@@ -112,6 +116,7 @@ export type ParteResumen = { id: number; nombre: string }
 
 /** Fila del listado (GET /api/siniestros). Las partes se resumen; sus datos de contacto van aparte. */
 export type SiniestroListado = {
+  eliminacionEnCurso: boolean
   id: number
   numeroSiniestro: string
   numeroPoliza: string
@@ -149,16 +154,6 @@ export type OpcionesSiniestros = {
   gestores: { id: number; nombre: string; eliminado: boolean }[]
 }
 
-/** Datos básicos de un siniestro (GET /api/siniestros/:id), para la ficha. CU-10 la va a ampliar. */
-export type SiniestroResumen = {
-  id: number
-  numeroSiniestro: string
-  numeroPoliza: string
-  aseguradora: { id: number; nombre: string }
-  estado: { id: number; nombre: string }
-  gestor: ParteResumen
-}
-
 /** Datos de contacto de las partes (GET /api/siniestros/:id/partes), para los modales del listado (CU-09 3.b y 3.c). */
 export type PartesSiniestro = {
   siniestro: { id: number; numeroSiniestro: string }
@@ -183,7 +178,7 @@ export type PartesSiniestro = {
   abogados: {
     id: number
     nombreCompleto: string
-    numeroMatricula: number | null
+    numeroMatricula: string | null
     telefono: string | null
     email: string | null
     representa: string[]
@@ -200,4 +195,24 @@ export type PartesSiniestro = {
     abogado: string | null
     lesion: { tipo: TipoLesion; descripcion: string | null } | null
   }[]
+}
+
+// El número se confirma en el servidor contra el registro vigente, nunca contra datos del navegador.
+export const confirmarBajaSiniestroSchema = z.strictObject({})
+
+export const confirmarSiniestroSchema = z.strictObject({
+  numeroSiniestro: z.string().trim().min(1, 'Escribí el número del siniestro').max(255),
+})
+export type ConfirmarSiniestro = z.output<typeof confirmarSiniestroSchema>
+
+// La regla usa la bandera del catálogo; cambiar el texto visible no cambia los permisos.
+export function esCierreEnviado(estado: { esCierre: boolean }): boolean {
+  return estado.esCierre
+}
+
+/** El borrado definitivo exige la baja previa y el estado de cierre. El servidor lo vuelve a verificar. */
+export function puedeEliminarSiniestro(
+  siniestro: Pick<SiniestroListado, 'eliminado' | 'estado'>,
+): boolean {
+  return siniestro.eliminado && esCierreEnviado(siniestro.estado)
 }
