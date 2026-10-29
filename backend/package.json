@@ -17,6 +17,8 @@
     "typecheck": "tsc",
     "lint": "eslint .",
     "test:recuperacion": "node --experimental-strip-types --test tests/recuperacion.test.mjs",
+    "test:dashboard": "node --experimental-strip-types --test tests/dashboard.test.mjs",
+    "test:dashboard:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/dashboard.db.test.mjs",
     "test:perfil": "node --experimental-strip-types --test tests/perfil.test.mjs",
     "test:perfil:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/perfil.db.test.mjs",
     "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs",

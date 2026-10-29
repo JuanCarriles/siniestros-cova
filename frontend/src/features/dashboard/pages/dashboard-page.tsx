@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { Link, useLoaderData } from 'react-router'
 import { ArrowRight, ChevronRight, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { usePanel } from '@/components/layout/panel-context'
@@ -6,9 +6,14 @@ import { navigationFor, sections } from '@/components/layout/panel-navigation'
 import { sectionIcons } from '@/components/layout/panel-icons'
 import { SectionHeading } from '@/components/layout/section-heading'
 
+import type { cargarDashboard } from '../loader'
+import { DashboardGestorPage } from './dashboard-gestor-page'
+
 // Inicio de administradores y superadministradores: accesos a cada sección del estudio.
 export function DashboardPage() {
   const { usuario, basePath } = usePanel()
+  const { dashboardGestor } = useLoaderData<typeof cargarDashboard>()
+  if (dashboardGestor) return <DashboardGestorPage dashboard={dashboardGestor} />
   return (
     <>
       <SectionHeading section="dashboard" />

@@ -30,6 +30,7 @@ import {
   requerirSeccion,
   salir,
 } from '@/features/auth/sesion'
+import { cargarDashboard } from '@/features/dashboard/loader'
 import { DashboardPage } from '@/features/dashboard/pages/dashboard-page'
 import { cargarUsuarios } from '@/features/usuarios/loader'
 import { UsuariosPage } from '@/features/usuarios/pages/usuarios-page'
@@ -70,8 +71,9 @@ const secciones: Record<PanelSection, ComponentType> = {
   perfil: PerfilPage,
 }
 
-// Loader propio de las secciones que traen datos. Tiene que llamar a requerirSeccion antes de pedirlos.
+// Loader propio de las secciones que traen datos. Valida sesión y rol antes de pedirlos.
 const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
+  dashboard: cargarDashboard,
   siniestros: cargarSiniestros,
   aseguradoras: cargarAseguradoras,
   ajustadores: cargarAjustadores,

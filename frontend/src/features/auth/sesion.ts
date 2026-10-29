@@ -20,7 +20,7 @@ export function sesionActual(): Promise<SesionUsuario | null> {
   return consultaEnCurso
 }
 
-/** Página a la que entra cada rol: gestor → siniestros; administradores → dashboard. */
+/** Página a la que entra cada rol: todos los roles → dashboard (contenido según su rol). */
 export function rutaInicio(tipo: TipoUsuario): string {
   return `/${initialSection(tipo) ?? 'perfil'}`
 }
