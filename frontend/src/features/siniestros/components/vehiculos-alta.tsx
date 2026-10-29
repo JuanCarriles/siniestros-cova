@@ -36,6 +36,7 @@ import type {
   VehiculoBorrador,
 } from '../borrador-alta'
 import { nombresPersonas } from '../personas-alta'
+import { Patente } from './patente'
 import { PersonaDialog } from './persona-dialog'
 import { BotonPersona, BotonQuitar, TarjetaPersona } from './tarjeta-persona'
 import { VehiculoDialog } from './vehiculo-dialog'
@@ -504,23 +505,5 @@ function Panel({
       </h3>
       <div className={cn('grid gap-3 p-4', grilla && 'lg:grid-cols-2')}>{children}</div>
     </section>
-  )
-}
-
-// El dominio como se ve en la chapa: se reconoce de un vistazo entre varios vehículos
-function Patente({ dominio }: { dominio: string }) {
-  return (
-    <span className="grid min-w-32 overflow-hidden rounded-md border-2 border-ink bg-surface text-center shadow-card">
-      <span
-        className="bg-navy px-2 text-[0.625rem] font-bold tracking-[0.2em] text-on-navy"
-        aria-hidden="true"
-      >
-        ARGENTINA
-      </span>
-      <span className="px-3 py-1 dato text-xl font-bold tracking-wider">
-        <span className="sr-only">Dominio </span>
-        {dominio}
-      </span>
-    </span>
   )
 }

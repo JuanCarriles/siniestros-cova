@@ -134,9 +134,6 @@ export function crearServicioBajasSiniestros(deps: {
       where: { idSiniestro: id },
       select: { idDireccion: true },
     })
-    const vehiculos = [
-      ...new Set(personas.flatMap((p) => (p.idVehiculo === null ? [] : [p.idVehiculo]))),
-    ]
     const direcciones = [
       ...new Set(
         [
@@ -154,10 +151,10 @@ export function crearServicioBajasSiniestros(deps: {
     await tx.documentoSiniestro.deleteMany({ where: { idSiniestro: id } })
     await tx.personaInvolucrada.deleteMany({ where: { idSiniestro: id } })
     await tx.perito.deleteMany({ where: { idSiniestro: id } })
-    if (vehiculos.length)
-      await tx.vehiculo.deleteMany({
-        where: { id: { in: vehiculos }, personasInvolucradas: { none: {} } },
-      })
+    // Los vehículos del siniestro, también los que no tienen personas (CU-09 11.a)
+    await tx.vehiculo.deleteMany({
+      where: { idSiniestro: id, personasInvolucradas: { none: {} } },
+    })
     await tx.siniestro.delete({ where: { id } })
     // Direcciones o vehículos compartidos y catálogos maestros se conservan.
     if (direcciones.length)

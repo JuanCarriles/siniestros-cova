@@ -11,6 +11,7 @@ import type { DashboardGestor } from '@cova/shared/schemas/dashboard'
 import { DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
 import { usePanel } from '@/components/layout/panel-context'
 import { SectionHeading } from '@/components/layout/section-heading'
+import { fechaDe, fechaHoraDe } from '@/features/siniestros/ficha/formato'
 import { Paginacion } from '@/components/paginacion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,12 +24,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-const fecha = (iso: string) =>
-  new Intl.DateTimeFormat('es-AR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(iso))
 const tipoPericia = { CESVI: 'CESVI', MEDICO: 'Médica' }
 
 export function DashboardGestorPage({ dashboard }: { dashboard: DashboardGestor }) {
@@ -39,6 +34,7 @@ export function DashboardGestorPage({ dashboard }: { dashboard: DashboardGestor 
   const indicadores = [
     {
       titulo: 'Casos activos',
+      href: `${basePath}/siniestros?activos=true`,
       cantidad: casos.activos,
       detalle: 'Asignados a vos y sin cierre.',
       Icon: FolderOpen,
@@ -53,6 +49,7 @@ export function DashboardGestorPage({ dashboard }: { dashboard: DashboardGestor 
     },
     {
       titulo: 'Demorados',
+      href: `${basePath}/siniestros?activos=true&orden=demora`,
       cantidad: casos.demorados,
       detalle: `${DIAS_DEMORADO * 24} horas o más sin movimientos.`,
       Icon: Clock3,
@@ -71,10 +68,7 @@ export function DashboardGestorPage({ dashboard }: { dashboard: DashboardGestor 
         <p className="text-muted-foreground" role="status">
           {actualizando
             ? 'Actualizando información…'
-            : `Actualizado el ${fecha(dashboard.actualizadoEn)} a las ${new Intl.DateTimeFormat(
-                'es-AR',
-                { hour: '2-digit', hourCycle: 'h23', minute: '2-digit' },
-              ).format(new Date(dashboard.actualizadoEn))}.`}
+            : `Actualizado ${fechaHoraDe(dashboard.actualizadoEn)}.`}
         </p>
         <div className="flex w-full flex-wrap gap-3 sm:w-auto">
           <Button
@@ -97,10 +91,23 @@ export function DashboardGestorPage({ dashboard }: { dashboard: DashboardGestor 
       </div>
 
       <section aria-label="Resumen de mis casos" className="grid gap-4 md:grid-cols-3">
-        {indicadores.map(({ titulo, cantidad, detalle, Icon, color }) => (
-          <article key={titulo} className="rounded-xl border bg-card p-6 shadow-card">
+        {indicadores.map(({ titulo, cantidad, detalle, Icon, color, href }) => (
+          <article key={titulo} className="relative rounded-xl border bg-card p-6 shadow-card">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="font-semibold text-primary">{titulo}</h2>
+              <h2 className="font-semibold text-primary">
+                {href ? (
+                  <Link
+                    to={href}
+                    className="underline underline-offset-4 after:absolute after:inset-0 after:rounded-xl"
+                    aria-label={`${titulo}: ${cantidad}. ${titulo === 'Demorados' ? 'Ver casos activos ordenados por demora' : 'Ver mis casos activos'}`}
+                  >
+                    {titulo}
+                    <ArrowRight className="ml-2 inline size-4" aria-hidden="true" />
+                  </Link>
+                ) : (
+                  titulo
+                )}
+              </h2>
               <span className={`grid size-12 shrink-0 place-items-center rounded-lg ${color}`}>
                 <Icon className="size-6" aria-hidden="true" />
               </span>
@@ -129,8 +136,12 @@ export function DashboardGestorPage({ dashboard }: { dashboard: DashboardGestor 
           <h2 id="pericias-title" className="text-xl font-semibold text-primary">
             Pericias pendientes
           </h2>
-          <Badge variant="info" aria-label={`${pendientes.total} pericias pendientes`}>
+          <Badge variant="info">
             {pendientes.total}
+            <span className="sr-only">
+              {' '}
+              {pendientes.total === 1 ? 'pericia pendiente' : 'pericias pendientes'}
+            </span>
           </Badge>
           <p className="w-full text-muted-foreground">
             Solicitudes abiertas de tus casos activos, de la más antigua a la más reciente.
@@ -176,7 +187,7 @@ export function DashboardGestorPage({ dashboard }: { dashboard: DashboardGestor 
                       </TableCell>
                       <TableCell>
                         <time dateTime={pericia.fechaSolicitud}>
-                          {fecha(pericia.fechaSolicitud)}
+                          {fechaDe(pericia.fechaSolicitud)}
                         </time>
                         <p className="mt-1 text-muted-foreground">
                           Hace {pericia.diasEspera} {pericia.diasEspera === 1 ? 'día' : 'días'}
@@ -215,8 +226,8 @@ export function DashboardGestorPage({ dashboard }: { dashboard: DashboardGestor 
                   <p className="break-words">{pericia.nombre}</p>
                   <p className="text-muted-foreground">
                     Solicitada el{' '}
-                    <time dateTime={pericia.fechaSolicitud}>{fecha(pericia.fechaSolicitud)}</time> ·
-                    Hace {pericia.diasEspera} {pericia.diasEspera === 1 ? 'día' : 'días'}
+                    <time dateTime={pericia.fechaSolicitud}>{fechaDe(pericia.fechaSolicitud)}</time>{' '}
+                    · Hace {pericia.diasEspera} {pericia.diasEspera === 1 ? 'día' : 'días'}
                   </p>
                   <Button variant="outline" asChild className="w-full">
                     <Link

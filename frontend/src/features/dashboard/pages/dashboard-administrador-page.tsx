@@ -11,9 +11,8 @@ import { tonoDeEstado } from '@/lib/estados-visuales'
 import { cn } from '@/lib/utils'
 import { DiasSinMovimiento } from '@/features/siniestros/components/celdas-siniestro'
 import { SectionHeading } from '@/components/layout/section-heading'
-import { fechaDe, fechaHoraDe } from '@/features/siniestros/ficha/formato'
+import { fechaHoraDe } from '@/features/siniestros/ficha/formato'
 
-const fecha = fechaDe
 const titulos = {
   demorados: 'Casos demorados',
   actividad: 'Actividad reciente',

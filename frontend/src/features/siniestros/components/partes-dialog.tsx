@@ -16,6 +16,8 @@ import {
 import { ApiError } from '@/lib/api'
 import { plural } from '@/lib/texto'
 import { partesSiniestro } from '../api/siniestros.api'
+import { email, telefono } from './contacto'
+import { Dato } from './dato'
 
 /** Qué parte del siniestro mostrar (CU-09 3.b y 3.c) */
 export type VistaPartes =
@@ -41,33 +43,6 @@ const LESIONES = {
   GRAVE: 'Graves',
   MUERTE: 'Muerte',
 } as const
-
-function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
-  return (
-    <div className="grid content-start gap-0.5">
-      <dt className="text-sm text-muted-foreground">{etiqueta}</dt>
-      <dd className="break-words">
-        {children ?? <span className="text-muted-foreground">Sin dato</span>}
-      </dd>
-    </div>
-  )
-}
-
-const email = (valor: string | null) =>
-  valor ? (
-    <a href={`mailto:${valor}`} className="text-primary underline underline-offset-4">
-      {valor}
-    </a>
-  ) : null
-const telefono = (valor: string | null) =>
-  valor ? (
-    <a
-      href={`tel:${valor.replace(/[^\d+]/g, '')}`}
-      className="dato text-primary underline underline-offset-4"
-    >
-      {valor}
-    </a>
-  ) : null
 
 function Icono({ children }: { children: ReactNode }) {
   return (
