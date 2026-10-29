@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   booleanoSchema,
+  claveArchivoSchema,
   emailSchema,
   enteroPequenoSchema,
   fechaSchema,
@@ -11,9 +12,12 @@ import {
 import {
   rolAccidenteSchema,
   tipoLesionSchema,
+  tipoPeritoSchema,
   usoVehiculoSchema,
   type RolAccidente,
   type TipoLesion,
+  type TipoPerito,
+  type TipoUsuario,
 } from './enums.ts'
 
 // ------------------------------------------------------------------ Alta de siniestro (CU-09 pasos 4-5, E4-04)
@@ -83,6 +87,8 @@ export type OpcionesAltaSiniestro = {
   paises: { id: number; nombre: string }[]
   provincias: { id: number; nombre: string; idPais: number }[]
   tiposDocumento: { id: number; nombre: string }[]
+  /** Paso 5: a quién se puede asignar el siniestro (gestores, administradores y superadministradores) */
+  usuarios: { id: number; nombre: string; tipoUsuario: TipoUsuario; casosActivos: number }[]
 }
 
 // ------------------------------------------------------------------ Paso 2: vehículos (CU-09 pasos 6-10, E4-05)
@@ -171,6 +177,15 @@ export function normalizarDocumento(documento: string): string {
   return documento.replace(/[^0-9a-z]/gi, '').toUpperCase()
 }
 
+// Vacío es "sin email"; cualquier otra cosa tiene que ser un email (si no, el mensaje genérico sería en inglés)
+const emailOpcional = z
+  .union([z.literal(''), emailSchema.pipe(z.string().max(120))], {
+    error: 'Ingresá un email válido',
+  })
+  .transform((email) => email || null)
+  .nullable()
+  .optional()
+
 // Todo es opcional: se carga lo que se sepa. Una persona sin nombre se muestra como "Desconocido 1, 2…".
 const datosPersona = {
   nombreCompletoRazonSocial: libre(150),
@@ -182,14 +197,7 @@ const datosPersona = {
     fechaSchema.refine((fecha) => fecha <= hoyArgentina(), 'La fecha no puede ser posterior a hoy'),
   ),
   telefono: libre(50),
-  // Vacío es "sin email"; cualquier otra cosa tiene que ser un email (si no, el mensaje genérico sería en inglés)
-  email: z
-    .union([z.literal(''), emailSchema.pipe(z.string().max(120))], {
-      error: 'Ingresá un email válido',
-    })
-    .transform((email) => email || null)
-    .nullable()
-    .optional(),
+  email: emailOpcional,
   domicilio: z.strictObject({
     idProvincia: opcional(idSchema),
     localidad: libre(100),
@@ -300,3 +308,156 @@ export const personaExternaAltaSchema = z
 
 export type PersonaExternaAltaInput = z.input<typeof personaExternaAltaSchema>
 export type PersonaExternaAltaData = z.output<typeof personaExternaAltaSchema>
+
+// ------------------------------------------------------------------ Paso 3: abogados (CU-09 pasos 23-27, E4-08)
+
+// Solo el nombre y a quién representa son obligatorios (25.b). Representa a una o varias personas del alta (25.a),
+// que todavía no tienen id: se guardan sus claves. Cada persona tiene a lo sumo un abogado.
+export const abogadoAltaSchema = z.strictObject({
+  nombreCompleto: obligatorio('Ingresá el nombre completo', 150),
+  numeroMatricula: libre(40),
+  telefono: libre(50),
+  email: emailOpcional,
+  representados: z
+    .array(z.string().min(1))
+    .min(1, 'Elegí al menos una persona a la que representa'),
+})
+
+export type AbogadoAltaInput = z.input<typeof abogadoAltaSchema>
+export type AbogadoAltaData = z.output<typeof abogadoAltaSchema>
+
+// ------------------------------------------------------------------ Paso 4: peritos (CU-09 pasos 28-31, E4-09)
+
+export const TIPOS_PERITO: Record<TipoPerito, string> = {
+  CESVI: 'CESVI',
+  MEDICO: 'Médico',
+}
+
+const fechaHastaHoy = fechaSchema.refine(
+  (fecha) => fecha <= hoyArgentina(),
+  'La fecha no puede ser posterior a hoy',
+)
+
+// Un perito CESVI y uno médico como máximo: el paso 4 tiene un lugar para cada uno. El nombre y la fecha de
+// solicitud son obligatorios (así está la base). Sin fecha de cierre la pericia queda pendiente (29.a): cerrado se
+// deduce de la fecha, no se carga aparte.
+export const peritoAltaSchema = z
+  .strictObject({
+    tipoPerito: tipoPeritoSchema,
+    nombre: obligatorio('Ingresá el nombre del perito', 150),
+    telefono: libre(50),
+    email: emailOpcional,
+    fechaSolicitud: z
+      .string({ error: 'Ingresá la fecha de solicitud' })
+      .min(1, 'Ingresá la fecha de solicitud')
+      .pipe(fechaHastaHoy),
+    fechaCierre: opcional(fechaHastaHoy),
+  })
+  .refine((p) => !p.fechaCierre || p.fechaCierre >= p.fechaSolicitud, {
+    message: 'El cierre no puede ser anterior a la solicitud',
+    path: ['fechaCierre'],
+  })
+  .transform((p) => ({ ...p, cerrado: !!p.fechaCierre }))
+
+export type PeritoAltaInput = z.input<typeof peritoAltaSchema>
+export type PeritoAltaData = z.output<typeof peritoAltaSchema>
+
+// ------------------------------------------------------------------ Paso 5: documentos, asignación y alta (CU-09 32-36, E4-10)
+
+/**
+ * Un documento ya subido a R2 durante el alta, antes de que exista el siniestro (carpeta altas/{idUsuario}). Al
+ * crear el siniestro se registra como documento suyo.
+ */
+export const documentoAltaSchema = z.strictObject({
+  clave: claveArchivoSchema,
+  nombreOriginal: z.string().trim().min(1).max(255),
+  tipoExtension: z.string().min(1).max(10),
+  mimeType: z.string().min(1).max(120),
+  tamanoBytes: z.number().int().positive(),
+})
+export type DocumentoAlta = z.infer<typeof documentoAltaSchema>
+
+// Las personas llevan la clave con que las identifica el alta: los abogados las referencian por esa clave
+const conClave = <T extends z.ZodType>(datos: T) =>
+  z.strictObject({ clave: z.string().min(1).max(64), datos })
+
+export const MENSAJE_ASIGNACION_OBLIGATORIA =
+  'La asignación es obligatoria: elegí a quién se le asigna el siniestro'
+
+// Todo lo cargado en los cinco pasos, tal como se manda al confirmar (paso 35). El servidor vuelve a validar cada
+// parte con su schema y, acá, lo que cruza pasos.
+export const crearSiniestroSchema = z
+  .strictObject({
+    datosCaso: datosCasoSchema,
+    vehiculos: z
+      .array(
+        z.strictObject({
+          datos: vehiculoAltaSchema,
+          titular: conClave(titularAltaSchema).nullable(),
+          ocupantes: z.array(conClave(ocupanteAltaSchema)).max(60),
+        }),
+      )
+      .max(30),
+    personasExternas: z.array(conClave(personaExternaAltaSchema)).max(60),
+    abogados: z.array(abogadoAltaSchema).max(30),
+    peritos: z.array(peritoAltaSchema).max(2),
+    documentos: z.array(documentoAltaSchema).max(60),
+    idUsuarioAsignado: elegido(MENSAJE_ASIGNACION_OBLIGATORIA),
+  })
+  .superRefine((alta, ctx) => {
+    const error = (message: string, path: (string | number)[]) =>
+      ctx.addIssue({ code: 'custom', message, path })
+
+    const dominios = new Set<string>()
+    alta.vehiculos.forEach((v, i) => {
+      const dominio = normalizarDominio(v.datos.dominio)
+      if (dominios.has(dominio))
+        error(`El vehículo ${v.datos.dominio} está cargado dos veces`, ['vehiculos', i])
+      dominios.add(dominio)
+    })
+
+    const personas = [
+      ...alta.vehiculos.flatMap((v) => [...(v.titular ? [v.titular] : []), ...v.ocupantes]),
+      ...alta.personasExternas,
+    ]
+    const claves = new Set<string>()
+    const documentos = new Set<string>()
+    for (const p of personas) {
+      if (claves.has(p.clave)) error('Hay una persona cargada dos veces', ['personasExternas'])
+      claves.add(p.clave)
+      const documento = p.datos.documento ? normalizarDocumento(p.datos.documento) : ''
+      if (documento && documentos.has(documento))
+        error(`El documento ${p.datos.documento} está cargado en dos personas`, [
+          'personasExternas',
+        ])
+      if (documento) documentos.add(documento)
+    }
+
+    // Cada persona tiene a lo sumo un abogado, y solo personas de esta alta
+    const representadas = new Set<string>()
+    alta.abogados.forEach((a, i) => {
+      for (const clave of a.representados) {
+        if (!claves.has(clave))
+          error(`${a.nombreCompleto} representa a una persona que ya no está en el alta`, [
+            'abogados',
+            i,
+          ])
+        if (representadas.has(clave)) error('Una persona tiene más de un abogado', ['abogados', i])
+        representadas.add(clave)
+      }
+    })
+
+    const tipos = alta.peritos.map((p) => p.tipoPerito)
+    if (new Set(tipos).size !== tipos.length)
+      error('Puede haber un perito CESVI y uno médico como máximo', ['peritos'])
+
+    const archivos = alta.documentos.map((d) => d.clave)
+    if (new Set(archivos).size !== archivos.length)
+      error('Hay un documento cargado dos veces', ['documentos'])
+  })
+
+export type CrearSiniestroInput = z.input<typeof crearSiniestroSchema>
+export type CrearSiniestroData = z.output<typeof crearSiniestroSchema>
+
+/** Respuesta al crear: si el aviso por mail no salió, el siniestro igual quedó creado (36.a) */
+export type SiniestroCreado = { id: number; numeroSiniestro: string; correoEnviado: boolean }

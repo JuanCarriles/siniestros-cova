@@ -53,7 +53,7 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
             tipoUsuario: 'ADMINISTRADOR',
           }
           const abogado = await tx.abogado.create({
-            data: { nombreCompleto: `Dra. Paula Sánchez ${marca}`, numeroMatricula: 54120 },
+            data: { nombreCompleto: `Dra. Paula Sánchez ${marca}`, numeroMatricula: '54120' },
           })
 
           const siniestro = (numero, idUsuario, extra = {}) =>
@@ -84,10 +84,17 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
               modelo: 'Corolla',
               anio: 2021,
               rolAccidente: 'ASEGURADO',
+              idSiniestro: s1.id,
             },
           })
           const tercero = await tx.vehiculo.create({
-            data: { dominio: 'AF447TR', marca: 'Fiat', modelo: 'Cronos', rolAccidente: 'TERCERO' },
+            data: {
+              dominio: 'AF447TR',
+              marca: 'Fiat',
+              modelo: 'Cronos',
+              rolAccidente: 'TERCERO',
+              idSiniestro: s1.id,
+            },
           })
           const persona = (data) =>
             tx.personaInvolucrada.create({ data: { idSiniestro: s1.id, ...data } })
@@ -236,7 +243,7 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
           // Ficha: el gestor abre los suyos; los ajenos y los dados de baja dan 403; el administrador, todos
           const ficha = await servicio.obtener(gestorA, s1.id)
           assert.deepEqual(
-            [ficha.numeroSiniestro, ficha.aseguradora.id, ficha.gestor.id],
+            [ficha.numeroSiniestro, ficha.aseguradora.id, ficha.asignado.id],
             [s1.numeroSiniestro, aseguradora.id, gestorA.id],
           )
           await assert.rejects(servicio.obtener(gestorB, s1.id), (e) => {

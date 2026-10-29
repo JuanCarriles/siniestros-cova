@@ -40,3 +40,12 @@ Dashboard. Comparar con su listado de siniestros activos; otro gestor debe tener
 Abrir una pericia debe llevar a un caso asignado. Verificar también un gestor sin casos, la paginación,
 el botón Actualizar y la vista a 390 px de ancho. En Docker hay que reconstruir frontend y backend
 para ver el código nuevo; no se modificó su configuración.
+
+
+## Integración con desarrollo y accesibilidad
+
+La rama incorpora la ficha E5-01 y conserva ambos exports compartidos (ficha y dashboard).
+«Casos activos» abre el listado de activos y «Demorados» lo ordena por demora; este último enlace
+prioriza los demorados, no oculta los demás activos. «Al día» mantiene su contador sin un filtro inexistente.
+El badge de pericias incluye texto oculto accesible junto al número. Las fechas reutilizan `fechaDe`
+y `fechaHoraDe` de la ficha, con año de cuatro cifras y hora en formato de 24 horas.

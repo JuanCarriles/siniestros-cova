@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -41,7 +42,10 @@ const tiposMime = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 } as const
 
-const carpetaSchema = z.string().regex(/^(plantillas|pruebas|siniestros\/[1-9]\d*)$/)
+// altas/{idUsuario}: documentos subidos durante el alta, antes de que exista el siniestro (CU-09 34)
+const carpetaSchema = z
+  .string()
+  .regex(/^(plantillas|pruebas|siniestros\/[1-9]\d*|altas\/[1-9]\d*)$/)
 
 function errorR2(mensaje: string, error: unknown): HttpError {
   const fallo = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } } | null
@@ -190,6 +194,27 @@ export function crearAlmacenamientoR2(
       } catch (error) {
         throw errorR2('No se pudo generar la descarga de R2', error)
       }
+    },
+
+    // Copia un objeto a otra carpeta con el mismo nombre (UUID.ext); el original queda. Sirve para mover: copiar,
+    // registrar la clave nueva y recién entonces borrar el original. Devuelve la clave nueva.
+    async copiar(clave: string, carpeta: string) {
+      const origen = claveArchivoSchema.parse(clave)
+      const destino = claveArchivoSchema.parse(
+        `${carpetaSchema.parse(carpeta)}/${origen.split('/').pop()}`,
+      )
+      try {
+        await s3.send(
+          new CopyObjectCommand({
+            Bucket: config.R2_BUCKET,
+            Key: destino,
+            CopySource: `${config.R2_BUCKET}/${origen.split('/').map(encodeURIComponent).join('/')}`,
+          }),
+        )
+      } catch (error) {
+        throw errorR2('No se pudo copiar el objeto en R2', error)
+      }
+      return destino
     },
 
     // Borrado físico de plantillas autorizadas, compensación de altas y pruebas; no usar para bajas lógicas.

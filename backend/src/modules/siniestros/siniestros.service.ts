@@ -6,10 +6,12 @@ import {
   type PaginaSiniestros,
   type PartesSiniestro,
   type SiniestroListado,
-  type SiniestroResumen,
 } from '@cova/shared/schemas/siniestros'
+import type { FichaSiniestro } from '@cova/shared/schemas/ficha-siniestro'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
+import { aDireccion, dia, hora, nombreDe, selectDireccion } from './ficha.ts'
+import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 
 type BaseSiniestros = Pick<
   Prisma.TransactionClient,
@@ -18,7 +20,6 @@ type BaseSiniestros = Pick<
 
 const DIA_MS = 24 * 60 * 60 * 1000
 
-const nombreDe = (p: { nombres: string; apellidos: string }) => `${p.nombres} ${p.apellidos}`
 const nombrePersona = (p: { nombreCompletoRazonSocial: string | null }) =>
   p.nombreCompletoRazonSocial?.trim() || 'Sin nombre'
 
@@ -113,10 +114,13 @@ async function idsQueCoinciden(prisma: BaseSiniestros, texto: string): Promise<n
        OR unaccent(s."numeroPoliza") ILIKE unaccent(${patron}::text)
        OR EXISTS (
          SELECT 1 FROM "PersonaInvolucrada" p
-         LEFT JOIN "Vehiculo" v ON v."id" = p."idVehiculo"
          WHERE p."idSiniestro" = s."id" AND p."eliminado" = false
-           AND (unaccent(p."nombreCompletoRazonSocial") ILIKE unaccent(${patron}::text)
-                OR regexp_replace(v."dominio", '[[:space:]-]', '', 'g') ILIKE ${patronPatente}::text)
+           AND unaccent(p."nombreCompletoRazonSocial") ILIKE unaccent(${patron}::text)
+       )
+       OR EXISTS (
+         SELECT 1 FROM "Vehiculo" v
+         WHERE v."idSiniestro" = s."id" AND v."eliminado" = false
+           AND regexp_replace(v."dominio", '[[:space:]-]', '', 'g') ILIKE ${patronPatente}::text
        )`
   return filas.map((f) => f.id)
 }
@@ -129,25 +133,8 @@ export function crearServicioSiniestros(
 ) {
   const esGestor = (usuario: SesionUsuario) => usuario.tipoUsuario === 'GESTOR'
 
-  // E4-03: un gestor solo abre los siniestros asignados a él (RF-17), y nunca uno dado de baja. Si existe pero no
-  // le corresponde, error de permisos (403); el administrador y el superadministrador abren cualquiera.
-  async function exigirAcceso(usuario: SesionUsuario, id: number) {
-    const fila = await prisma.siniestro.findUnique({
-      where: { id },
-      select: { idUsuario: true, eliminado: true, eliminacionEnCurso: true },
-    })
-    if (!fila) throw new HttpError(404, 'El siniestro no existe.')
-    if (fila.eliminacionEnCurso)
-      throw new HttpError(
-        403,
-        'Este siniestro tiene una eliminación definitiva pendiente. Un administrador puede reintentarla desde el listado.',
-      )
-    if (!esGestor(usuario)) return
-    if (fila.idUsuario !== usuario.id) {
-      throw new HttpError(403, 'Este siniestro no está asignado a vos.')
-    }
-    if (fila.eliminado) throw new HttpError(403, 'Este siniestro está dado de baja.')
-  }
+  const exigirAcceso = (usuario: SesionUsuario, id: number) =>
+    exigirAccesoSiniestro(prisma, usuario, id)
 
   return {
     async listar(usuario: SesionUsuario, filtros: FiltrosSiniestros): Promise<PaginaSiniestros> {
@@ -246,26 +233,78 @@ export function crearServicioSiniestros(
       }
     },
 
-    async obtener(usuario: SesionUsuario, id: number): Promise<SiniestroResumen> {
+    // CU-10 paso 1 (E5-01): cabecera de la ficha, datos del caso y cuántos hay en cada pestaña
+    async obtener(usuario: SesionUsuario, id: number): Promise<FichaSiniestro> {
       await exigirAcceso(usuario, id)
+      const activo = { where: { eliminado: false } }
       const fila = await prisma.siniestro.findUniqueOrThrow({
         where: { id },
         select: {
           id: true,
           numeroSiniestro: true,
           numeroPoliza: true,
+          inicioVigencia: true,
+          sucursal: true,
+          fechaAsignacion: true,
+          fechaUltimoMovimiento: true,
+          fechaBaja: true,
+          fechaOcurrencia: true,
+          horaOcurrencia: true,
+          menorEdadInvolucrado: true,
+          causa: true,
           aseguradora: { select: { id: true, nombre: true } },
-          estadoSiniestro: { select: { id: true, nombre: true } },
+          ajustador: { select: { id: true, nombres: true, apellidos: true } },
           usuario: { select: { id: true, nombres: true, apellidos: true } },
+          estadoSiniestro: {
+            select: { id: true, nombre: true, descripcion: true, esCierre: true },
+          },
+          direccion: { select: selectDireccion },
+          // Los abogados se cuentan por las personas que representan
+          personasInvolucradas: {
+            where: { eliminado: false },
+            select: { idVehiculo: true, abogado: { select: { id: true, eliminado: true } } },
+          },
+          _count: {
+            select: {
+              vehiculos: activo,
+              peritos: activo,
+              novedades: activo,
+              documentos: activo,
+            },
+          },
         },
       })
+      const personas = fila.personasInvolucradas
       return {
         id: fila.id,
         numeroSiniestro: fila.numeroSiniestro,
         numeroPoliza: fila.numeroPoliza,
+        inicioVigencia: fila.inicioVigencia,
+        sucursal: fila.sucursal,
         aseguradora: fila.aseguradora,
+        ajustador: fila.ajustador && { id: fila.ajustador.id, nombre: nombreDe(fila.ajustador) },
+        asignado: { id: fila.usuario.id, nombre: nombreDe(fila.usuario) },
+        fechaAsignacion: fila.fechaAsignacion.toISOString(),
         estado: fila.estadoSiniestro,
-        gestor: { id: fila.usuario.id, nombre: nombreDe(fila.usuario) },
+        fechaBaja: fila.fechaBaja?.toISOString() ?? null,
+        diasSinMovimiento: diasDesde(fila.fechaUltimoMovimiento ?? fila.fechaAsignacion, reloj()),
+        hecho: {
+          fechaOcurrencia: dia(fila.fechaOcurrencia),
+          horaOcurrencia: hora(fila.horaOcurrencia),
+          menorEdadInvolucrado: fila.menorEdadInvolucrado,
+          causa: fila.causa,
+        },
+        lugar: aDireccion(fila.direccion),
+        cantidades: {
+          vehiculosYPartes:
+            fila._count.vehiculos + personas.filter((p) => p.idVehiculo === null).length,
+          abogados: new Set(
+            personas.flatMap((p) => (p.abogado && !p.abogado.eliminado ? [p.abogado.id] : [])),
+          ).size,
+          peritos: fila._count.peritos,
+          novedades: fila._count.novedades,
+          documentos: fila._count.documentos,
+        },
       }
     },
 

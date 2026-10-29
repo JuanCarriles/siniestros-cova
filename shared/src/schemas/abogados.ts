@@ -1,18 +1,11 @@
 import { z } from 'zod'
-import {
-  emailSchema,
-  enteroSchema,
-  esquemaEdicion,
-  opcional,
-  telefonoSchema,
-  textoSchema,
-} from './comunes.ts'
+import { emailSchema, esquemaEdicion, opcional, telefonoSchema, textoSchema } from './comunes.ts'
 
 // Datos de alta de Abogado; id y baja lógica se gestionan por separado.
 export const abogadoSchema = z.strictObject({
   nombreCompleto: textoSchema,
   telefono: opcional(telefonoSchema),
-  numeroMatricula: opcional(enteroSchema),
+  numeroMatricula: opcional(textoSchema),
   email: opcional(emailSchema),
 })
 
