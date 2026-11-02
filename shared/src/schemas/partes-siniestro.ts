@@ -3,6 +3,7 @@ import { idSchema } from './comunes.ts'
 import {
   abogadoAltaSchema,
   ocupanteAltaSchema,
+  peritoAltaSchema,
   personaExternaAltaSchema,
   titularAltaSchema,
   vehiculoAltaSchema,
@@ -66,3 +67,17 @@ export const abogadoFichaSchema = abogadoAltaSchema.extend({
 })
 export type AbogadoFichaData = z.output<typeof abogadoFichaSchema>
 export type AbogadoFichaInput = z.input<typeof abogadoFichaSchema>
+
+/** PUT /api/siniestros/:id/abogados/:idAbogado, con la revisión con que se abrió el formulario */
+export const modificarAbogadoSchema = z.strictObject({
+  revision: revisionSchema,
+  datos: abogadoFichaSchema,
+})
+export type ModificarAbogado = z.output<typeof modificarAbogadoSchema>
+
+/** PUT /api/siniestros/:id/peritos/:idPerito, con la revisión con que se abrió el formulario */
+export const modificarPeritoSchema = z.strictObject({
+  revision: revisionSchema,
+  datos: peritoAltaSchema,
+})
+export type ModificarPerito = z.output<typeof modificarPeritoSchema>

@@ -10,6 +10,8 @@ import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
 import {
   abogadoFichaSchema,
   agregarPersonaSchema,
+  modificarAbogadoSchema,
+  modificarPeritoSchema,
   modificarPersonaSchema,
   modificarVehiculoSchema,
 } from '@cova/shared/schemas/partes-siniestro'
@@ -62,10 +64,10 @@ export const PESTANAS_FICHA = [
 // PATCH /api/siniestros/:id/personas/:idPersona/baja       baja lógica
 // Abogados y peritos desde la ficha (CU-10 1.d y 1.e, E5-07), con el mismo control de acceso:
 // POST  /api/siniestros/:id/abogados                       agrega un abogado y le asigna a quién representa
-// PUT   /api/siniestros/:id/abogados/:idAbogado            lo modifica
+// PUT   /api/siniestros/:id/abogados/:idAbogado            lo modifica ({ revision, datos }: 409 si cambió)
 // PATCH /api/siniestros/:id/abogados/:idAbogado/baja       sus personas de este siniestro quedan sin abogado
 // POST  /api/siniestros/:id/peritos                        carga un perito (uno de cada tipo como máximo)
-// PUT   /api/siniestros/:id/peritos/:idPerito              lo modifica (registrar el cierre es movimiento)
+// PUT   /api/siniestros/:id/peritos/:idPerito              lo modifica ({ revision, datos }); el cierre es movimiento
 // PATCH /api/siniestros/:id/peritos/:idPerito/baja         baja lógica
 // Alta (solo administrador y superadministrador):
 // GET  /api/siniestros/alta/opciones
@@ -239,7 +241,7 @@ export function crearSiniestrosRouter(deps: {
       usuarioDeSesion(req),
       idSchema.parse(req.params.id),
       idSchema.parse(req.params.idAbogado),
-      abogadoFichaSchema.parse(req.body),
+      modificarAbogadoSchema.parse(req.body),
     )
     res.status(204).end()
   })
@@ -267,7 +269,7 @@ export function crearSiniestrosRouter(deps: {
       usuarioDeSesion(req),
       idSchema.parse(req.params.id),
       idSchema.parse(req.params.idPerito),
-      peritoAltaSchema.parse(req.body),
+      modificarPeritoSchema.parse(req.body),
     )
     res.status(204).end()
   })

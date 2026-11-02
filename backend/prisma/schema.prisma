@@ -294,11 +294,15 @@ model Perito {
   idDireccion    Int?       @unique
   eliminado      Boolean    @default(false)
   fechaBaja      DateTime?  @db.Timestamptz(3)
+  /// Cuántas veces se modificó desde la ficha: un formulario abierto antes del último cambio no lo pisa (E5-07)
+  revision       Int        @default(0)
 
   siniestro Siniestro  @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   direccion Direccion? @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([idSiniestro])
+  // Un perito activo de cada tipo por siniestro: índice parcial "Perito_tipo_activo_key", creado a mano en la
+  // migración 20261104130000_abogados_peritos_concurrencia (Prisma no declara índices parciales). Falla con P2002.
 }
 
 model Aseguradora {
@@ -336,6 +340,8 @@ model Abogado {
   email           String?
   eliminado       Boolean   @default(false)
   fechaBaja       DateTime? @db.Timestamptz(3)
+  /// Cuántas veces se modificó desde la ficha, incluido a quién representa (E5-07)
+  revision        Int       @default(0)
 
   personasInvolucradas PersonaInvolucrada[]
 }

@@ -1,9 +1,19 @@
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
-import type { AbogadoFichaData, ParteCreada } from '@cova/shared/schemas/partes-siniestro'
+import type {
+  AbogadoFichaData,
+  ModificarAbogado,
+  ParteCreada,
+} from '@cova/shared/schemas/partes-siniestro'
 import { HttpError } from '../../../utils/httpError.ts'
 import { eventoHistorial } from '../../historial/historial.textos.ts'
 import { datosAbogado } from '../partes-datos.ts'
-import { camposCambiados, prepararEdicion, type Transaccion, type Tx } from '../partes-edicion.ts'
+import {
+  camposCambiados,
+  exigirRevision,
+  prepararEdicion,
+  type Transaccion,
+  type Tx,
+} from '../partes-edicion.ts'
 
 /** Cómo se nombra cada dato en el historial cuando cambia */
 const ETIQUETAS: Record<keyof ReturnType<typeof datosAbogado>, string> = {
@@ -59,6 +69,29 @@ const representaEnOtros = async (tx: Tx, idSiniestro: number, idAbogado: number)
     where: { idAbogado, eliminado: false, idSiniestro: { not: idSiniestro } },
   })) > 0
 
+/**
+ * Las personas elegidas pasan al abogado `destino`. Los abogados que las representaban cambian a quién representan:
+ * su revisión sube, para que un formulario suyo abierto antes no las devuelva sin aviso.
+ */
+async function pasarRepresentados(tx: Tx, ids: number[], destino: number) {
+  const anteriores = await tx.personaInvolucrada.findMany({
+    where: { id: { in: ids }, idAbogado: { not: null } },
+    select: { idAbogado: true },
+  })
+  const otros = [...new Set(anteriores.map((p) => p.idAbogado))].filter(
+    (id): id is number => id !== null && id !== destino,
+  )
+  if (otros.length)
+    await tx.abogado.updateMany({
+      where: { id: { in: otros } },
+      data: { revision: { increment: 1 } },
+    })
+  await tx.personaInvolucrada.updateMany({
+    where: { id: { in: ids } },
+    data: { idAbogado: destino },
+  })
+}
+
 // CU-10 1.d (E5-07): abogados desde la ficha, con las reglas del alta. Cada persona tiene a lo sumo un abogado: las
 // que se eligen dejan al que tenían. Un mismo abogado puede figurar en varios siniestros: lo que se cambia desde la
 // ficha de uno no toca a los demás. Cada cambio queda en el historial; no cuenta como movimiento del caso.
@@ -73,10 +106,11 @@ export function crearServicioAbogadosGestion({ transaccion }: { transaccion: Tra
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
         const personas = await exigirRepresentados(tx, idSiniestro, datos.representados)
         const { id } = await tx.abogado.create({ data: datosAbogado(datos), select: { id: true } })
-        await tx.personaInvolucrada.updateMany({
-          where: { id: { in: personas.map((p) => p.id) } },
-          data: { idAbogado: id },
-        })
+        await pasarRepresentados(
+          tx,
+          personas.map((p) => p.id),
+          id,
+        )
         await tx.historialSiniestro.create({
           data: {
             idSiniestro,
@@ -97,7 +131,7 @@ export function crearServicioAbogadosGestion({ transaccion }: { transaccion: Tra
       usuario: SesionUsuario,
       idSiniestro: number,
       idAbogado: number,
-      datos: AbogadoFichaData,
+      { revision, datos }: ModificarAbogado,
     ) {
       await transaccion(async (tx) => {
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
@@ -115,24 +149,25 @@ export function crearServicioAbogadosGestion({ transaccion }: { transaccion: Tra
         const campos = camposCambiados(actual, nuevos, ETIQUETAS)
         const cambiaContacto = campos.length > 0
         if (cambiaRepresentados) campos.push('a quién representa')
+        // Sin diferencias con lo guardado no pisa nada, aunque el formulario sea viejo
         if (campos.length === 0) return
+        exigirRevision(actual.revision, revision, `los datos del abogado ${actual.nombreCompleto}`)
 
         // Si también figura en otro siniestro, los datos nuevos son solo de este: una copia para sus personas
         let destino = idAbogado
-        if (cambiaContacto) {
-          if (await representaEnOtros(tx, idSiniestro, idAbogado))
-            destino = (await tx.abogado.create({ data: nuevos, select: { id: true } })).id
-          else await tx.abogado.update({ where: { id: idAbogado }, data: nuevos })
-        }
+        if (cambiaContacto && (await representaEnOtros(tx, idSiniestro, idAbogado)))
+          destino = (await tx.abogado.create({ data: nuevos, select: { id: true } })).id
+        else
+          await tx.abogado.update({
+            where: { id: idAbogado },
+            data: { ...(cambiaContacto ? nuevos : {}), revision: { increment: 1 } },
+          })
         const ids = elegidas.map((p) => p.id)
         await tx.personaInvolucrada.updateMany({
           where: { idAbogado, idSiniestro, eliminado: false, id: { notIn: ids } },
           data: { idAbogado: null },
         })
-        await tx.personaInvolucrada.updateMany({
-          where: { id: { in: ids } },
-          data: { idAbogado: destino },
-        })
+        await pasarRepresentados(tx, ids, destino)
         await tx.historialSiniestro.create({
           data: {
             idSiniestro,

@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { useRevalidator } from 'react-router'
 import { Car, Plus, UserPlus, UsersRound } from 'lucide-react'
 import type { VehiculoFicha } from '@cova/shared/schemas/ficha-siniestro'
-import type { RegistroDesactualizado } from '@cova/shared/schemas/partes-siniestro'
 import type {
   OcupanteAltaData,
   PersonaExternaAltaData,
@@ -11,7 +10,6 @@ import type {
 } from '@cova/shared/schemas/siniestros-alta'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
-import { ApiError } from '@/lib/api'
 import { PersonaDialog, type ModoPersona } from '../../components/persona-dialog'
 import { VehiculoDialog } from '../../components/vehiculo-dialog'
 import { partes } from '../api/ficha.api'
@@ -25,6 +23,7 @@ import {
 import { DetalleVehiculoDialog, TarjetaVehiculo } from '../components/vehiculo-ficha'
 import { nombreDe, tituloVehiculo } from '../formato'
 import { useFicha, usePestana } from '../hooks/use-ficha'
+import { useRevision } from '../hooks/use-revision'
 import {
   aseguradorasPara,
   externaAFormulario,
@@ -70,7 +69,7 @@ export function PestanaVehiculos() {
   const volverA = useRef<HTMLElement | null>(null)
   const agregarVehiculo = useRef<HTMLButtonElement>(null)
   /** La revisión del vehículo o la persona que se está modificando, tal como se abrió el formulario */
-  const revision = useRef(0)
+  const revision = useRevision()
 
   // El asegurado viene primero; los terceros se numeran en orden de carga
   let terceros = 0
@@ -91,27 +90,11 @@ export function PestanaVehiculos() {
     setMensaje(texto)
   }
 
-  /**
-   * Guarda con la revisión abierta. Si otro usuario modificó el registro, el modal muestra el aviso y la ficha se
-   * actualiza detrás; la revisión pasa a la actual: guardar de nuevo, ya avisado, reemplaza esos cambios.
-   */
-  async function conRevision(guardar: (revision: number) => Promise<void>) {
-    try {
-      await guardar(revision.current)
-    } catch (err) {
-      const detalle =
-        err instanceof ApiError ? (err.detalles as RegistroDesactualizado | undefined) : undefined
-      if (detalle?.codigo === 'REGISTRO_DESACTUALIZADO') {
-        revision.current = detalle.revision
-        void revalidator.revalidate()
-      }
-      throw err
-    }
-  }
-
   async function guardarVehiculo(nuevos: VehiculoAltaData) {
     if (editandoVehiculo) {
-      await conRevision((r) => partes.modificarVehiculo(ficha.id, editandoVehiculo.id, r, nuevos))
+      await revision.guardar((r) =>
+        partes.modificarVehiculo(ficha.id, editandoVehiculo.id, r, nuevos),
+      )
       await actualizar(`Se guardaron los cambios del vehículo ${nuevos.dominio}.`)
     } else {
       await partes.agregarVehiculo(ficha.id, nuevos)
@@ -124,7 +107,7 @@ export function PestanaVehiculos() {
     const { modo, vehiculo: suyo, persona: actual } = editandoPersona
     const nombre = nuevos.nombreCompletoRazonSocial || 'la persona'
     if (actual) {
-      await conRevision((r) => partes.modificarPersona(ficha.id, actual.persona.id, r, nuevos))
+      await revision.guardar((r) => partes.modificarPersona(ficha.id, actual.persona.id, r, nuevos))
       return actualizar(`Se guardaron los cambios de ${nombre}.`)
     }
     if (modo === 'externa')
@@ -164,7 +147,7 @@ export function PestanaVehiculos() {
   const accionesPersona = (p: PersonaEnFicha, suyo: VehiculoFicha | null) => ({
     onModificar: (boton: HTMLElement) => {
       desde(boton)
-      revision.current = p.persona.revision
+      revision.abrir(p.persona.revision)
       setEditandoPersona({
         modo: p.tipo === 'fuera' ? 'externa' : p.tipo,
         vehiculo: suyo,
@@ -231,7 +214,7 @@ export function PestanaVehiculos() {
                   ? {
                       onModificar: (boton) => {
                         desde(boton)
-                        revision.current = v.revision
+                        revision.abrir(v.revision)
                         setEditandoVehiculo(v)
                       },
                       onDarDeBaja: (boton) => {

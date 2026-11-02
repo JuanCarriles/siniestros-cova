@@ -104,32 +104,53 @@ test('PostgreSQL: agregar, modificar y dar de baja abogados y peritos desde la f
           assert.deepEqual([await abogadoDe(martin), await abogadoDe(sinNombre)], [sofia, sofia])
 
           // Modificar a quién representa: Norma deja a Valeria y pasa a Sofía; la persona sin nombre queda sin abogado
-          await abogados.modificar(yo, caso.id, sofia, abogado({ representados: [martin, norma] }))
+          await abogados.modificar(yo, caso.id, sofia, {
+            revision: 0,
+            datos: abogado({ representados: [martin, norma] }),
+          })
           assert.deepEqual(
             [await abogadoDe(martin), await abogadoDe(norma), await abogadoDe(sinNombre)],
             [sofia, sofia, null],
           )
-          // Sin cambios no registra nada
-          await abogados.modificar(yo, caso.id, sofia, abogado({ representados: [norma, martin] }))
+          // Sin cambios no registra nada, aunque el formulario sea viejo
+          await abogados.modificar(yo, caso.id, sofia, {
+            revision: 0,
+            datos: abogado({ representados: [norma, martin] }),
+          })
+          // Con cambios, un formulario abierto antes del último guardado se rechaza y no cambia nada
+          await assert.rejects(
+            abogados.modificar(yo, caso.id, sofia, {
+              revision: 0,
+              datos: abogado({ telefono: '341 000-0000', representados: [norma, martin] }),
+            }),
+            (e) =>
+              e.status === 409 &&
+              e.details?.codigo === 'REGISTRO_DESACTUALIZADO' &&
+              e.details.revision === 1,
+          )
+          assert.equal((await abogadoGuardado(sofia)).telefono, null)
+          // Valeria perdió a Norma: su revisión subió, un formulario suyo abierto antes no la devuelve sin aviso
+          assert.equal((await abogadoGuardado(valeria.id)).revision, 1)
 
           // Valeria ya no representa a nadie en este caso: no se puede tocar desde acá
           await assert.rejects(
-            abogados.modificar(yo, caso.id, valeria.id, abogado({ representados: [norma] })),
+            abogados.modificar(yo, caso.id, valeria.id, {
+              revision: 1,
+              datos: abogado({ representados: [norma] }),
+            }),
             (e) => e.status === 404,
           )
 
           // Luis también figura en otro caso: cambiar su teléfono desde este crea una copia solo para este
-          await abogados.modificar(
-            yo,
-            caso.id,
-            luis.id,
-            abogado({
+          await abogados.modificar(yo, caso.id, luis.id, {
+            revision: 0,
+            datos: abogado({
               nombreCompleto: 'Luis Maidana',
               numeroMatricula: '',
               telefono: '11 5000-2000',
               representados: [elsa],
             }),
-          )
+          })
           const copia = await abogadoDe(elsa)
           assert.notEqual(copia, luis.id)
           assert.equal((await abogadoGuardado(copia)).telefono, '11 5000-2000')
@@ -175,42 +196,55 @@ test('PostgreSQL: agregar, modificar y dar de baja abogados y peritos desde la f
             (e) => e.status === 409 && /ya tiene un perito cesvi/.test(e.message),
           )
           // Cargar uno pendiente o cambiar sus datos no es movimiento
-          await peritos.modificar(yo, caso.id, cesvi, perito({ telefono: '341 555-0000' }))
+          await peritos.modificar(yo, caso.id, cesvi, {
+            revision: 0,
+            datos: perito({ telefono: '341 555-0000' }),
+          })
           assert.equal((await movimiento()).toISOString(), ultimoMovimiento.toISOString())
           // Lo mismo que está guardado no registra nada
-          await peritos.modificar(yo, caso.id, cesvi, perito({ telefono: '341 555-0000' }))
+          await peritos.modificar(yo, caso.id, cesvi, {
+            revision: 0,
+            datos: perito({ telefono: '341 555-0000' }),
+          })
+          // Un formulario abierto antes del último guardado, con cambios, se rechaza
           await assert.rejects(
-            peritos.modificar(yo, caso.id, cesvi, perito({ tipoPerito: 'MEDICO' })),
+            peritos.modificar(yo, caso.id, cesvi, {
+              revision: 0,
+              datos: perito({ nombre: 'Otro nombre' }),
+            }),
+            (e) => e.status === 409 && e.details?.codigo === 'REGISTRO_DESACTUALIZADO',
+          )
+          await assert.rejects(
+            peritos.modificar(yo, caso.id, cesvi, {
+              revision: 1,
+              datos: perito({ tipoPerito: 'MEDICO' }),
+            }),
             (e) => e.status === 400,
           )
 
           // Registrar el cierre sí es movimiento
-          await peritos.modificar(
-            yo,
-            caso.id,
-            cesvi,
-            perito({
+          await peritos.modificar(yo, caso.id, cesvi, {
+            revision: 1,
+            datos: perito({
               telefono: '341 555-0000',
               email: 'jorge@example.com',
               fechaCierre: '2026-10-20',
             }),
-          )
+          })
           const guardado = await tx.perito.findUniqueOrThrow({ where: { id: cesvi } })
           assert.equal(guardado.cerrado, true)
           assert.ok((await movimiento()) > ultimoMovimiento)
 
           // Corregir la fecha de un cierre ya registrado, no
           await reiniciarMovimiento()
-          await peritos.modificar(
-            yo,
-            caso.id,
-            cesvi,
-            perito({
+          await peritos.modificar(yo, caso.id, cesvi, {
+            revision: 2,
+            datos: perito({
               telefono: '341 555-0000',
               email: 'jorge@example.com',
               fechaCierre: '2026-10-21',
             }),
-          )
+          })
           assert.equal((await movimiento()).toISOString(), ultimoMovimiento.toISOString())
 
           // Cargarlo ya cerrado, sí

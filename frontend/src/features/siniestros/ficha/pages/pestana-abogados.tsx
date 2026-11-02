@@ -15,6 +15,7 @@ import { BajaParteDialog, type PedidoBaja } from '../components/baja-parte-dialo
 import { PestanaFicha, PestanaVacia } from '../components/pestana-ficha'
 import { nombreDe } from '../formato'
 import { useFicha, usePestana } from '../hooks/use-ficha'
+import { useRevision } from '../hooks/use-revision'
 import {
   abogadoAFormulario,
   idDePersona,
@@ -39,6 +40,8 @@ export function PestanaAbogados() {
   const [mensaje, setMensaje] = useState<string | null>(null)
   const volverA = useRef<HTMLElement | null>(null)
   const agregar = useRef<HTMLButtonElement>(null)
+  /** La revisión del abogado que se está modificando, tal como se abrió el formulario */
+  const revision = useRevision()
 
   const grupos = gruposRepresentables(
     representablesDeFicha(personas),
@@ -59,7 +62,9 @@ export function PestanaAbogados() {
   async function guardar(datos: AbogadoAltaData) {
     const pedido = { ...datos, representados: datos.representados.map(idDePersona) }
     if (editando) {
-      await profesionales.modificarAbogado(ficha.id, editando.id, pedido)
+      await revision.guardar((r) =>
+        profesionales.modificarAbogado(ficha.id, editando.id, r, pedido),
+      )
       await actualizar(`Se guardaron los cambios del abogado ${datos.nombreCompleto}.`)
     } else {
       await profesionales.agregarAbogado(ficha.id, pedido)
@@ -142,6 +147,7 @@ export function PestanaAbogados() {
                         variant="outline"
                         onClick={(e) => {
                           desde(e.currentTarget)
+                          revision.abrir(a.revision)
                           setEditando(a)
                         }}
                         aria-label={`Modificar al abogado ${a.nombreCompleto}`}

@@ -24,6 +24,7 @@ import { BajaParteDialog, type PedidoBaja } from '../components/baja-parte-dialo
 import { PestanaFicha } from '../components/pestana-ficha'
 import { fechaDe } from '../formato'
 import { useFicha, usePestana } from '../hooks/use-ficha'
+import { useRevision } from '../hooks/use-revision'
 import { peritoAFormulario } from '../partes-formulario'
 
 const TIPOS: Record<
@@ -67,6 +68,8 @@ export function PestanaPeritos() {
   /** Después de dar de baja, el foco va al botón para cargar otro de ese tipo, que aparece en su lugar */
   const cargar = useRef<Partial<Record<TipoPerito, HTMLButtonElement | null>>>({})
   const libre = useRef<TipoPerito | null>(null)
+  /** La revisión del perito que se está modificando, tal como se abrió el formulario */
+  const revision = useRevision()
 
   const desde = (boton: HTMLElement) => {
     volverA.current = boton
@@ -83,7 +86,7 @@ export function PestanaPeritos() {
     if (!editando) return
     const { tipo, perito, registrarCierre } = editando
     if (perito) {
-      await profesionales.modificarPerito(ficha.id, perito.id, datos)
+      await revision.guardar((r) => profesionales.modificarPerito(ficha.id, perito.id, r, datos))
       await actualizar(
         registrarCierre || (!perito.cerrado && datos.cerrado)
           ? `Se registró el cierre de la pericia de ${datos.nombre}.`
@@ -201,6 +204,7 @@ export function PestanaPeritos() {
                     <Button
                       onClick={(e) => {
                         desde(e.currentTarget)
+                        revision.abrir(p.revision)
                         setEditando({ tipo, perito: p, registrarCierre: true })
                       }}
                       aria-label={`Registrar el cierre de la pericia de ${p.nombre}`}
@@ -213,6 +217,7 @@ export function PestanaPeritos() {
                     variant="outline"
                     onClick={(e) => {
                       desde(e.currentTarget)
+                      revision.abrir(p.revision)
                       setEditando({ tipo, perito: p, registrarCierre: false })
                     }}
                     aria-label={`Modificar al ${nombreTipo} ${p.nombre}`}

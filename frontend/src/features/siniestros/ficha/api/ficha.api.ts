@@ -95,14 +95,27 @@ const cuerpoPerito = ({ cerrado: _cerrado, ...datos }: PeritoAltaData) => datos
 export const profesionales = {
   agregarAbogado: (id: number, datos: AbogadoFichaData): Promise<ParteCreada> =>
     api(`/siniestros/${id}/abogados`, { method: 'POST', body: datos }),
-  modificarAbogado: (id: number, idAbogado: number, datos: AbogadoFichaData): Promise<void> =>
-    api(`/siniestros/${id}/abogados/${idAbogado}`, { method: 'PUT', body: datos }),
+  modificarAbogado: (
+    id: number,
+    idAbogado: number,
+    revision: number,
+    datos: AbogadoFichaData,
+  ): Promise<void> =>
+    api(`/siniestros/${id}/abogados/${idAbogado}`, { method: 'PUT', body: { revision, datos } }),
   darDeBajaAbogado: (id: number, idAbogado: number): Promise<void> =>
     api(`/siniestros/${id}/abogados/${idAbogado}/baja`, { method: 'PATCH' }),
   agregarPerito: (id: number, datos: PeritoAltaData): Promise<ParteCreada> =>
     api(`/siniestros/${id}/peritos`, { method: 'POST', body: cuerpoPerito(datos) }),
-  modificarPerito: (id: number, idPerito: number, datos: PeritoAltaData): Promise<void> =>
-    api(`/siniestros/${id}/peritos/${idPerito}`, { method: 'PUT', body: cuerpoPerito(datos) }),
+  modificarPerito: (
+    id: number,
+    idPerito: number,
+    revision: number,
+    datos: PeritoAltaData,
+  ): Promise<void> =>
+    api(`/siniestros/${id}/peritos/${idPerito}`, {
+      method: 'PUT',
+      body: { revision, datos: cuerpoPerito(datos) },
+    }),
   darDeBajaPerito: (id: number, idPerito: number): Promise<void> =>
     api(`/siniestros/${id}/peritos/${idPerito}/baja`, { method: 'PATCH' }),
 }

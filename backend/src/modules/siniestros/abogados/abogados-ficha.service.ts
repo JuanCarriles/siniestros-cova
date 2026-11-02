@@ -18,6 +18,7 @@ export function crearServicioAbogadosFicha(prisma: Base) {
         orderBy: { id: 'asc' },
         select: {
           id: true,
+          revision: true,
           nombreCompleto: true,
           numeroMatricula: true,
           telefono: true,

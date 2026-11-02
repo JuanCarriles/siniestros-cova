@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { agregarPersonaSchema } from '@cova/shared/schemas/partes-siniestro'
-import { vehiculoAltaSchema } from '@cova/shared/schemas/siniestros-alta'
+import { peritoAltaSchema, vehiculoAltaSchema } from '@cova/shared/schemas/siniestros-alta'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
+import { crearServicioPeritosGestion } from '../src/modules/siniestros/peritos/peritos-gestion.service.ts'
 import { crearServicioPersonasGestion } from '../src/modules/siniestros/personas/personas-gestion.service.ts'
 import { crearServicioVehiculosGestion } from '../src/modules/siniestros/vehiculos/vehiculos-gestion.service.ts'
 
@@ -14,6 +15,7 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
   const base = { transaccion: (trabajo) => prisma.$transaction(trabajo, { timeout: 15_000 }) }
   const vehiculos = crearServicioVehiculosGestion(base)
   const personas = crearServicioPersonasGestion(base)
+  const peritos = crearServicioPeritosGestion(base)
 
   const estado = await prisma.estadoSiniestro.findFirstOrThrow({ where: { esCierre: false } })
   const aseguradora = await prisma.aseguradora.create({ data: { nombre: `Concurrencia ${marca}` } })
@@ -151,8 +153,31 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
       0,
       'ninguna persona activa queda en un vehículo dado de baja',
     )
+
+    // Dos peritos CESVI a la vez (E5-07): uno de cada tipo
+    const perito = (nombre) =>
+      peritoAltaSchema.parse({
+        tipoPerito: 'CESVI',
+        nombre,
+        telefono: '',
+        email: '',
+        fechaSolicitud: '2026-10-01',
+        fechaCierre: '',
+      })
+    unaSola(
+      await Promise.allSettled([
+        peritos.agregar(yo, idSiniestro, perito('Uno')),
+        peritos.agregar(yo, idSiniestro, perito('Dos')),
+      ]),
+      409,
+    )
+    assert.equal(
+      await prisma.perito.count({ where: { idSiniestro, tipoPerito: 'CESVI', eliminado: false } }),
+      1,
+    )
   } finally {
     await prisma.historialSiniestro.deleteMany({ where: { idSiniestro } })
+    await prisma.perito.deleteMany({ where: { idSiniestro } })
     await prisma.personaInvolucrada.deleteMany({ where: { idSiniestro } })
     await prisma.vehiculo.deleteMany({ where: { idSiniestro } })
     await prisma.siniestro.delete({ where: { id: idSiniestro } })

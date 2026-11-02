@@ -1,5 +1,5 @@
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
-import type { ParteCreada } from '@cova/shared/schemas/partes-siniestro'
+import type { ModificarPerito, ParteCreada } from '@cova/shared/schemas/partes-siniestro'
 import {
   TIPOS_PERITO,
   hoyArgentina,
@@ -10,6 +10,7 @@ import { eventoHistorial } from '../../historial/historial.textos.ts'
 import { datosPerito, diaArgentina } from '../partes-datos.ts'
 import {
   camposCambiados,
+  exigirRevision,
   prepararEdicion,
   registrarMovimiento,
   type Transaccion,
@@ -84,7 +85,7 @@ export function crearServicioPeritosGestion({ transaccion }: { transaccion: Tran
       usuario: SesionUsuario,
       idSiniestro: number,
       idPerito: number,
-      datos: PeritoAltaData,
+      { revision, datos }: ModificarPerito,
     ) {
       await transaccion(async (tx) => {
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
@@ -101,9 +102,14 @@ export function crearServicioPeritosGestion({ transaccion }: { transaccion: Tran
           fechaCierre: actual.fechaCierre && alMediodia(actual.fechaCierre),
         }
         const campos = camposCambiados(guardados, nuevos, ETIQUETAS)
+        // Sin diferencias con lo guardado no pisa nada, aunque el formulario sea viejo
         if (campos.length === 0) return
+        exigirRevision(actual.revision, revision, `los datos del perito ${actual.nombre}`)
         const ahora = new Date()
-        await tx.perito.update({ where: { id: idPerito }, data: nuevos })
+        await tx.perito.update({
+          where: { id: idPerito },
+          data: { ...nuevos, revision: { increment: 1 } },
+        })
         const cierre = !actual.cerrado && nuevos.cerrado
         if (cierre) await registrarMovimiento(tx, idSiniestro, ahora)
         await tx.historialSiniestro.create({
