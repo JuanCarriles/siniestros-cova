@@ -5,6 +5,7 @@ import {
   personaExternaAltaSchema,
   titularAltaSchema,
 } from '@cova/shared/schemas/siniestros-alta'
+import { usosDeDireccion } from '../../../lib/direcciones.ts'
 import { HttpError } from '../../../utils/httpError.ts'
 import { eventoHistorial } from '../../historial/historial.textos.ts'
 import { datosDireccion, datosPersona, type TipoPersona } from '../partes-datos.ts'
@@ -12,6 +13,7 @@ import {
   camposCambiados,
   exigirCatalogos,
   exigirDocumentoLibre,
+  exigirRevision,
   nombreParaHistorial,
   prepararEdicion,
   rolParaHistorial,
@@ -76,6 +78,28 @@ async function buscarPersona(tx: Tx, idSiniestro: number, idPersona: number) {
   const tipo: TipoPersona =
     persona.idVehiculo === null ? 'externa' : persona.esPropietario ? 'titular' : 'ocupante'
   return { persona, tipo }
+}
+
+/**
+ * El domicilio se corrige en su misma fila; si no tenía y ahora tiene, se crea. Si la fila la usa también otro
+ * registro (un usuario, el lugar de un siniestro, un perito), no se toca: la persona pasa a tener una copia propia.
+ * Devuelve la dirección que queda en la persona.
+ */
+async function guardarDomicilio(
+  tx: Tx,
+  idDireccion: number | null,
+  domicilio: ReturnType<typeof datosDireccion>,
+): Promise<number | null> {
+  const nueva = async () =>
+    domicilio ? (await tx.direccion.create({ data: domicilio, select: { id: true } })).id : null
+  if (!idDireccion) return nueva()
+  const usos = await usosDeDireccion(tx, idDireccion)
+  if (usos.usuarios > 0 || usos.siniestros > 0 || usos.perito) return nueva()
+  await tx.direccion.update({
+    where: { id: idDireccion },
+    data: domicilio ?? { idProvincia: null, localidad: null, calle: null, codigoPostal: null },
+  })
+  return idDireccion
 }
 
 // CU-10 1.c.2 a 1.c.6 (E5-06): titulares, ocupantes y personas fuera de los vehículos desde la ficha, con las
@@ -146,7 +170,7 @@ export function crearServicioPersonasGestion({ transaccion }: { transaccion: Tra
       usuario: SesionUsuario,
       idSiniestro: number,
       idPersona: number,
-      cuerpo: unknown,
+      { revision, datos: cuerpo }: { revision: number; datos: unknown },
     ) {
       await transaccion(async (tx) => {
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
@@ -160,7 +184,13 @@ export function crearServicioPersonasGestion({ transaccion }: { transaccion: Tra
             ...camposCambiados(persona.direccion ?? {}, domicilio ?? {}, ETIQUETAS_DOMICILIO),
           ]),
         ]
+        // Sin diferencias con lo guardado no pisa nada, aunque el formulario sea viejo
         if (campos.length === 0) return
+        exigirRevision(
+          persona.revision,
+          revision,
+          `los datos de ${nombreParaHistorial(persona.nombreCompletoRazonSocial)}`,
+        )
         if (nuevos.documento !== persona.documento)
           await exigirDocumentoLibre(tx, idSiniestro, nuevos.documento, idPersona)
         await exigirCatalogos(tx, {
@@ -171,23 +201,10 @@ export function crearServicioPersonasGestion({ transaccion }: { transaccion: Tra
               ? domicilio?.idProvincia
               : null,
         })
-        // El domicilio se corrige en su misma fila; si no tenía y ahora tiene, se crea
-        let idDireccion = persona.idDireccion
-        if (idDireccion)
-          await tx.direccion.update({
-            where: { id: idDireccion },
-            data: domicilio ?? {
-              idProvincia: null,
-              localidad: null,
-              calle: null,
-              codigoPostal: null,
-            },
-          })
-        else if (domicilio)
-          idDireccion = (await tx.direccion.create({ data: domicilio, select: { id: true } })).id
+        const idDireccion = await guardarDomicilio(tx, persona.idDireccion, domicilio)
         await tx.personaInvolucrada.update({
           where: { id: idPersona },
-          data: { ...nuevos, idDireccion },
+          data: { ...nuevos, idDireccion, revision: { increment: 1 } },
         })
         await tx.historialSiniestro.create({
           data: {

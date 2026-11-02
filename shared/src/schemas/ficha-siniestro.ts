@@ -12,6 +12,8 @@ import type {
 // Fechas de un día: "aaaa-mm-dd"; horas: "hh:mm"; momentos: ISO.
 
 export type DireccionFicha = {
+  /** Para precargar el formulario al modificar, aunque el país esté dado de baja */
+  idPais: number | null
   pais: string | null
   /** Para precargar el formulario al modificar */
   idProvincia: number | null
@@ -54,6 +56,8 @@ export type FichaSiniestro = {
 
 export type PersonaFicha = {
   id: number
+  /** Cuántas veces se modificó: se manda al guardar, para no pisar el cambio de otro usuario (E5-06) */
+  revision: number
   /** null si se cargó sin nombre */
   nombre: string | null
   idTipoDocumento: number | null
@@ -83,6 +87,8 @@ export type PersonaVehiculoFicha = PersonaFicha & {
 
 export type VehiculoFicha = {
   id: number
+  /** Cuántas veces se modificó: se manda al guardar, para no pisar el cambio de otro usuario (E5-06) */
+  revision: number
   rolAccidente: RolAccidente | null
   marca: string | null
   modelo: string | null

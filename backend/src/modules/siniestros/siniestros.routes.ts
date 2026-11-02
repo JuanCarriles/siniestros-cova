@@ -7,7 +7,12 @@ import {
   filtrosSiniestrosSchema,
 } from '@cova/shared/schemas/siniestros'
 import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
-import { abogadoFichaSchema, agregarPersonaSchema } from '@cova/shared/schemas/partes-siniestro'
+import {
+  abogadoFichaSchema,
+  agregarPersonaSchema,
+  modificarPersonaSchema,
+  modificarVehiculoSchema,
+} from '@cova/shared/schemas/partes-siniestro'
 import {
   crearSiniestroSchema,
   datosCasoSchema,
@@ -50,10 +55,10 @@ export const PESTANAS_FICHA = [
 // Vehículos y personas desde la ficha (CU-10 1.c, E5-06), con el mismo control de acceso:
 // GET   /api/siniestros/partes/opciones                    catálogos de los formularios
 // POST  /api/siniestros/:id/vehiculos                      agrega un vehículo
-// PUT   /api/siniestros/:id/vehiculos/:idVehiculo          lo modifica
+// PUT   /api/siniestros/:id/vehiculos/:idVehiculo          lo modifica ({ revision, datos }: 409 si cambió)
 // PATCH /api/siniestros/:id/vehiculos/:idVehiculo/baja     baja lógica (409 si tiene personas)
 // POST  /api/siniestros/:id/personas                       titular, ocupante o persona fuera
-// PUT   /api/siniestros/:id/personas/:idPersona            la modifica
+// PUT   /api/siniestros/:id/personas/:idPersona            la modifica ({ revision, datos }: 409 si cambió)
 // PATCH /api/siniestros/:id/personas/:idPersona/baja       baja lógica
 // Abogados y peritos desde la ficha (CU-10 1.d y 1.e, E5-07), con el mismo control de acceso:
 // POST  /api/siniestros/:id/abogados                       agrega un abogado y le asigna a quién representa
@@ -176,7 +181,7 @@ export function crearSiniestrosRouter(deps: {
       usuarioDeSesion(req),
       idSchema.parse(req.params.id),
       idSchema.parse(req.params.idVehiculo),
-      vehiculoAltaSchema.parse(req.body),
+      modificarVehiculoSchema.parse(req.body),
     )
     res.status(204).end()
   })
@@ -199,13 +204,13 @@ export function crearSiniestrosRouter(deps: {
         ),
       )
   })
-  // El cuerpo se valida en el servicio: el formulario depende de si es titular, ocupante o persona fuera
+  // Los datos se validan en el servicio: el formulario depende de si es titular, ocupante o persona fuera
   router.put('/:id/personas/:idPersona', async (req, res) => {
     await personas.modificar(
       usuarioDeSesion(req),
       idSchema.parse(req.params.id),
       idSchema.parse(req.params.idPersona),
-      req.body,
+      modificarPersonaSchema.parse(req.body),
     )
     res.status(204).end()
   })

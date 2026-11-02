@@ -1,5 +1,9 @@
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
-import type { ParteCreada, VehiculoConPersonas } from '@cova/shared/schemas/partes-siniestro'
+import type {
+  ModificarVehiculo,
+  ParteCreada,
+  VehiculoConPersonas,
+} from '@cova/shared/schemas/partes-siniestro'
 import type { VehiculoAltaData } from '@cova/shared/schemas/siniestros-alta'
 import { HttpError } from '../../../utils/httpError.ts'
 import { eventoHistorial } from '../../historial/historial.textos.ts'
@@ -8,6 +12,7 @@ import {
   camposCambiados,
   exigirCatalogos,
   exigirDominioLibre,
+  exigirRevision,
   prepararEdicion,
   type Transaccion,
   type Tx,
@@ -72,19 +77,24 @@ export function crearServicioVehiculosGestion({ transaccion }: { transaccion: Tr
       usuario: SesionUsuario,
       idSiniestro: number,
       idVehiculo: number,
-      datos: VehiculoAltaData,
+      { revision, datos }: ModificarVehiculo,
     ) {
       await transaccion(async (tx) => {
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
         const actual = await buscarVehiculo(tx, idSiniestro, idVehiculo)
         const nuevos = datosVehiculo(datos)
         const campos = camposCambiados(actual, nuevos, ETIQUETAS)
+        // Sin diferencias con lo guardado no pisa nada, aunque el formulario sea viejo
         if (campos.length === 0) return
+        exigirRevision(actual.revision, revision, `el vehículo ${actual.dominio}`)
         if (nuevos.dominio !== actual.dominio)
           await exigirDominioLibre(tx, idSiniestro, nuevos.dominio, idVehiculo)
         if (nuevos.idAseguradora !== actual.idAseguradora)
           await exigirCatalogos(tx, { idAseguradora: nuevos.idAseguradora })
-        await tx.vehiculo.update({ where: { id: idVehiculo }, data: nuevos })
+        await tx.vehiculo.update({
+          where: { id: idVehiculo },
+          data: { ...nuevos, revision: { increment: 1 } },
+        })
         await tx.historialSiniestro.create({
           data: {
             idSiniestro,

@@ -5,6 +5,7 @@ import {
   ocupanteAltaSchema,
   personaExternaAltaSchema,
   titularAltaSchema,
+  vehiculoAltaSchema,
 } from './siniestros-alta.ts'
 
 // Vehículos y personas desde la ficha (CU-10 1.c, E5-06), y abogados y peritos (1.d y 1.e, E5-07). Los datos se
@@ -19,6 +20,28 @@ export const agregarPersonaSchema = z.discriminatedUnion('tipo', [
 ])
 export type AgregarPersona = z.output<typeof agregarPersonaSchema>
 export type AgregarPersonaInput = z.input<typeof agregarPersonaSchema>
+
+/** Cuántas veces se había modificado el registro cuando se abrió el formulario */
+const revisionSchema = z.number().int().min(0)
+
+/** PUT /api/siniestros/:id/vehiculos/:idVehiculo */
+export const modificarVehiculoSchema = z.strictObject({
+  revision: revisionSchema,
+  datos: vehiculoAltaSchema,
+})
+export type ModificarVehiculo = z.output<typeof modificarVehiculoSchema>
+
+/** PUT /api/siniestros/:id/personas/:idPersona. Los datos se validan según sea titular, ocupante o persona fuera. */
+export const modificarPersonaSchema = z.strictObject({
+  revision: revisionSchema,
+  datos: z.unknown(),
+})
+
+/**
+ * 409 al guardar un formulario abierto antes de que otro usuario modificara el mismo registro: no se guarda nada y
+ * lo escrito sigue en el formulario. Trae la revisión actual: si después del aviso se guarda de nuevo, reemplaza.
+ */
+export type RegistroDesactualizado = { codigo: 'REGISTRO_DESACTUALIZADO'; revision: number }
 
 /** Respuesta de agregar un vehículo o una persona */
 export type ParteCreada = { id: number }

@@ -360,6 +360,8 @@ model Vehiculo {
   idSiniestro       Int
   eliminado         Boolean       @default(false)
   fechaBaja         DateTime?     @db.Timestamptz(3)
+  /// Cuántas veces se modificó desde la ficha: un formulario abierto antes del último cambio no lo pisa (E5-06)
+  revision          Int           @default(0)
 
   aseguradora          Aseguradora?         @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro            Siniestro            @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -367,6 +369,9 @@ model Vehiculo {
 
   @@index([idAseguradora])
   @@index([idSiniestro])
+  // Dominio único entre los vehículos activos del siniestro, sin espacios ni guiones y sin distinguir mayúsculas:
+  // índice parcial "Vehiculo_dominio_activo_key", creado a mano en la migración 20261104120000_partes_concurrencia
+  // (Prisma no declara índices parciales ni sobre expresiones). Un repetido falla con P2002.
 }
 
 model TipoDocumento {
@@ -403,6 +408,8 @@ model PersonaInvolucrada {
   tipoLesion                TipoLesion?
   eliminado                 Boolean     @default(false)
   fechaBaja                 DateTime?   @db.Timestamptz(3)
+  /// Cuántas veces se modificó desde la ficha: un formulario abierto antes del último cambio no lo pisa (E5-06)
+  revision                  Int         @default(0)
 
   siniestro     Siniestro      @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   direccion     Direccion?     @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -414,6 +421,8 @@ model PersonaInvolucrada {
   @@index([idAbogado])
   @@index([idTipoDocumento])
   @@index([idVehiculo])
+  // Un titular activo por vehículo: índice parcial "PersonaInvolucrada_titular_activo_key", creado a mano en la
+  // migración 20261104120000_partes_concurrencia (Prisma no declara índices parciales). Un segundo falla con P2002.
 }
 
 model EstadoSiniestro {

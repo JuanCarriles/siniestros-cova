@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useRevalidator } from 'react-router'
 import { Car, Plus, UserPlus, UsersRound } from 'lucide-react'
 import type { VehiculoFicha } from '@cova/shared/schemas/ficha-siniestro'
+import type { RegistroDesactualizado } from '@cova/shared/schemas/partes-siniestro'
 import type {
   OcupanteAltaData,
   PersonaExternaAltaData,
@@ -10,6 +11,7 @@ import type {
 } from '@cova/shared/schemas/siniestros-alta'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
+import { ApiError } from '@/lib/api'
 import { PersonaDialog, type ModoPersona } from '../../components/persona-dialog'
 import { VehiculoDialog } from '../../components/vehiculo-dialog'
 import { partes } from '../api/ficha.api'
@@ -24,8 +26,10 @@ import { DetalleVehiculoDialog, TarjetaVehiculo } from '../components/vehiculo-f
 import { nombreDe, tituloVehiculo } from '../formato'
 import { useFicha, usePestana } from '../hooks/use-ficha'
 import {
+  aseguradorasPara,
   externaAFormulario,
   ocupanteAFormulario,
+  opcionesPara,
   personasDelSiniestro,
   titularAFormulario,
   vehiculoAFormulario,
@@ -47,7 +51,8 @@ function personaAFormulario(p: PersonaEnFicha) {
 // Pestaña "Vehículos y partes" (CU-10 1.c): cada vehículo con su titular y sus ocupantes, y aparte las personas que
 // no iban en ninguno. "Ver detalle" muestra todos los datos (1.c.7 a 1.c.10). Agregar y modificar usan los mismos
 // formularios del alta (1.c.1 a 1.c.5); dar de baja se confirma (1.c.6). Cada cambio queda en el historial. Un
-// siniestro cerrado o dado de baja solo se consulta.
+// siniestro cerrado o dado de baja solo se consulta. Si otro usuario modificó el mismo registro mientras el formulario
+// estaba abierto, el guardado se rechaza y avisa; guardar de nuevo después del aviso reemplaza esos cambios.
 export function PestanaVehiculos() {
   const ficha = useFicha()
   const datos = usePestana<'vehiculos'>()
@@ -64,6 +69,8 @@ export function PestanaVehiculos() {
   const [mensaje, setMensaje] = useState<string | null>(null)
   const volverA = useRef<HTMLElement | null>(null)
   const agregarVehiculo = useRef<HTMLButtonElement>(null)
+  /** La revisión del vehículo o la persona que se está modificando, tal como se abrió el formulario */
+  const revision = useRef(0)
 
   // El asegurado viene primero; los terceros se numeran en orden de carga
   let terceros = 0
@@ -84,9 +91,27 @@ export function PestanaVehiculos() {
     setMensaje(texto)
   }
 
+  /**
+   * Guarda con la revisión abierta. Si otro usuario modificó el registro, el modal muestra el aviso y la ficha se
+   * actualiza detrás; la revisión pasa a la actual: guardar de nuevo, ya avisado, reemplaza esos cambios.
+   */
+  async function conRevision(guardar: (revision: number) => Promise<void>) {
+    try {
+      await guardar(revision.current)
+    } catch (err) {
+      const detalle =
+        err instanceof ApiError ? (err.detalles as RegistroDesactualizado | undefined) : undefined
+      if (detalle?.codigo === 'REGISTRO_DESACTUALIZADO') {
+        revision.current = detalle.revision
+        void revalidator.revalidate()
+      }
+      throw err
+    }
+  }
+
   async function guardarVehiculo(nuevos: VehiculoAltaData) {
     if (editandoVehiculo) {
-      await partes.modificarVehiculo(ficha.id, editandoVehiculo.id, nuevos)
+      await conRevision((r) => partes.modificarVehiculo(ficha.id, editandoVehiculo.id, r, nuevos))
       await actualizar(`Se guardaron los cambios del vehículo ${nuevos.dominio}.`)
     } else {
       await partes.agregarVehiculo(ficha.id, nuevos)
@@ -99,7 +124,7 @@ export function PestanaVehiculos() {
     const { modo, vehiculo: suyo, persona: actual } = editandoPersona
     const nombre = nuevos.nombreCompletoRazonSocial || 'la persona'
     if (actual) {
-      await partes.modificarPersona(ficha.id, actual.persona.id, nuevos)
+      await conRevision((r) => partes.modificarPersona(ficha.id, actual.persona.id, r, nuevos))
       return actualizar(`Se guardaron los cambios de ${nombre}.`)
     }
     if (modo === 'externa')
@@ -139,6 +164,7 @@ export function PestanaVehiculos() {
   const accionesPersona = (p: PersonaEnFicha, suyo: VehiculoFicha | null) => ({
     onModificar: (boton: HTMLElement) => {
       desde(boton)
+      revision.current = p.persona.revision
       setEditandoPersona({
         modo: p.tipo === 'fuera' ? 'externa' : p.tipo,
         vehiculo: suyo,
@@ -205,6 +231,7 @@ export function PestanaVehiculos() {
                   ? {
                       onModificar: (boton) => {
                         desde(boton)
+                        revision.current = v.revision
                         setEditandoVehiculo(v)
                       },
                       onDarDeBaja: (boton) => {
@@ -288,7 +315,7 @@ export function PestanaVehiculos() {
           otros={vehiculos
             .filter((v) => v.id !== editandoVehiculo?.id)
             .map((v) => ({ dominio: v.dominio, rolAccidente: v.rolAccidente ?? 'TERCERO' }))}
-          aseguradoras={opciones.aseguradoras}
+          aseguradoras={aseguradorasPara(opciones.aseguradoras, editandoVehiculo ?? null)}
           idAseguradoraSiniestro={String(ficha.aseguradora.id)}
           onGuardar={guardarVehiculo}
           onCerrar={() => setEditandoVehiculo(undefined)}
@@ -302,7 +329,7 @@ export function PestanaVehiculos() {
           vehiculo={editandoPersona.vehiculo}
           persona={editandoPersona.persona && personaAFormulario(editandoPersona.persona)}
           involucrados={personasDelSiniestro(datos)}
-          opciones={opciones}
+          opciones={opcionesPara(opciones, editandoPersona.persona?.persona ?? null)}
           onGuardar={guardarPersona}
           onCerrar={() => setEditandoPersona(null)}
           elementoAlCerrar={() => volverA.current}
