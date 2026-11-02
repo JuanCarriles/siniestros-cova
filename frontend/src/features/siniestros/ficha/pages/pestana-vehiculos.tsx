@@ -127,7 +127,7 @@ export function PestanaVehiculos() {
       volverA.current = agregarVehiculo.current
       setBaja(null)
       await actualizar(`Se dio de baja el vehículo ${pedido.vehiculo.dominio}.`)
-    } else {
+    } else if (pedido.tipo === 'persona') {
       await partes.darDeBajaPersona(ficha.id, pedido.persona.persona.id)
       volverA.current = agregarVehiculo.current
       setBaja(null)

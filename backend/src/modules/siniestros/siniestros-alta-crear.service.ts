@@ -12,8 +12,10 @@ import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
 import { validarArchivoPlantilla } from '../plantillas/validar-archivo.ts'
 import {
+  datosAbogado,
   datosDireccion,
   datosPersona,
+  datosPerito,
   datosVehiculo,
   dia,
   type PersonaPorTipo,
@@ -22,8 +24,6 @@ import {
 
 type Actor = { id: number }
 
-// Las fechas de los peritos van a Timestamptz: al mediodía de la Argentina, para que ningún huso las corra de día
-const diaArgentina = (fecha: string) => new Date(`${fecha}T12:00:00-03:00`)
 const horaDelDia = (hora: string) => new Date(`1970-01-01T${hora}Z`)
 
 const carpetaDe = (actor: Actor) => `altas/${actor.id}`
@@ -249,15 +249,7 @@ export function crearServicioCrearSiniestro(deps: {
         // Abogados primero: cada persona guarda el suyo (a lo sumo uno)
         const abogadoDe = new Map<string, number>()
         for (const a of alta.abogados) {
-          const { id } = await tx.abogado.create({
-            data: {
-              nombreCompleto: a.nombreCompleto,
-              numeroMatricula: a.numeroMatricula ?? null,
-              telefono: a.telefono ?? null,
-              email: a.email ?? null,
-            },
-            select: { id: true },
-          })
+          const { id } = await tx.abogado.create({ data: datosAbogado(a), select: { id: true } })
           for (const clave of a.representados) abogadoDe.set(clave, id)
         }
 
@@ -289,16 +281,7 @@ export function crearServicioCrearSiniestro(deps: {
 
         for (const p of alta.peritos)
           await tx.perito.create({
-            data: {
-              idSiniestro,
-              tipoPerito: p.tipoPerito,
-              nombre: p.nombre,
-              telefono: p.telefono ?? null,
-              email: p.email ?? null,
-              fechaSolicitud: diaArgentina(p.fechaSolicitud),
-              fechaCierre: p.fechaCierre ? diaArgentina(p.fechaCierre) : null,
-              cerrado: p.cerrado,
-            },
+            data: { idSiniestro, tipoPerito: p.tipoPerito, ...datosPerito(p) },
           })
 
         // Cada documento se copia a la carpeta del siniestro y se registra con esa clave: si R2 falla, no se crea

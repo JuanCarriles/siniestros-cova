@@ -1,13 +1,15 @@
 import { z } from 'zod'
 import { idSchema } from './comunes.ts'
 import {
+  abogadoAltaSchema,
   ocupanteAltaSchema,
   personaExternaAltaSchema,
   titularAltaSchema,
 } from './siniestros-alta.ts'
 
-// Vehículos y personas desde la ficha (CU-10 1.c, E5-06). Los datos se validan con los mismos schemas del alta:
-// un vehículo con vehiculoAltaSchema; una persona según dónde está.
+// Vehículos y personas desde la ficha (CU-10 1.c, E5-06), y abogados y peritos (1.d y 1.e, E5-07). Los datos se
+// validan con los mismos schemas del alta: un vehículo con vehiculoAltaSchema; una persona según dónde está; un
+// perito con peritoAltaSchema.
 
 /** POST /api/siniestros/:id/personas. El titular y el ocupante dicen en qué vehículo; la persona fuera, no. */
 export const agregarPersonaSchema = z.discriminatedUnion('tipo', [
@@ -26,3 +28,18 @@ export type VehiculoConPersonas = {
   codigo: 'VEHICULO_CON_PERSONAS'
   personas: { id: number; nombre: string | null; rol: 'titular' | 'ocupante' }[]
 }
+
+// ------------------------------------------------------------------ Abogados y peritos (CU-10 1.d y 1.e, E5-07)
+
+/**
+ * POST y PUT /api/siniestros/:id/abogados. El formulario del alta, pero representa a personas que ya existen: van
+ * sus ids. Una persona que tenía otro abogado pasa a este.
+ */
+export const abogadoFichaSchema = abogadoAltaSchema.extend({
+  representados: z
+    .array(idSchema)
+    .min(1, 'Elegí al menos una persona a la que representa')
+    .max(100),
+})
+export type AbogadoFichaData = z.output<typeof abogadoFichaSchema>
+export type AbogadoFichaInput = z.input<typeof abogadoFichaSchema>

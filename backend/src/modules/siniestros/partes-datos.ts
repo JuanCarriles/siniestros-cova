@@ -1,16 +1,44 @@
 import type {
+  AbogadoAltaData,
   OcupanteAltaData,
+  PeritoAltaData,
   PersonaExternaAltaData,
   TitularAltaData,
   VehiculoAltaData,
 } from '@cova/shared/schemas/siniestros-alta'
 import type { Prisma } from '../../generated/prisma/client.ts'
 
-// Cómo se guardan los vehículos y las personas de un siniestro, a partir de los formularios del alta (CU-09). Lo
-// usan el alta (E4-05 a E4-07) y la ficha al agregar o modificar partes (CU-10 1.c, E5-06): las dos guardan igual.
+// Cómo se guardan los vehículos, las personas, los abogados y los peritos de un siniestro, a partir de los
+// formularios del alta (CU-09). Lo usan el alta (E4-05 a E4-09) y la ficha al agregar o modificar (CU-10 1.c a 1.e,
+// E5-06 y E5-07): las dos guardan igual.
 
 /** Las fechas sin hora (AAAA-MM-DD) van a columnas Date */
 export const dia = (fecha: string) => new Date(`${fecha}T00:00:00Z`)
+
+/** Las fechas de los peritos van a Timestamptz: al mediodía de la Argentina, para que ningún huso las corra de día */
+export const diaArgentina = (fecha: string) => new Date(`${fecha}T12:00:00-03:00`)
+
+/** Los datos de contacto del abogado; a quién representa se guarda en cada persona */
+export function datosAbogado(a: Omit<AbogadoAltaData, 'representados'>) {
+  return {
+    nombreCompleto: a.nombreCompleto,
+    numeroMatricula: a.numeroMatricula ?? null,
+    telefono: a.telefono ?? null,
+    email: a.email ?? null,
+  }
+}
+
+/** Sin el tipo: no cambia una vez cargado */
+export function datosPerito(p: PeritoAltaData) {
+  return {
+    nombre: p.nombre,
+    telefono: p.telefono ?? null,
+    email: p.email ?? null,
+    fechaSolicitud: diaArgentina(p.fechaSolicitud),
+    fechaCierre: p.fechaCierre ? diaArgentina(p.fechaCierre) : null,
+    cerrado: p.cerrado,
+  }
+}
 
 export type TipoPersona = 'titular' | 'ocupante' | 'externa'
 export type PersonaPorTipo = {

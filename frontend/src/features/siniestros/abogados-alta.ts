@@ -1,9 +1,11 @@
+import type { RolAccidente } from '@cova/shared/schemas/enums'
 import { ROLES_ACCIDENTE } from '@cova/shared/schemas/siniestros-alta'
 import type { AbogadoBorrador } from './borrador-alta'
 import type { Involucrados } from './personas-alta'
 
 // Paso 3 del alta (CU-09 pasos 23-27, E4-08): a quién representa cada abogado. Cada persona tiene a lo sumo un
-// abogado; un abogado representa a una o varias personas del paso 2.
+// abogado; un abogado representa a una o varias personas del paso 2. La ficha (CU-10 1.d, E5-07) arma los mismos
+// grupos con las personas guardadas.
 
 export type PersonaRepresentable = {
   clave: string
@@ -19,18 +21,31 @@ export type GrupoRepresentables = { titulo: string; personas: PersonaRepresentab
 const lugarDe = (p: { lugar?: string | null; lugarOtro?: string | null }) =>
   p.lugar === 'Otro' ? p.lugarOtro : p.lugar
 
+/** Lo que hace falta de las personas del alta (Involucrados) o de las guardadas en la ficha */
+export type PersonasRepresentables = {
+  vehiculos: {
+    dominio: string
+    rolAccidente: RolAccidente | null
+    titular: { clave: string } | null
+    ocupantes: { clave: string; lugar?: string | null; lugarOtro?: string | null }[]
+  }[]
+  personasExternas: { clave: string; rolSinVehiculo: string | null }[]
+}
+
 /**
- * Las personas del alta para elegir a quién representa un abogado, agrupadas como en el paso 2. nombres: el de
- * cada persona por su clave ("Desconocido N" incluido), de nombresPersonas.
+ * Las personas del siniestro para elegir a quién representa un abogado, agrupadas como en el paso 2. nombres: el
+ * de cada persona por su clave ("Desconocido N" incluido), de nombresPersonas.
  */
 export function gruposRepresentables(
-  involucrados: Involucrados,
+  involucrados: PersonasRepresentables,
   nombres: Map<string, string>,
 ): GrupoRepresentables[] {
   const nombre = (clave: string) => nombres.get(clave) ?? ''
   const grupos: GrupoRepresentables[] = involucrados.vehiculos
     .map((v) => ({
-      titulo: `Vehículo ${v.dominio} · ${ROLES_ACCIDENTE[v.rolAccidente]}`,
+      titulo: [`Vehículo ${v.dominio}`, v.rolAccidente && ROLES_ACCIDENTE[v.rolAccidente]]
+        .filter(Boolean)
+        .join(' · '),
       personas: [
         ...(v.titular
           ? [
@@ -57,7 +72,7 @@ export function gruposRepresentables(
       personas: involucrados.personasExternas.map((p) => ({
         clave: p.clave,
         nombre: nombre(p.clave),
-        detalle: p.rolSinVehiculo,
+        detalle: p.rolSinVehiculo ?? 'Fuera de los vehículos',
       })),
     })
   return grupos

@@ -37,6 +37,8 @@ enum TipoEventoHistorial {
   REACTIVACION_SINIESTRO
   VEHICULO
   PERSONA
+  ABOGADO
+  PERITO
 }
 
 enum TipoPerito {

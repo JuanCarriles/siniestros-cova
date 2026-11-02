@@ -7,10 +7,15 @@ import type {
   PeritoFicha,
   VehiculosYPartesFicha,
 } from '@cova/shared/schemas/ficha-siniestro'
-import type { AgregarPersona, ParteCreada } from '@cova/shared/schemas/partes-siniestro'
+import type {
+  AbogadoFichaData,
+  AgregarPersona,
+  ParteCreada,
+} from '@cova/shared/schemas/partes-siniestro'
 import type {
   OcupanteAltaData,
   OpcionesPartes,
+  PeritoAltaData,
   PersonaExternaAltaData,
   TitularAltaData,
   VehiculoAltaData,
@@ -32,7 +37,16 @@ export const pestanasFicha = {
     ])
     return { ...partes, opciones }
   },
-  abogados: (id: number): Promise<AbogadoFicha[]> => api(`/siniestros/${id}/abogados`),
+  // Con las personas del siniestro, para elegir a quién representa (E5-07)
+  abogados: async (
+    id: number,
+  ): Promise<{ abogados: AbogadoFicha[]; personas: VehiculosYPartesFicha }> => {
+    const [abogados, personas] = await Promise.all([
+      api<AbogadoFicha[]>(`/siniestros/${id}/abogados`),
+      api<VehiculosYPartesFicha>(`/siniestros/${id}/vehiculos`),
+    ])
+    return { abogados, personas }
+  },
   peritos: (id: number): Promise<PeritoFicha[]> => api(`/siniestros/${id}/peritos`),
   novedades: (id: number): Promise<NovedadFicha[]> => api(`/siniestros/${id}/novedades`),
   documentos: (id: number): Promise<DocumentoFicha[]> => api(`/siniestros/${id}/documentos`),
@@ -58,4 +72,24 @@ export const partes = {
     api(`/siniestros/${id}/personas/${idPersona}`, { method: 'PUT', body: datos }),
   darDeBajaPersona: (id: number, idPersona: number): Promise<void> =>
     api(`/siniestros/${id}/personas/${idPersona}/baja`, { method: 'PATCH' }),
+}
+
+// ------------------------------------------------------------------ Abogados y peritos (CU-10 1.d y 1.e, E5-07)
+
+/** cerrado lo deduce el schema de la fecha de cierre: no se manda */
+const cuerpoPerito = ({ cerrado: _cerrado, ...datos }: PeritoAltaData) => datos
+
+export const profesionales = {
+  agregarAbogado: (id: number, datos: AbogadoFichaData): Promise<ParteCreada> =>
+    api(`/siniestros/${id}/abogados`, { method: 'POST', body: datos }),
+  modificarAbogado: (id: number, idAbogado: number, datos: AbogadoFichaData): Promise<void> =>
+    api(`/siniestros/${id}/abogados/${idAbogado}`, { method: 'PUT', body: datos }),
+  darDeBajaAbogado: (id: number, idAbogado: number): Promise<void> =>
+    api(`/siniestros/${id}/abogados/${idAbogado}/baja`, { method: 'PATCH' }),
+  agregarPerito: (id: number, datos: PeritoAltaData): Promise<ParteCreada> =>
+    api(`/siniestros/${id}/peritos`, { method: 'POST', body: cuerpoPerito(datos) }),
+  modificarPerito: (id: number, idPerito: number, datos: PeritoAltaData): Promise<void> =>
+    api(`/siniestros/${id}/peritos/${idPerito}`, { method: 'PUT', body: cuerpoPerito(datos) }),
+  darDeBajaPerito: (id: number, idPerito: number): Promise<void> =>
+    api(`/siniestros/${id}/peritos/${idPerito}/baja`, { method: 'PATCH' }),
 }

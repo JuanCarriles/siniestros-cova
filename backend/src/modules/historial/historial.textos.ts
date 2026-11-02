@@ -1,4 +1,4 @@
-import { TipoEventoHistorial } from '../../generated/prisma/client.ts'
+import { TipoEventoHistorial, type TipoPerito } from '../../generated/prisma/client.ts'
 import { formatearFecha, nombreCompleto } from '../../utils/formato.ts'
 
 // Arma cada evento del historial del siniestro (RF-11, RF-12, RF-20): el tipo y un texto que
@@ -129,7 +129,77 @@ export const eventoHistorial = {
       TipoEventoHistorial.PERSONA,
       `${nombreCompleto(autor)} dio de baja a ${persona}, ${como}, el ${formatearFecha(fecha)}`,
     ),
+
+  // Abogados y peritos desde la ficha (CU-10 1.d y 1.e, E5-07)
+
+  /** "Pedro González agregó al abogado Luis Maidana, que representa a Ana Ruiz y Juan Paz, el 20/10/2026" */
+  abogadoAgregado: (autor: Persona, abogado: string, representados: string[], fecha: Date) =>
+    evento(
+      TipoEventoHistorial.ABOGADO,
+      `${nombreCompleto(autor)} agregó al abogado ${abogado}, que representa a ${enumerar(representados)}, el ${formatearFecha(fecha)}`,
+    ),
+  /** "Pedro González modificó los datos del abogado Luis Maidana (teléfono y a quién representa) el 20/10/2026" */
+  abogadoModificado: (autor: Persona, abogado: string, campos: string[], fecha: Date) =>
+    evento(
+      TipoEventoHistorial.ABOGADO,
+      `${nombreCompleto(autor)} modificó los datos del abogado ${abogado} (${enumerar(campos)}) el ${formatearFecha(fecha)}`,
+    ),
+  /** "Pedro González dio de baja al abogado Luis Maidana el 20/10/2026" */
+  abogadoDadoDeBaja: (autor: Persona, abogado: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.ABOGADO,
+      `${nombreCompleto(autor)} dio de baja al abogado ${abogado} el ${formatearFecha(fecha)}`,
+    ),
+
+  /** "Pedro González cargó al perito CESVI Juan Pérez el 20/10/2026" (cerrada: "…con la pericia cerrada…") */
+  peritoAgregado: (
+    autor: Persona,
+    tipo: TipoPerito,
+    perito: string,
+    cerrada: boolean,
+    fecha: Date,
+  ) =>
+    evento(
+      TipoEventoHistorial.PERITO,
+      `${nombreCompleto(autor)} cargó al ${PERITO[tipo]} ${perito}${cerrada ? ' con la pericia cerrada' : ''} el ${formatearFecha(fecha)}`,
+    ),
+  /** "Pedro González modificó los datos del perito médico Juan Pérez (teléfono) el 20/10/2026" */
+  peritoModificado: (
+    autor: Persona,
+    tipo: TipoPerito,
+    perito: string,
+    campos: string[],
+    fecha: Date,
+  ) =>
+    evento(
+      TipoEventoHistorial.PERITO,
+      `${nombreCompleto(autor)} modificó los datos del ${PERITO[tipo]} ${perito} (${enumerar(campos)}) el ${formatearFecha(fecha)}`,
+    ),
+  /**
+   * "Pedro González registró el cierre de la pericia médica de Juan Pérez el 20/10/2026". Si también cambió otros
+   * datos: "…de Juan Pérez y modificó teléfono el 20/10/2026".
+   */
+  periciaCerrada: (
+    autor: Persona,
+    tipo: TipoPerito,
+    perito: string,
+    otrosCampos: string[],
+    fecha: Date,
+  ) =>
+    evento(
+      TipoEventoHistorial.PERITO,
+      `${nombreCompleto(autor)} registró el cierre de la ${PERICIA[tipo]} de ${perito}${otrosCampos.length ? ` y modificó ${enumerar(otrosCampos)}` : ''} el ${formatearFecha(fecha)}`,
+    ),
+  /** "Pedro González dio de baja al perito CESVI Juan Pérez el 20/10/2026" */
+  peritoDadoDeBaja: (autor: Persona, tipo: TipoPerito, perito: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.PERITO,
+      `${nombreCompleto(autor)} dio de baja al ${PERITO[tipo]} ${perito} el ${formatearFecha(fecha)}`,
+    ),
 }
+
+const PERITO: Record<TipoPerito, string> = { CESVI: 'perito CESVI', MEDICO: 'perito médico' }
+const PERICIA: Record<TipoPerito, string> = { CESVI: 'pericia CESVI', MEDICO: 'pericia médica' }
 
 /** "dominio", "dominio y color", "dominio, color y daños" */
 function enumerar(campos: string[]): string {

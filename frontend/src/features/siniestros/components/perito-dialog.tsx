@@ -8,6 +8,7 @@ import {
   type PeritoAltaData,
   type PeritoAltaInput,
 } from '@cova/shared/schemas/siniestros-alta'
+import { Aviso } from '@/components/aviso'
 import { TextField } from '@/components/text-field'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { PeritoBorrador } from '../borrador-alta'
+import { campoDelError, mensajeDelError } from '../errores-servidor'
 
 type PeritoFormulario = Omit<PeritoAltaInput, 'tipoPerito'> & { tipoPerito: TipoPerito }
 
@@ -33,10 +35,12 @@ const aFormulario = (tipo: TipoPerito, p: PeritoBorrador | null): PeritoFormular
 })
 
 // CU-09 pasos 28-30 (E4-09). El tipo lo da el lugar desde el que se abre (uno de cada tipo como máximo). Nombre y
-// fecha de solicitud son obligatorios; sin fecha de cierre la pericia queda pendiente (29.a).
+// fecha de solicitud son obligatorios; sin fecha de cierre la pericia queda pendiente (29.a). La ficha (CU-10 1.e,
+// E5-07) usa el mismo formulario: ahí guardar espera al servidor y, si rechaza, el modal sigue abierto.
 export function PeritoDialog({
   tipo,
   perito,
+  registrarCierre = false,
   onGuardar,
   onCerrar,
   elementoAlCerrar,
@@ -44,26 +48,46 @@ export function PeritoDialog({
   tipo: TipoPerito
   /** null: cargar uno nuevo */
   perito: PeritoBorrador | null
-  onGuardar: (datos: PeritoAltaData) => void
+  /** Desde la ficha, para una pericia pendiente: el foco va a la fecha de cierre, propuesta con la de hoy */
+  registrarCierre?: boolean
+  onGuardar: (datos: PeritoAltaData) => void | Promise<void>
   onCerrar: () => void
   elementoAlCerrar: () => HTMLElement | null
 }) {
   const nuevo = perito === null
   const nombreTipo = tipo === 'MEDICO' ? 'perito médico' : `perito ${TIPOS_PERITO[tipo]}`
+  const pericia = tipo === 'MEDICO' ? 'pericia médica' : `pericia ${TIPOS_PERITO[tipo]}`
+  const hoy = hoyArgentina()
+  const valores = aFormulario(tipo, perito)
+  if (registrarCierre && !valores.fechaCierre) valores.fechaCierre = hoy
   const {
     control,
     register,
     handleSubmit,
-    formState: { errors },
+    setError,
+    formState: { errors, isSubmitting },
   } = useForm<PeritoFormulario, unknown, PeritoAltaData>({
     resolver: zodResolver(peritoAltaSchema),
-    defaultValues: aFormulario(tipo, perito),
+    defaultValues: valores,
   })
   const solicitud = useWatch({ control, name: 'fechaSolicitud' })
-  const hoy = hoyArgentina()
 
-  const guardar = handleSubmit((datos) => {
-    onGuardar(datos)
+  const guardar = handleSubmit(async (datos) => {
+    if (registrarCierre && !datos.fechaCierre) {
+      setError('fechaCierre', { message: 'Ingresá la fecha de cierre' }, { shouldFocus: true })
+      return
+    }
+    try {
+      await onGuardar(datos)
+    } catch (err) {
+      const campo = campoDelError(err, ['nombre', 'fechaSolicitud', 'fechaCierre'] as const)
+      if (campo) setError(campo, { message: mensajeDelError(err, '') }, { shouldFocus: true })
+      else
+        setError('root', {
+          message: mensajeDelError(err, 'No se pudo guardar. Revisá la conexión y probá de nuevo.'),
+        })
+      return
+    }
     onCerrar()
   })
 
@@ -81,18 +105,21 @@ export function PeritoDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {nuevo ? 'Cargar' : 'Modificar'} {nombreTipo}
+            {registrarCierre
+              ? `Registrar el cierre de la ${pericia}`
+              : `${nuevo ? 'Cargar' : 'Modificar'} ${nombreTipo}`}
           </DialogTitle>
           <DialogDescription>
-            El nombre y la fecha de solicitud son obligatorios. Si la pericia sigue en curso, dejá
-            vacía la fecha de cierre: queda pendiente.
+            {registrarCierre
+              ? 'Revisá la fecha de cierre (propuesta: hoy) y guardá. Registrar el cierre cuenta como movimiento del caso.'
+              : 'El nombre y la fecha de solicitud son obligatorios. Si la pericia sigue en curso, dejá vacía la fecha de cierre: queda pendiente.'}
           </DialogDescription>
         </DialogHeader>
         <form noValidate onSubmit={(e) => void guardar(e)} className="grid gap-5">
           <TextField
             label="Nombre completo"
             required
-            autoFocus
+            autoFocus={!registrarCierre}
             autoComplete="off"
             maxLength={150}
             error={errors.nombre?.message}
@@ -127,18 +154,31 @@ export function PeritoDialog({
             <TextField
               label="Fecha de cierre"
               type="date"
+              autoFocus={registrarCierre}
+              required={registrarCierre}
               min={solicitud || undefined}
               max={hoy}
-              hint="Vacía: la pericia queda pendiente."
+              hint={registrarCierre ? undefined : 'Vacía: la pericia queda pendiente.'}
               error={errors.fechaCierre?.message}
               {...register('fechaCierre')}
             />
           </div>
+          {errors.root && (
+            <Aviso tipo="error" enfocar>
+              {errors.root.message}
+            </Aviso>
+          )}
           <DialogFooter className="gap-3">
-            <Button type="button" variant="outline" onClick={onCerrar}>
+            <Button type="button" variant="outline" onClick={onCerrar} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">{nuevo ? `Guardar ${nombreTipo}` : 'Guardar cambios'}</Button>
+            <Button type="submit" loading={isSubmitting}>
+              {registrarCierre
+                ? 'Registrar cierre'
+                : nuevo
+                  ? `Guardar ${nombreTipo}`
+                  : 'Guardar cambios'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -5,7 +5,8 @@ import { HttpError } from '../../utils/httpError.ts'
 import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 import type { TipoPersona } from './partes-datos.ts'
 
-// Reglas comunes para agregar, modificar y dar de baja vehículos y personas desde la ficha (CU-10 1.c, E5-06).
+// Reglas comunes para agregar, modificar y dar de baja vehículos y personas (CU-10 1.c, E5-06), abogados y peritos
+// (1.d y 1.e, E5-07) desde la ficha.
 
 export type Tx = Prisma.TransactionClient
 export type Transaccion = <T>(trabajo: (tx: Tx) => Promise<T>) => Promise<T>
@@ -33,6 +34,17 @@ export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestr
   })
   if (!autor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
   return autor
+}
+
+/**
+ * Cuenta como movimiento del caso: reinicia los días sin movimiento (RF-19). Desde la ficha, de vehículos, personas,
+ * abogados y peritos solo lo hace registrar el cierre de una pericia (E5-07); lo demás queda en el historial.
+ */
+export async function registrarMovimiento(tx: Tx, idSiniestro: number, fecha: Date) {
+  await tx.siniestro.update({
+    where: { id: idSiniestro },
+    data: { fechaUltimoMovimiento: fecha },
+  })
 }
 
 /** Los catálogos elegidos tienen que seguir activos. Solo se controlan los que cambiaron. */
