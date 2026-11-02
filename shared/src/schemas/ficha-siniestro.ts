@@ -13,6 +13,8 @@ import type {
 
 export type DireccionFicha = {
   pais: string | null
+  /** Para precargar el formulario al modificar */
+  idProvincia: number | null
   provincia: string | null
   localidad: string | null
   calle: string | null
@@ -54,6 +56,7 @@ export type PersonaFicha = {
   id: number
   /** null si se cargó sin nombre */
   nombre: string | null
+  idTipoDocumento: number | null
   tipoDocumento: string | null
   documento: string | null
   estadoCivil: string | null
@@ -91,6 +94,7 @@ export type VehiculoFicha = {
   color: string | null
   numeroChasis: string | null
   numeroMotor: string | null
+  idAseguradora: number | null
   aseguradora: string | null
   acreedorPrendario: string | null
   descripcionDanos: string | null

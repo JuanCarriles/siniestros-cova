@@ -82,10 +82,12 @@ test('PostgreSQL: reglas de CU-03 dentro de una transacción reversible', async 
               idDireccion: direccion.id,
             },
           })
+          // Cada uno con su número: no se repite en una aseguradora (migración numero_siniestro_unico)
+          let numero = 0
           const siniestro = (idEstadoSiniestro, extra = {}) =>
             tx.siniestro.create({
               data: {
-                numeroSiniestro: 'P-1',
+                numeroSiniestro: `P-${++numero}`,
                 numeroPoliza: 'P-1',
                 fechaAsignacion: new Date(),
                 demorado: false,

@@ -14,6 +14,8 @@ const TIPOS: Record<TipoEventoHistorial, string> = {
   CAMBIO_ESTADO: 'Cambio de estado',
   BAJA_SINIESTRO: 'Baja',
   REACTIVACION_SINIESTRO: 'Reactivación',
+  VEHICULO: 'Vehículo',
+  PERSONA: 'Persona',
 }
 
 // Pestaña "Historial" (CU-10 1.i): lo que pasó en el siniestro en orden cronológico, con su tipo, quién lo hizo y

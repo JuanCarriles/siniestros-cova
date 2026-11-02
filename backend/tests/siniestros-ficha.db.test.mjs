@@ -262,6 +262,7 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
           })
           assert.deepEqual(ficha.lugar, {
             pais: provincia.pais.nombre,
+            idProvincia: provincia.id,
             provincia: provincia.nombre,
             localidad: 'Almagro',
             calle: 'Av. Rivadavia',

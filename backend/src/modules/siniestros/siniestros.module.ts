@@ -12,9 +12,12 @@ import { crearServicioPeritosFicha } from './peritos/peritos-ficha.service.ts'
 import { crearServicioCrearSiniestro } from './siniestros-alta-crear.service.ts'
 import { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
+import type { Transaccion } from './partes-edicion.ts'
 import { crearSiniestrosRouter } from './siniestros.routes.ts'
 import { crearServicioSiniestros } from './siniestros.service.ts'
+import { crearServicioPersonasGestion } from './personas/personas-gestion.service.ts'
 import { crearServicioVehiculosFicha } from './vehiculos/vehiculos-ficha.service.ts'
+import { crearServicioVehiculosGestion } from './vehiculos/vehiculos-gestion.service.ts'
 
 // Acceso diferido a la base: el cliente se crea en el primer pedido, no al importar
 const db = {
@@ -78,6 +81,10 @@ const operaciones = crearServicioBajasSiniestros({
   },
 })
 
+// Vehículos y personas desde la ficha (E5-06): cada cambio y su evento del historial, juntos
+const transaccionPartes: Transaccion = (trabajo) =>
+  getPrisma().$transaction(trabajo, { timeout: 15_000 })
+
 export const siniestrosRouter = crearSiniestrosRouter({
   servicio: crearServicioSiniestros(db),
   alta: crearServicioAltaSiniestros(db),
@@ -96,5 +103,7 @@ export const siniestrosRouter = crearSiniestrosRouter({
     documentos: crearServicioDocumentosFicha(db),
     historial: crearServicioHistorialFicha(db),
   },
+  vehiculos: crearServicioVehiculosGestion({ transaccion: transaccionPartes }),
+  personas: crearServicioPersonasGestion({ transaccion: transaccionPartes }),
   requerirSesion,
 })

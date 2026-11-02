@@ -7,6 +7,7 @@ export const selectDireccion = {
   localidad: true,
   calle: true,
   codigoPostal: true,
+  idProvincia: true,
   provincia: { select: { nombre: true, pais: { select: { nombre: true } } } },
 } as const satisfies Prisma.DireccionSelect
 
@@ -17,6 +18,7 @@ export function aDireccion(d: FilaDireccion | null): DireccionFicha | null {
   if (!d) return null
   return {
     pais: d.provincia?.pais.nombre ?? null,
+    idProvincia: d.idProvincia,
     provincia: d.provincia?.nombre ?? null,
     localidad: d.localidad,
     calle: d.calle,

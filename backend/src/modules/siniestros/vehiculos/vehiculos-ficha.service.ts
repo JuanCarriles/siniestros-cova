@@ -14,6 +14,7 @@ const selectPersona = {
   id: true,
   idVehiculo: true,
   nombreCompletoRazonSocial: true,
+  idTipoDocumento: true,
   documento: true,
   estadoCivil: true,
   sexo: true,
@@ -40,6 +41,7 @@ function aPersona(p: FilaPersona): PersonaFicha {
   return {
     id: p.id,
     nombre: nombreOpcional(p),
+    idTipoDocumento: p.idTipoDocumento,
     tipoDocumento: p.tipoDocumento?.nombre ?? null,
     documento: p.documento,
     estadoCivil: p.estadoCivil,
@@ -93,6 +95,7 @@ export function crearServicioVehiculosFicha(prisma: Base) {
             numeroMotor: true,
             acreedorPrendario: true,
             descripcionDanos: true,
+            idAseguradora: true,
             aseguradora: { select: { nombre: true } },
           },
         }),
