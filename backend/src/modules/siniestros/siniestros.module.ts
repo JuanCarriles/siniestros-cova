@@ -12,6 +12,7 @@ import { crearServicioPeritosFicha } from './peritos/peritos-ficha.service.ts'
 import { crearServicioCrearSiniestro } from './siniestros-alta-crear.service.ts'
 import { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
+import { crearServicioEstadoSiniestro } from './siniestros-estado.service.ts'
 import { crearSiniestrosRouter } from './siniestros.routes.ts'
 import { crearServicioSiniestros } from './siniestros.service.ts'
 import { crearServicioVehiculosFicha } from './vehiculos/vehiculos-ficha.service.ts'
@@ -88,6 +89,9 @@ export const siniestrosRouter = crearSiniestrosRouter({
     urlSistema: env.APP_URL,
   }),
   operaciones,
+  estados: crearServicioEstadoSiniestro({
+    transaccion: (trabajo) => getPrisma().$transaction(trabajo, { timeout: 15_000 }),
+  }),
   ficha: {
     vehiculos: crearServicioVehiculosFicha(db),
     abogados: crearServicioAbogadosFicha(db),
