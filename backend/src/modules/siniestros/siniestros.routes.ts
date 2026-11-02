@@ -17,6 +17,7 @@ import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts
 import type { crearServicioSiniestros } from './siniestros.service.ts'
 import { cambiarEstadoSiniestroSchema } from '@cova/shared/schemas/cambio-estado-siniestro'
 import type { crearServicioEstadoSiniestro } from './siniestros-estado.service.ts'
+import type { crearServicioEdicionCaso } from './siniestros-edicion.service.ts'
 
 /** Lectura de cada pestaña de la ficha (CU-10). Cada historia suma sus acciones en su propio servicio. */
 type PestanaFicha = {
@@ -46,6 +47,7 @@ export const PESTANAS_FICHA = [
 // DELETE /api/siniestros/alta/documentos  { clave } lo quita
 // POST   /api/siniestros/alta             crea el siniestro con todo lo cargado y avisa al asignado
 export function crearSiniestrosRouter(deps: {
+  edicion: ReturnType<typeof crearServicioEdicionCaso>
   estados: ReturnType<typeof crearServicioEstadoSiniestro>
   operaciones: ReturnType<typeof crearServicioBajasSiniestros>
   servicio: ReturnType<typeof crearServicioSiniestros>
@@ -54,7 +56,7 @@ export function crearSiniestrosRouter(deps: {
   ficha: Record<(typeof PESTANAS_FICHA)[number], PestanaFicha>
   requerirSesion: RequestHandler
 }) {
-  const { servicio, alta, creacion, operaciones, estados, ficha, requerirSesion } = deps
+  const { servicio, alta, creacion, operaciones, estados, edicion, ficha, requerirSesion } = deps
   const router = Router()
   router.use(requerirSesion, requerirRol('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'))
 
@@ -94,6 +96,13 @@ export function crearSiniestrosRouter(deps: {
     res.json(await servicio.opciones(usuarioDeSesion(req)))
   })
 
+  router.get('/:id/edicion', async (req, res) => {
+    res.set('Cache-Control', 'no-store')
+    res.json(await edicion.obtener(usuarioDeSesion(req), idSchema.parse(req.params.id)))
+  })
+  router.patch('/:id/datos', async (req, res) => {
+    res.json(await edicion.modificar(usuarioDeSesion(req), idSchema.parse(req.params.id), req.body))
+  })
   router.get('/:id/estados', soloAdministracion, async (req, res) => {
     res.set('Cache-Control', 'no-store')
     res.json(await estados.opciones(usuarioDeSesion(req), idSchema.parse(req.params.id)))

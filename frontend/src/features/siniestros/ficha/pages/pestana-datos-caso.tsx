@@ -1,4 +1,9 @@
-import { FileText, Flag, MapPin, UsersRound } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useRevalidator } from 'react-router'
+import { FileText, Flag, MapPin, Pencil, UsersRound } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Aviso } from '@/components/aviso'
+import { EditarDatosCaso } from '../components/editar-datos-caso'
 import { Badge } from '@/components/ui/badge'
 import { Dato } from '../../components/dato'
 import { BloqueFicha, PestanaFicha } from '../components/pestana-ficha'
@@ -9,8 +14,62 @@ import { useFicha } from '../hooks/use-ficha'
 export function PestanaDatosCaso() {
   const ficha = useFicha()
   const { hecho, lugar } = ficha
+  const [editando, setEditando] = useState(false)
+  const [mensaje, setMensaje] = useState<string | null>(null)
+  const [correoFallido, setCorreoFallido] = useState(false)
+  const revalidator = useRevalidator()
+  useEffect(() => {
+    if (!mensaje) return
+    const temporizador = window.setTimeout(() => setMensaje(null), 6000)
+    return () => window.clearTimeout(temporizador)
+  }, [mensaje])
+  if (editando)
+    return (
+      <EditarDatosCaso
+        ficha={ficha}
+        onCancelar={() => setEditando(false)}
+        onHecho={(resultado) => {
+          setEditando(false)
+          setMensaje(
+            resultado.modificado
+              ? 'Los datos del caso se actualizaron y el cambio quedó registrado en el historial.'
+              : 'No había cambios para guardar.',
+          )
+          setCorreoFallido(!resultado.correosEnviados)
+          void revalidator.revalidate()
+        }}
+      />
+    )
   return (
-    <PestanaFicha titulo="Datos del caso">
+    <PestanaFicha
+      titulo="Datos del caso"
+      acciones={
+        !ficha.fechaBaja && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setMensaje(null)
+              setCorreoFallido(false)
+              setEditando(true)
+            }}
+          >
+            <Pencil aria-hidden="true" />
+            Modificar datos
+          </Button>
+        )
+      }
+    >
+      {mensaje && (
+        <Aviso tipo="exito" className="mb-4">
+          {mensaje}
+        </Aviso>
+      )}
+      {correoFallido && (
+        <Aviso tipo="info" className="mb-4">
+          Los cambios y avisos internos se guardaron, pero no se pudieron enviar todos los mails de
+          reasignación.
+        </Aviso>
+      )}
       <div className="grid gap-5 lg:grid-cols-2">
         <BloqueFicha icono={FileText} titulo="Póliza">
           <dl className="grid gap-x-6 gap-y-4 text-lg sm:grid-cols-2">

@@ -13,6 +13,8 @@ import { crearServicioCrearSiniestro } from './siniestros-alta-crear.service.ts'
 import { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import { crearServicioEstadoSiniestro } from './siniestros-estado.service.ts'
+import { crearServicioEdicionCaso } from './siniestros-edicion.service.ts'
+import { crearCorreoReasignacion } from '../../lib/correo-reasignacion.ts'
 import { crearSiniestrosRouter } from './siniestros.routes.ts'
 import { crearServicioSiniestros } from './siniestros.service.ts'
 import { crearServicioVehiculosFicha } from './vehiculos/vehiculos-ficha.service.ts'
@@ -89,6 +91,11 @@ export const siniestrosRouter = crearSiniestrosRouter({
     urlSistema: env.APP_URL,
   }),
   operaciones,
+  edicion: crearServicioEdicionCaso({
+    transaccion: (trabajo) => getPrisma().$transaction(trabajo, { timeout: 15_000 }),
+    enviarAviso: crearCorreoReasignacion(configCorreo),
+    urlSistema: env.APP_URL,
+  }),
   estados: crearServicioEstadoSiniestro({
     transaccion: (trabajo) => getPrisma().$transaction(trabajo, { timeout: 15_000 }),
   }),

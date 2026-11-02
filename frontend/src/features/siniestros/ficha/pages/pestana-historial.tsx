@@ -12,6 +12,7 @@ const TIPOS: Record<TipoEventoHistorial, string> = {
   ASIGNACION: 'Asignación',
   REASIGNACION: 'Reasignación',
   CAMBIO_ESTADO: 'Cambio de estado',
+  MODIFICACION_DATOS: 'Modificación de datos',
   BAJA_SINIESTRO: 'Baja',
   REACTIVACION_SINIESTRO: 'Reactivación',
 }

@@ -127,11 +127,17 @@ export function NotificacionesPanel({ basePath }: { basePath: string }) {
                 </div>
                 <p className="mb-2 break-words">{aviso.mensaje}</p>
                 <Link
-                  to={`${basePath}/siniestros/${aviso.siniestro.id}`}
+                  to={
+                    aviso.puedeAbrirSiniestro
+                      ? `${basePath}/siniestros/${aviso.siniestro.id}`
+                      : `${basePath}/siniestros`
+                  }
                   className="inline-flex min-h-12 items-center font-semibold text-primary underline underline-offset-4"
                   onClick={() => void abrirNotificacion(aviso.id)}
                 >
-                  Ver siniestro {aviso.siniestro.numeroSiniestro}
+                  {aviso.puedeAbrirSiniestro
+                    ? `Ver siniestro ${aviso.siniestro.numeroSiniestro}`
+                    : 'Ir al listado de siniestros'}
                 </Link>
               </li>
             ))}

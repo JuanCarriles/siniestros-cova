@@ -13,6 +13,7 @@ export const bandejaNotificacionesSchema = z.strictObject({
       mensaje: z.string(),
       fecha: z.iso.datetime(),
       leida: z.boolean(),
+      puedeAbrirSiniestro: z.boolean(),
       siniestro: z.strictObject({ id: z.int().positive(), numeroSiniestro: z.string() }),
     }),
   ),

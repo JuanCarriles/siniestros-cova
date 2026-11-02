@@ -21,6 +21,7 @@ export const tipoEventoHistorialSchema = z.enum([
   'ASIGNACION',
   'REASIGNACION',
   'CAMBIO_ESTADO',
+  'MODIFICACION_DATOS',
   'BAJA_SINIESTRO',
   'REACTIVACION_SINIESTRO',
 ])

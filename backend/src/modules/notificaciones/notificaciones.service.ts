@@ -8,10 +8,15 @@ export function crearServicioNotificaciones(base: Base) {
   const filtro = (usuario: SesionUsuario): Prisma.NotificacionWhereInput => ({
     idUsuario: usuario.id,
     eliminado: false,
-    siniestro: {
-      eliminacionEnCurso: false,
-      ...(usuario.tipoUsuario === 'GESTOR' ? { idUsuario: usuario.id, eliminado: false } : {}),
-    },
+    siniestro: { eliminacionEnCurso: false },
+    ...(usuario.tipoUsuario === 'GESTOR'
+      ? {
+          OR: [
+            { siniestro: { idUsuario: usuario.id, eliminado: false } },
+            { tipoNotificacion: 'REASIGNACION_SINIESTRO' as const },
+          ],
+        }
+      : {}),
   })
   return {
     listar(usuario: SesionUsuario, pagina: number): Promise<BandejaNotificaciones> {
@@ -30,7 +35,9 @@ export function crearServicioNotificaciones(base: Base) {
             mensaje: true,
             fechaCreacion: true,
             leida: true,
-            siniestro: { select: { id: true, numeroSiniestro: true } },
+            siniestro: {
+              select: { id: true, numeroSiniestro: true, idUsuario: true, eliminado: true },
+            },
           },
         })
         return {
@@ -43,7 +50,10 @@ export function crearServicioNotificaciones(base: Base) {
             mensaje: f.mensaje,
             fecha: f.fechaCreacion.toISOString(),
             leida: f.leida,
-            siniestro: f.siniestro,
+            siniestro: { id: f.siniestro.id, numeroSiniestro: f.siniestro.numeroSiniestro },
+            puedeAbrirSiniestro:
+              usuario.tipoUsuario !== 'GESTOR' ||
+              (f.siniestro.idUsuario === usuario.id && !f.siniestro.eliminado),
           })),
         }
       })

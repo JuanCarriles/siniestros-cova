@@ -24,6 +24,11 @@ const evento = (tipoEvento: TipoEventoHistorial, descripcion: string): EventoHis
 })
 
 export const eventoHistorial = {
+  modificacionDatos: (cambios: string[]) =>
+    evento(
+      TipoEventoHistorial.MODIFICACION_DATOS,
+      `Se modificaron datos del caso: ${cambios.join('; ')}.`,
+    ),
   bajaSiniestro: (autor: Persona, fecha: Date) =>
     evento(
       TipoEventoHistorial.BAJA_SINIESTRO,
