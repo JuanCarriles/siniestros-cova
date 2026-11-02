@@ -7,8 +7,10 @@ import {
   vehiculoAltaSchema,
 } from '../../shared/src/schemas/siniestros-alta.ts'
 import {
+  aseguradorasPara,
   externaAFormulario,
   ocupanteAFormulario,
+  opcionesPara,
   personasDelSiniestro,
   titularAFormulario,
   vehiculoAFormulario,
@@ -127,4 +129,36 @@ test('el aviso de documento repetido no salta con la propia persona, sí con otr
   const personas = personasDelSiniestro({ vehiculos: [vehiculo], personasFuera: [] })
   assert.equal(documentoRepetido(personas, '27884102', 'p11'), null)
   assert.equal(documentoRepetido(personas, '27884102', null), 'titular del vehículo AA456EF')
+})
+
+test('un catálogo dado de baja que el registro tiene guardado sigue en su lista y se conserva', () => {
+  const opciones = {
+    aseguradoras: [{ id: 1, nombre: 'Litoral Seguros' }],
+    paises: [{ id: 1, nombre: 'Argentina' }],
+    provincias: [{ id: 2, nombre: 'Córdoba', idPais: 1 }],
+    tiposDocumento: [{ id: 1, nombre: 'DNI' }],
+  }
+  // Sancor (3), Santa Fe (21) y "Pasaporte" (4) se dieron de baja después de cargarse
+  const titular = {
+    ...vehiculo.titular,
+    idTipoDocumento: 4,
+    tipoDocumento: 'Pasaporte',
+    domicilio: { ...persona.domicilio, idPais: 1 },
+  }
+  const paraPersona = opcionesPara(opciones, titular)
+  assert.deepEqual(paraPersona.provincias.at(-1), {
+    id: 21,
+    nombre: 'Santa Fe (dada de baja)',
+    idPais: 1,
+  })
+  assert.deepEqual(paraPersona.tiposDocumento.at(-1), { id: 4, nombre: 'Pasaporte (dado de baja)' })
+  // El país sigue activo: no se repite
+  assert.equal(paraPersona.paises.length, 1)
+  assert.deepEqual(aseguradorasPara(opciones.aseguradoras, vehiculo).at(-1), {
+    id: 3,
+    nombre: 'Sancor (dada de baja)',
+  })
+  // Para cargar uno nuevo, solo los activos
+  assert.equal(opcionesPara(opciones, null), opciones)
+  assert.equal(aseguradorasPara(opciones.aseguradoras, null).length, 1)
 })

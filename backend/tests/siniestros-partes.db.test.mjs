@@ -175,22 +175,34 @@ test('PostgreSQL: agregar, modificar y dar de baja vehículos y personas desde l
           )
 
           // Modificar: el historial nombra los campos que cambiaron; sin cambios no registra nada
-          await vehiculos.modificar(
-            yo,
-            caso.id,
-            idVehiculo,
-            vehiculo({ color: 'Blanco', descripcionDanos: 'Paragolpes' }),
+          await vehiculos.modificar(yo, caso.id, idVehiculo, {
+            revision: 0,
+            datos: vehiculo({ color: 'Blanco', descripcionDanos: 'Paragolpes' }),
+          })
+          // Un formulario abierto antes del cambio, con lo mismo que quedó guardado: no pisa nada
+          await vehiculos.modificar(yo, caso.id, idVehiculo, {
+            revision: 0,
+            datos: vehiculo({ color: 'Blanco', descripcionDanos: 'Paragolpes' }),
+          })
+          // Con algo distinto, se rechaza y no cambia nada: el otro usuario había cambiado el color
+          await assert.rejects(
+            vehiculos.modificar(yo, caso.id, idVehiculo, {
+              revision: 0,
+              datos: vehiculo({ marca: 'Peugeot' }),
+            }),
+            (e) =>
+              e.status === 409 &&
+              e.details?.codigo === 'REGISTRO_DESACTUALIZADO' &&
+              e.details.revision === 1,
           )
-          await vehiculos.modificar(
-            yo,
-            caso.id,
-            idVehiculo,
-            vehiculo({ color: 'Blanco', descripcionDanos: 'Paragolpes' }),
+          const vehiculoGuardado = await tx.vehiculo.findUniqueOrThrow({
+            where: { id: idVehiculo },
+          })
+          assert.deepEqual(
+            [vehiculoGuardado.marca, vehiculoGuardado.color, vehiculoGuardado.revision],
+            ['Fiat', 'Blanco', 1],
           )
-          await personas.modificar(
-            yo,
-            caso.id,
-            idTitular,
+          const datosTitular = (domicilio) =>
             titular({
               nombreCompletoRazonSocial: 'Norma Quiroga',
               idTipoDocumento: String(tipoDni.id),
@@ -201,18 +213,49 @@ test('PostgreSQL: agregar, modificar y dar de baja vehículos y personas desde l
                 localidad: 'Rosario',
                 calle: '',
                 codigoPostal: '',
+                ...domicilio,
               },
-            }),
-          )
+            })
+          await personas.modificar(yo, caso.id, idTitular, { revision: 0, datos: datosTitular() })
           const titularGuardado = await tx.personaInvolucrada.findUniqueOrThrow({
             where: { id: idTitular },
             include: { direccion: true },
           })
           assert.equal(titularGuardado.telefono, '11 5520-8834')
           assert.equal(titularGuardado.direccion.localidad, 'Rosario')
+          await assert.rejects(
+            personas.modificar(yo, caso.id, idTitular, {
+              revision: 0,
+              datos: datosTitular({ localidad: 'Funes' }),
+            }),
+            (e) => e.status === 409 && e.details?.codigo === 'REGISTRO_DESACTUALIZADO',
+          )
+
+          // Una dirección que también usa otro registro no se corrige en su lugar: la persona pasa a tener una copia
+          await tx.usuario.update({
+            where: { id: gestora.id },
+            data: { idDireccion: titularGuardado.idDireccion },
+          })
+          await personas.modificar(yo, caso.id, idTitular, {
+            revision: 1,
+            datos: datosTitular({ localidad: 'Funes' }),
+          })
+          const conCopia = await tx.personaInvolucrada.findUniqueOrThrow({
+            where: { id: idTitular },
+            include: { direccion: true },
+          })
+          assert.notEqual(conCopia.idDireccion, titularGuardado.idDireccion)
+          assert.equal(conCopia.direccion.localidad, 'Funes')
+          const deLaGestora = await tx.direccion.findUniqueOrThrow({
+            where: { id: titularGuardado.idDireccion },
+          })
+          assert.equal(deLaGestora.localidad, 'Rosario')
           // Los datos de otro tipo de persona no se aceptan
           await assert.rejects(
-            personas.modificar(yo, caso.id, idTitular, { rolSinVehiculo: 'Peatón' }),
+            personas.modificar(yo, caso.id, idTitular, {
+              revision: 2,
+              datos: { rolSinVehiculo: 'Peatón' },
+            }),
             { name: 'ZodError' },
           )
 
@@ -246,6 +289,10 @@ test('PostgreSQL: agregar, modificar y dar de baja vehículos y personas desde l
             [
               'PERSONA',
               'Ana Prueba modificó los datos de Norma Quiroga, titular del vehículo AE 123 CD (teléfono y domicilio)',
+            ],
+            [
+              'PERSONA',
+              'Ana Prueba modificó los datos de Norma Quiroga, titular del vehículo AE 123 CD (domicilio)',
             ],
             ['PERSONA', 'Ana Prueba dio de baja a Norma Quiroga, titular del vehículo AE 123 CD,'],
             [

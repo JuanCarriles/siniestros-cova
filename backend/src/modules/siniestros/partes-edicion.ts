@@ -1,4 +1,5 @@
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
+import type { RegistroDesactualizado } from '@cova/shared/schemas/partes-siniestro'
 import { normalizarDocumento, normalizarDominio } from '@cova/shared/schemas/siniestros-alta'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
@@ -13,9 +14,14 @@ export type Transaccion = <T>(trabajo: (tx: Tx) => Promise<T>) => Promise<T>
 /**
  * Antes de cualquier cambio: el acceso de la ficha (el gestor, solo sus casos) y que el siniestro se pueda tocar.
  * Uno dado de baja o cerrado se consulta pero no se modifica. Devuelve quién hace el cambio, para el historial.
+ *
+ * Bloquea la fila del siniestro hasta el final de la transacción: los cambios de partes de un mismo siniestro se
+ * hacen de a uno. Así lo que se controla (dominio y documento sin repetir, un titular por vehículo, un vehículo sin
+ * personas antes de su baja) sigue valiendo al guardar, aunque dos usuarios confirmen a la vez.
  */
 export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestro: number) {
   await exigirAccesoSiniestro(tx, usuario, idSiniestro)
+  await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${idSiniestro} FOR UPDATE`
   const siniestro = await tx.siniestro.findUniqueOrThrow({
     where: { id: idSiniestro },
     select: { eliminado: true, estadoSiniestro: { select: { esCierre: true } } },
@@ -33,6 +39,20 @@ export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestr
   })
   if (!autor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
   return autor
+}
+
+/**
+ * El formulario se abrió con la revisión `abierta`: si el registro se modificó después, guardarlo pisaría ese cambio
+ * sin que nadie lo note. Se rechaza; lo escrito sigue en el formulario.
+ */
+export function exigirRevision(actual: number, abierta: number, que: string) {
+  if (actual === abierta) return
+  const detalle: RegistroDesactualizado = { codigo: 'REGISTRO_DESACTUALIZADO', revision: actual }
+  throw new HttpError(
+    409,
+    `Otra persona modificó ${que} mientras lo editabas. Lo que escribiste sigue en el formulario: si guardás de nuevo, reemplaza esos cambios; si cancelás, ves la versión actual.`,
+    detalle,
+  )
 }
 
 /** Los catálogos elegidos tienen que seguir activos. Solo se controlan los que cambiaron. */

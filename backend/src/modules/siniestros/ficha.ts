@@ -8,7 +8,7 @@ export const selectDireccion = {
   calle: true,
   codigoPostal: true,
   idProvincia: true,
-  provincia: { select: { nombre: true, pais: { select: { nombre: true } } } },
+  provincia: { select: { nombre: true, idPais: true, pais: { select: { nombre: true } } } },
 } as const satisfies Prisma.DireccionSelect
 
 type FilaDireccion = Prisma.DireccionGetPayload<{ select: typeof selectDireccion }>
@@ -17,6 +17,7 @@ type FilaDireccion = Prisma.DireccionGetPayload<{ select: typeof selectDireccion
 export function aDireccion(d: FilaDireccion | null): DireccionFicha | null {
   if (!d) return null
   return {
+    idPais: d.provincia?.idPais ?? null,
     pais: d.provincia?.pais.nombre ?? null,
     idProvincia: d.idProvincia,
     provincia: d.provincia?.nombre ?? null,

@@ -10,6 +10,7 @@ import pg from 'pg'
 const CARPETA = new URL('../prisma/migrations/', import.meta.url)
 const VEHICULO_SINIESTRO = '20261027130000_vehiculo_siniestro'
 const NUMERO_UNICO = '20261028120000_numero_siniestro_unico'
+const PARTES_CONCURRENCIA = '20261104120000_partes_concurrencia'
 
 if (process.env.NODE_ENV === 'production') throw new Error('No correr en producción')
 if (!process.env.DATABASE_URL) throw new Error('Falta DATABASE_URL')
@@ -153,6 +154,60 @@ test('migración numero_siniestro_unico: con repetidos se detiene y los lista; s
     await db.query(`UPDATE "Siniestro" SET "numeroSiniestro" = 'S-2' WHERE id = $1`, [b])
     await db.query(await sql(NUMERO_UNICO))
     await assert.rejects(siniestro('s-2'), { code: '23505' }, 'sin distinguir mayúsculas')
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración partes_concurrencia: con titulares o dominios repetidos se detiene; sin repetidos, los frena', async () => {
+  const { db, borrar } = await baseHasta(PARTES_CONCURRENCIA)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const caso = await siniestro('S-1')
+    const vehiculo = (dominio, eliminado = false) =>
+      uno(
+        `INSERT INTO "Vehiculo" (dominio, "idSiniestro", eliminado, "fechaBaja")
+         VALUES ($1, $2, $3, CASE WHEN $3 THEN now() END) RETURNING id`,
+        [dominio, caso, eliminado],
+      )
+    const titular = (idVehiculo, eliminado = false) =>
+      uno(
+        `INSERT INTO "PersonaInvolucrada" ("idSiniestro", "idVehiculo", "esPropietario", eliminado, "fechaBaja")
+         VALUES ($1, $2, true, $3, CASE WHEN $3 THEN now() END) RETURNING id`,
+        [caso, idVehiculo, eliminado],
+      )
+    const a = await vehiculo('AE 123 CD')
+    const b = await vehiculo('ae-123cd')
+    // Los dados de baja no cuentan
+    await vehiculo('AE123CD', true)
+    const t1 = await titular(a)
+    const t2 = await titular(a)
+    await titular(a, true)
+
+    await assert.rejects(db.query(await sql(PARTES_CONCURRENCIA)), (error) => {
+      assert.ok(error.message.includes(`vehículo ${a} (personas ${t1}, ${t2})`), error.message)
+      return true
+    })
+    await db.query(
+      `UPDATE "PersonaInvolucrada" SET eliminado = true, "fechaBaja" = now() WHERE id = $1`,
+      [t2],
+    )
+    await assert.rejects(db.query(await sql(PARTES_CONCURRENCIA)), (error) => {
+      assert.ok(error.message.includes(`siniestro ${caso} (vehículos ${a}, ${b})`), error.message)
+      return true
+    })
+
+    await db.query(`UPDATE "Vehiculo" SET eliminado = true, "fechaBaja" = now() WHERE id = $1`, [b])
+    await db.query(await sql(PARTES_CONCURRENCIA))
+    await assert.rejects(
+      vehiculo('AE-123 cd'),
+      { code: '23505' },
+      'el mismo dominio escrito distinto',
+    )
+    await assert.rejects(titular(a), { code: '23505' }, 'un segundo titular activo')
+    await vehiculo('AE 123 CD', true)
+    const { rows } = await db.query(`SELECT revision FROM "Vehiculo" WHERE id = $1`, [a])
+    assert.equal(rows[0].revision, 0)
   } finally {
     await borrar()
   }

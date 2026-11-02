@@ -9,6 +9,7 @@ import {
   LUGARES_EN_VEHICULO,
   SEXOS,
   type OcupanteAltaData,
+  type OpcionesPartes,
   type PersonaExternaAltaData,
   type TitularAltaData,
   type VehiculoAltaData,
@@ -16,7 +17,7 @@ import {
 
 // De lo que muestra la ficha a lo que precargan los formularios del alta (CU-10 1.c.5, E5-06): modificar un vehículo
 // o una persona abre el mismo modal del alta con sus datos. Las personas llevan una clave ("p12") para no avisarse
-// a sí mismas como documento repetido.
+// a sí mismas como documento repetido. Un catálogo dado de baja que el registro tiene guardado sigue en su lista.
 
 export const clavePersona = (id: number) => `p${id}`
 
@@ -138,5 +139,56 @@ export function personasDelSiniestro({ vehiculos, personasFuera }: VehiculosYPar
       ...persona(p),
       rolSinVehiculo: p.rolSinVehiculo,
     })),
+  }
+}
+
+// ------------------------------------------------------------------ Catálogos dados de baja
+
+type Opcion = { id: number; nombre: string }
+
+/**
+ * Lo guardado sigue en la lista aunque se haya dado de baja ("Santa Fe (dada de baja)"): se puede mantener al
+ * modificar otro dato, en vez de quedar vacío y borrarse al guardar. No aparece para los demás registros.
+ */
+function conGuardado<T extends Opcion>(lista: T[], guardado: T | null, baja: string): T[] {
+  if (!guardado || lista.some((o) => o.id === guardado.id)) return lista
+  return [...lista, { ...guardado, nombre: `${guardado.nombre} (${baja})` }]
+}
+
+/** Las aseguradoras para modificar el vehículo, con la suya aunque esté dada de baja */
+export function aseguradorasPara(
+  aseguradoras: OpcionesPartes['aseguradoras'],
+  v: VehiculoFicha | null,
+): OpcionesPartes['aseguradoras'] {
+  const suya =
+    v?.idAseguradora && v.aseguradora ? { id: v.idAseguradora, nombre: v.aseguradora } : null
+  return conGuardado(aseguradoras, suya, 'dada de baja')
+}
+
+/** Los catálogos para modificar la persona, con su tipo de documento, país y provincia aunque estén dados de baja */
+export function opcionesPara(opciones: OpcionesPartes, p: PersonaFicha | null): OpcionesPartes {
+  if (!p) return opciones
+  const d = p.domicilio
+  return {
+    ...opciones,
+    tiposDocumento: conGuardado(
+      opciones.tiposDocumento,
+      p.idTipoDocumento && p.tipoDocumento
+        ? { id: p.idTipoDocumento, nombre: p.tipoDocumento }
+        : null,
+      'dado de baja',
+    ),
+    paises: conGuardado(
+      opciones.paises,
+      d?.idPais && d.pais ? { id: d.idPais, nombre: d.pais } : null,
+      'dado de baja',
+    ),
+    provincias: conGuardado(
+      opciones.provincias,
+      d?.idProvincia && d.idPais && d.provincia
+        ? { id: d.idProvincia, nombre: d.provincia, idPais: d.idPais }
+        : null,
+      'dada de baja',
+    ),
   }
 }

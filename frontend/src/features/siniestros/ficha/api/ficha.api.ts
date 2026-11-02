@@ -44,8 +44,17 @@ export const pestanasFicha = {
 export const partes = {
   agregarVehiculo: (id: number, datos: VehiculoAltaData): Promise<ParteCreada> =>
     api(`/siniestros/${id}/vehiculos`, { method: 'POST', body: datos }),
-  modificarVehiculo: (id: number, idVehiculo: number, datos: VehiculoAltaData): Promise<void> =>
-    api(`/siniestros/${id}/vehiculos/${idVehiculo}`, { method: 'PUT', body: datos }),
+  // revision: la que tenía al abrir el formulario. Si cambió, 409 (RegistroDesactualizado) y no se guarda nada.
+  modificarVehiculo: (
+    id: number,
+    idVehiculo: number,
+    revision: number,
+    datos: VehiculoAltaData,
+  ): Promise<void> =>
+    api(`/siniestros/${id}/vehiculos/${idVehiculo}`, {
+      method: 'PUT',
+      body: { revision, datos },
+    }),
   darDeBajaVehiculo: (id: number, idVehiculo: number): Promise<void> =>
     api(`/siniestros/${id}/vehiculos/${idVehiculo}/baja`, { method: 'PATCH' }),
   agregarPersona: (id: number, pedido: AgregarPersona): Promise<ParteCreada> =>
@@ -53,9 +62,13 @@ export const partes = {
   modificarPersona: (
     id: number,
     idPersona: number,
+    revision: number,
     datos: TitularAltaData | OcupanteAltaData | PersonaExternaAltaData,
   ): Promise<void> =>
-    api(`/siniestros/${id}/personas/${idPersona}`, { method: 'PUT', body: datos }),
+    api(`/siniestros/${id}/personas/${idPersona}`, {
+      method: 'PUT',
+      body: { revision, datos },
+    }),
   darDeBajaPersona: (id: number, idPersona: number): Promise<void> =>
     api(`/siniestros/${id}/personas/${idPersona}/baja`, { method: 'PATCH' }),
 }
