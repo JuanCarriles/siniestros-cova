@@ -156,8 +156,14 @@ export function VehiculoDialog({
     })
 
   return (
-    <Dialog open onOpenChange={(abrir) => !abrir && onCerrar()}>
+    <Dialog
+      open
+      onOpenChange={(abrir) => {
+        if (!abrir && !isSubmitting) onCerrar()
+      }}
+    >
       <DialogContent
+        showCloseButton={!isSubmitting}
         size="wide"
         onInteractOutside={(e) => e.preventDefault()}
         onOpenAutoFocus={(e) => {

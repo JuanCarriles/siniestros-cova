@@ -92,8 +92,14 @@ export function PeritoDialog({
   })
 
   return (
-    <Dialog open onOpenChange={(abrir) => !abrir && onCerrar()}>
+    <Dialog
+      open
+      onOpenChange={(abrir) => {
+        if (!abrir && !isSubmitting) onCerrar()
+      }}
+    >
       <DialogContent
+        showCloseButton={!isSubmitting}
         onInteractOutside={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => {
           const elemento = elementoAlCerrar()

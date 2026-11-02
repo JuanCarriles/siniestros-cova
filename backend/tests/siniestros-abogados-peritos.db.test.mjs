@@ -129,6 +129,16 @@ test('PostgreSQL: agregar, modificar y dar de baja abogados y peritos desde la f
               e.details.revision === 1,
           )
           assert.equal((await abogadoGuardado(sofia)).telefono, null)
+          // Tampoco devuelve una representación anterior al guardar un cambio de contacto: el formulario viejo todavía
+          // tenía a la persona sin nombre
+          await assert.rejects(
+            abogados.modificar(yo, caso.id, sofia, {
+              revision: 0,
+              datos: abogado({ telefono: '341 000-0000', representados: [martin, sinNombre] }),
+            }),
+            (e) => e.status === 409 && e.details?.codigo === 'REGISTRO_DESACTUALIZADO',
+          )
+          assert.equal(await abogadoDe(sinNombre), null)
           // Valeria perdió a Norma: su revisión subió, un formulario suyo abierto antes no la devuelve sin aviso
           assert.equal((await abogadoGuardado(valeria.id)).revision, 1)
 
@@ -234,6 +244,19 @@ test('PostgreSQL: agregar, modificar y dar de baja abogados y peritos desde la f
           const guardado = await tx.perito.findUniqueOrThrow({ where: { id: cesvi } })
           assert.equal(guardado.cerrado, true)
           assert.ok((await movimiento()) > ultimoMovimiento)
+
+          // Un formulario abierto antes del cierre, que solo cambia el teléfono, no vuelve la pericia a pendiente
+          await assert.rejects(
+            peritos.modificar(yo, caso.id, cesvi, {
+              revision: 1,
+              datos: perito({ telefono: '341 555-9999' }),
+            }),
+            (e) => e.status === 409 && e.details?.codigo === 'REGISTRO_DESACTUALIZADO',
+          )
+          const sigueCerrado = await tx.perito.findUniqueOrThrow({ where: { id: cesvi } })
+          assert.equal(sigueCerrado.cerrado, true)
+          assert.equal(sigueCerrado.fechaCierre?.toISOString(), guardado.fechaCierre?.toISOString())
+          assert.equal(sigueCerrado.telefono, '341 555-0000')
 
           // Corregir la fecha de un cierre ya registrado, no
           await reiniciarMovimiento()

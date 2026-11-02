@@ -63,6 +63,27 @@ async function buscarAbogado(tx: Tx, idSiniestro: number, idAbogado: number) {
   return abogado
 }
 
+/**
+ * Un abogado puede figurar en varios siniestros, y el bloqueo de cada siniestro no ordena los cambios que llegan
+ * desde fichas distintas: se bloquean también sus filas, en un solo pedido y por orden de id, hasta el final de la
+ * transacción. Así la baja ve lo que se guardó en los otros siniestros: dos bajas a la vez desde fichas distintas no
+ * dejan activo a un abogado que ya no representa a nadie.
+ */
+async function bloquearAbogados(tx: Tx, ids: (number | null)[]) {
+  const unicos = [...new Set(ids)].filter((id): id is number => id !== null).sort((a, b) => a - b)
+  if (unicos.length)
+    await tx.$queryRaw`SELECT "id" FROM "Abogado" WHERE "id" = ANY(${unicos}) ORDER BY "id" FOR UPDATE`
+}
+
+/** Quién representa hoy a las personas del siniestro elegidas */
+const abogadosDe = async (tx: Tx, idSiniestro: number, ids: number[]) =>
+  (
+    await tx.personaInvolucrada.findMany({
+      where: { id: { in: ids }, idSiniestro },
+      select: { idAbogado: true },
+    })
+  ).map((p) => p.idAbogado)
+
 /** ¿Representa a alguien en otro siniestro? */
 const representaEnOtros = async (tx: Tx, idSiniestro: number, idAbogado: number) =>
   (await tx.personaInvolucrada.count({
@@ -105,12 +126,10 @@ export function crearServicioAbogadosGestion({ transaccion }: { transaccion: Tra
       return transaccion(async (tx) => {
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
         const personas = await exigirRepresentados(tx, idSiniestro, datos.representados)
+        const ids = personas.map((p) => p.id)
+        await bloquearAbogados(tx, await abogadosDe(tx, idSiniestro, ids))
         const { id } = await tx.abogado.create({ data: datosAbogado(datos), select: { id: true } })
-        await pasarRepresentados(
-          tx,
-          personas.map((p) => p.id),
-          id,
-        )
+        await pasarRepresentados(tx, ids, id)
         await tx.historialSiniestro.create({
           data: {
             idSiniestro,
@@ -135,6 +154,10 @@ export function crearServicioAbogadosGestion({ transaccion }: { transaccion: Tra
     ) {
       await transaccion(async (tx) => {
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
+        await bloquearAbogados(tx, [
+          idAbogado,
+          ...(await abogadosDe(tx, idSiniestro, datos.representados)),
+        ])
         const actual = await buscarAbogado(tx, idSiniestro, idAbogado)
         const representaba = await tx.personaInvolucrada.findMany({
           where: { idAbogado, idSiniestro, eliminado: false },
@@ -183,6 +206,7 @@ export function crearServicioAbogadosGestion({ transaccion }: { transaccion: Tra
     async darDeBaja(usuario: SesionUsuario, idSiniestro: number, idAbogado: number) {
       await transaccion(async (tx) => {
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
+        await bloquearAbogados(tx, [idAbogado])
         const actual = await buscarAbogado(tx, idSiniestro, idAbogado)
         await tx.personaInvolucrada.updateMany({
           where: { idAbogado, idSiniestro, eliminado: false },

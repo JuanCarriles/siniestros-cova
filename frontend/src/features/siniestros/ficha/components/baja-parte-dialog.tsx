@@ -120,6 +120,7 @@ export function BajaParteDialog({
       onOpenChange={(abierto) => !abierto && !enviando && onCerrar()}
     >
       <DialogContent
+        showCloseButton={!enviando}
         onCloseAutoFocus={(e) => {
           const elemento = elementoAlCerrar()
           if (elemento) {
