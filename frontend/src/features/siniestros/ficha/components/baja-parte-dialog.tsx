@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { VehiculoFicha } from '@cova/shared/schemas/ficha-siniestro'
+import type { AbogadoFicha, PeritoFicha, VehiculoFicha } from '@cova/shared/schemas/ficha-siniestro'
 import type { VehiculoConPersonas } from '@cova/shared/schemas/partes-siniestro'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,10 @@ import { nombreDe } from '../formato'
 import type { PersonaEnFicha } from './persona-ficha'
 
 export type PedidoBaja =
-  { tipo: 'vehiculo'; vehiculo: VehiculoFicha } | { tipo: 'persona'; persona: PersonaEnFicha }
+  | { tipo: 'vehiculo'; vehiculo: VehiculoFicha }
+  | { tipo: 'persona'; persona: PersonaEnFicha }
+  | { tipo: 'abogado'; abogado: AbogadoFicha }
+  | { tipo: 'perito'; perito: PeritoFicha; nombreTipo: string }
 
 type PersonaPendiente = VehiculoConPersonas['personas'][number]
 
@@ -33,8 +36,9 @@ function comoFigura(p: PersonaEnFicha) {
   return `${p.tipo} del vehículo ${p.vehiculo}`
 }
 
-// Dar de baja un vehículo o una persona desde la ficha (CU-10 1.c.6): se confirma antes. Un vehículo con titular u
-// ocupantes no se puede dar de baja (1.c.6.1): el modal dice a quiénes dar de baja primero, sin botón para seguir.
+// Dar de baja un vehículo, una persona (CU-10 1.c.6, E5-06), un abogado o un perito (1.d y 1.e, E5-07) desde la
+// ficha: se confirma antes. Un vehículo con titular u ocupantes no se puede dar de baja (1.c.6.1): el modal dice a
+// quiénes dar de baja primero, sin botón para seguir.
 export function BajaParteDialog({
   pedido: pedidoActual,
   onConfirmar,
@@ -96,6 +100,18 @@ export function BajaParteDialog({
   } else if (pedido?.tipo === 'persona') {
     titulo = `¿Dar de baja a ${nombreDe(pedido.persona.persona)}?`
     descripcion = `Deja de figurar como ${comoFigura(pedido.persona)}${pedido.persona.persona.abogado ? ' y entre los representados de su abogado' : ''}. El cambio queda en el historial del siniestro.`
+  } else if (pedido?.tipo === 'abogado') {
+    const { nombreCompleto, representa } = pedido.abogado
+    titulo = `¿Dar de baja al abogado ${nombreCompleto}?`
+    descripcion = `Deja de figurar en este siniestro y ${
+      representa.length === 1
+        ? `${nombreDe(representa[0])} queda`
+        : `las ${representa.length} personas que representa quedan`
+    } sin abogado. El cambio queda en el historial del siniestro.`
+  } else if (pedido?.tipo === 'perito') {
+    titulo = `¿Dar de baja al ${pedido.nombreTipo} ${pedido.perito.nombre}?`
+    descripcion =
+      'Deja de figurar en el siniestro y su lugar queda libre para cargar otro. El cambio queda en el historial del siniestro.'
   }
 
   return (
@@ -104,6 +120,7 @@ export function BajaParteDialog({
       onOpenChange={(abierto) => !abierto && !enviando && onCerrar()}
     >
       <DialogContent
+        showCloseButton={!enviando}
         onCloseAutoFocus={(e) => {
           const elemento = elementoAlCerrar()
           if (elemento) {

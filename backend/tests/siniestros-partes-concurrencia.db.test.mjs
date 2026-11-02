@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { agregarPersonaSchema } from '@cova/shared/schemas/partes-siniestro'
-import { vehiculoAltaSchema } from '@cova/shared/schemas/siniestros-alta'
+import { peritoAltaSchema, vehiculoAltaSchema } from '@cova/shared/schemas/siniestros-alta'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
+import { crearServicioAbogadosGestion } from '../src/modules/siniestros/abogados/abogados-gestion.service.ts'
+import { crearServicioPeritosGestion } from '../src/modules/siniestros/peritos/peritos-gestion.service.ts'
 import { crearServicioPersonasGestion } from '../src/modules/siniestros/personas/personas-gestion.service.ts'
+import { crearServicioBajasSiniestros } from '../src/modules/siniestros/siniestros-bajas.service.ts'
 import { crearServicioVehiculosGestion } from '../src/modules/siniestros/vehiculos/vehiculos-gestion.service.ts'
 
 // CU-10 1.c (E5-06): dos usuarios confirman a la vez sobre el mismo siniestro. Cada operación corre en su propia
@@ -14,6 +17,8 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
   const base = { transaccion: (trabajo) => prisma.$transaction(trabajo, { timeout: 15_000 }) }
   const vehiculos = crearServicioVehiculosGestion(base)
   const personas = crearServicioPersonasGestion(base)
+  const peritos = crearServicioPeritosGestion(base)
+  const abogados = crearServicioAbogadosGestion(base)
 
   const estado = await prisma.estadoSiniestro.findFirstOrThrow({ where: { esCierre: false } })
   const aseguradora = await prisma.aseguradora.create({ data: { nombre: `Concurrencia ${marca}` } })
@@ -30,21 +35,37 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
       idDireccion: direccion.id,
     },
   })
-  const siniestro = await prisma.siniestro.create({
+  const administradora = await prisma.usuario.create({
     data: {
-      numeroSiniestro: `CONCURRENCIA-${marca}`,
-      numeroPoliza: 'P',
-      fechaAsignacion: new Date(),
-      fechaUltimoMovimiento: new Date(),
-      demorado: false,
-      menorEdadInvolucrado: false,
-      idEstadoSiniestro: estado.id,
-      idAseguradora: aseguradora.id,
-      idUsuario: gestora.id,
+      nombres: 'Eva',
+      apellidos: 'Prueba',
+      documento: '0',
+      telefono: '0',
+      email: `eva.concurrencia.${marca}@example.invalid`,
+      contrasena: '-',
+      tipoUsuario: 'ADMINISTRADOR',
+      idDireccion: direccion.id,
     },
   })
+  const crearSiniestro = (numero) =>
+    prisma.siniestro.create({
+      data: {
+        numeroSiniestro: numero,
+        numeroPoliza: 'P',
+        fechaAsignacion: new Date(),
+        fechaUltimoMovimiento: new Date(),
+        demorado: false,
+        menorEdadInvolucrado: false,
+        idEstadoSiniestro: estado.id,
+        idAseguradora: aseguradora.id,
+        idUsuario: gestora.id,
+      },
+    })
+  const siniestro = await crearSiniestro(`CONCURRENCIA-${marca}`)
+  const otro = await crearSiniestro(`CONCURRENCIA-OTRO-${marca}`)
   const yo = { ...gestora, tipoUsuario: gestora.tipoUsuario }
   const idSiniestro = siniestro.id
+  let idAbogado = null
 
   const vehiculo = (dominio) =>
     vehiculoAltaSchema.parse({
@@ -151,14 +172,109 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
       0,
       'ninguna persona activa queda en un vehículo dado de baja',
     )
+
+    // Dos peritos CESVI a la vez (E5-07): uno de cada tipo
+    const perito = (nombre) =>
+      peritoAltaSchema.parse({
+        tipoPerito: 'CESVI',
+        nombre,
+        telefono: '',
+        email: '',
+        fechaSolicitud: '2026-10-01',
+        fechaCierre: '',
+      })
+    unaSola(
+      await Promise.allSettled([
+        peritos.agregar(yo, idSiniestro, perito('Uno')),
+        peritos.agregar(yo, idSiniestro, perito('Dos')),
+      ]),
+      409,
+    )
+    assert.equal(
+      await prisma.perito.count({ where: { idSiniestro, tipoPerito: 'CESVI', eliminado: false } }),
+      1,
+    )
+
+    // Un abogado en dos siniestros, dado de baja desde las dos fichas a la vez (E5-07): cada baja bloquea un
+    // siniestro distinto. La que llega segunda tiene que ver que la otra ya le quitó sus personas y darlo de baja.
+    ;({ id: idAbogado } = await prisma.abogado.create({
+      data: { nombreCompleto: 'Luis Compartido' },
+    }))
+    for (const id of [idSiniestro, otro.id])
+      await prisma.personaInvolucrada.create({
+        data: { idSiniestro: id, nombreCompletoRazonSocial: 'Representada', idAbogado },
+      })
+    const bajas = await Promise.allSettled([
+      abogados.darDeBaja(yo, idSiniestro, idAbogado),
+      abogados.darDeBaja(yo, otro.id, idAbogado),
+    ])
+    assert.ok(
+      bajas.every((r) => r.status === 'fulfilled'),
+      String(bajas.find((r) => r.status === 'rejected')?.reason),
+    )
+    assert.equal(await prisma.personaInvolucrada.count({ where: { idAbogado } }), 0)
+    assert.equal(
+      (await prisma.abogado.findUniqueOrThrow({ where: { id: idAbogado } })).eliminado,
+      true,
+      'no queda activo un abogado que ya no representa a nadie',
+    )
+
+    // La baja del siniestro mientras se agrega un perito: la operación ya pasó el control de acceso y espera el
+    // bloqueo. Cuando la baja se confirma, el perito no se carga en un siniestro dado de baja.
+    let confirmarBaja
+    const pausa = new Promise((resolver) => (confirmarBaja = resolver))
+    const siniestros = crearServicioBajasSiniestros({
+      base: {
+        transaccion: (trabajo) =>
+          prisma.$transaction(
+            async (tx) => {
+              const resultado = await trabajo(tx)
+              await pausa
+              return resultado
+            },
+            { timeout: 15_000 },
+          ),
+      },
+      almacenamiento: () => ({ eliminar: async () => {} }),
+    })
+    const baja = siniestros.darDeBaja({ ...administradora }, idSiniestro)
+    // La baja ya tiene el siniestro bloqueado y el cambio hecho, sin confirmar
+    await esperar(prisma, `state = 'idle in transaction'`)
+    const alta = peritos.agregar(yo, idSiniestro, { ...perito('Médico'), tipoPerito: 'MEDICO' })
+    await esperar(prisma, `wait_event_type = 'Lock'`)
+    confirmarBaja()
+    await baja
+    await assert.rejects(alta, (e) => e.status === 409 && /dado de baja/.test(e.message))
+    assert.equal(
+      await prisma.perito.count({ where: { idSiniestro, tipoPerito: 'MEDICO' } }),
+      0,
+      'no se carga un perito en un siniestro dado de baja',
+    )
   } finally {
-    await prisma.historialSiniestro.deleteMany({ where: { idSiniestro } })
-    await prisma.personaInvolucrada.deleteMany({ where: { idSiniestro } })
-    await prisma.vehiculo.deleteMany({ where: { idSiniestro } })
-    await prisma.siniestro.delete({ where: { id: idSiniestro } })
+    for (const id of [idSiniestro, otro.id]) {
+      await prisma.historialSiniestro.deleteMany({ where: { idSiniestro: id } })
+      await prisma.perito.deleteMany({ where: { idSiniestro: id } })
+      await prisma.personaInvolucrada.deleteMany({ where: { idSiniestro: id } })
+      await prisma.vehiculo.deleteMany({ where: { idSiniestro: id } })
+      await prisma.siniestro.delete({ where: { id } })
+    }
+    if (idAbogado) await prisma.abogado.delete({ where: { id: idAbogado } })
+    await prisma.usuario.delete({ where: { id: administradora.id } })
     await prisma.usuario.delete({ where: { id: gestora.id } })
     await prisma.direccion.delete({ where: { id: direccion.id } })
     await prisma.aseguradora.delete({ where: { id: aseguradora.id } })
     await disconnectPrisma()
   }
 })
+
+/** Espera a que alguna conexión a esta base esté en la situación pedida (ver pg_stat_activity) */
+async function esperar(prisma, condicion) {
+  for (let intento = 0; intento < 250; intento++) {
+    const [{ cantidad }] = await prisma.$queryRawUnsafe(
+      `SELECT count(*)::int AS cantidad FROM pg_stat_activity WHERE datname = current_database() AND ${condicion}`,
+    )
+    if (cantidad > 0) return
+    await new Promise((resolver) => setTimeout(resolver, 20))
+  }
+  throw new Error(`Ninguna conexión llegó a: ${condicion}`)
+}

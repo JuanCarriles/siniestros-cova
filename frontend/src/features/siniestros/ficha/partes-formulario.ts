@@ -1,4 +1,6 @@
 import type {
+  AbogadoFicha,
+  PeritoFicha,
   PersonaFicha,
   PersonaVehiculoFicha,
   VehiculoFicha,
@@ -8,16 +10,20 @@ import {
   ESTADOS_CIVILES,
   LUGARES_EN_VEHICULO,
   SEXOS,
+  hoyArgentina,
   type OcupanteAltaData,
   type OpcionesPartes,
   type PersonaExternaAltaData,
   type TitularAltaData,
   type VehiculoAltaData,
 } from '@cova/shared/schemas/siniestros-alta'
+import type { PersonasRepresentables } from '../abogados-alta'
+import type { AbogadoBorrador, PeritoBorrador } from '../borrador-alta'
 
-// De lo que muestra la ficha a lo que precargan los formularios del alta (CU-10 1.c.5, E5-06): modificar un vehículo
-// o una persona abre el mismo modal del alta con sus datos. Las personas llevan una clave ("p12") para no avisarse
-// a sí mismas como documento repetido. Un catálogo dado de baja que el registro tiene guardado sigue en su lista.
+// De lo que muestra la ficha a lo que precargan los formularios del alta (CU-10 1.c.5, E5-06, y 1.d.2 y 1.e.2,
+// E5-07): modificar un vehículo, una persona, un abogado o un perito abre el mismo modal del alta con sus datos. Las
+// personas llevan una clave ("p12") para no avisarse a sí mismas como documento repetido; los abogados representan
+// a esas claves. Un catálogo dado de baja que el registro tiene guardado sigue en su lista.
 
 export const clavePersona = (id: number) => `p${id}`
 
@@ -139,6 +145,76 @@ export function personasDelSiniestro({ vehiculos, personasFuera }: VehiculosYPar
       ...persona(p),
       rolSinVehiculo: p.rolSinVehiculo,
     })),
+  }
+}
+
+// ------------------------------------------------------------------ Abogados y peritos (E5-07)
+
+const claveAbogado = (id: number) => `a${id}`
+
+/** De la clave de una persona a su id: "p12" → 12 */
+export const idDePersona = (clave: string) => Number(clave.slice(1))
+
+export function abogadoAFormulario(a: AbogadoFicha): AbogadoBorrador {
+  return {
+    clave: claveAbogado(a.id),
+    nombreCompleto: a.nombreCompleto,
+    numeroMatricula: a.numeroMatricula,
+    telefono: a.telefono,
+    email: a.email,
+    representados: a.representa.map((p) => clavePersona(p.id)),
+  }
+}
+
+/** Las personas guardadas, para elegir a quién representa un abogado (como en el paso 3 del alta) */
+export function representablesDeFicha({
+  vehiculos,
+  personasFuera,
+}: VehiculosYPartesFicha): PersonasRepresentables {
+  return {
+    vehiculos: vehiculos.map((v) => ({
+      dominio: v.dominio,
+      rolAccidente: v.rolAccidente,
+      titular: v.titular && { clave: clavePersona(v.titular.id) },
+      ocupantes: v.ocupantes.map((o) => ({ clave: clavePersona(o.id), lugar: o.lugarEnVehiculo })),
+    })),
+    personasExternas: personasFuera.map((p) => ({
+      clave: clavePersona(p.id),
+      rolSinVehiculo: p.rolSinVehiculo,
+    })),
+  }
+}
+
+/** Quién representa hoy a cada persona guardada (clave de la persona → abogado) */
+export function representantesDeFicha({ vehiculos, personasFuera }: VehiculosYPartesFicha) {
+  const personas = [
+    ...vehiculos.flatMap((v) => [...(v.titular ? [v.titular] : []), ...v.ocupantes]),
+    ...personasFuera,
+  ]
+  return new Map(
+    personas.flatMap((p) =>
+      p.abogado
+        ? [
+            [
+              clavePersona(p.id),
+              { clave: claveAbogado(p.abogado.id), nombreCompleto: p.abogado.nombreCompleto },
+            ] as const,
+          ]
+        : [],
+    ),
+  )
+}
+
+/** Las fechas se guardan con hora: el formulario muestra su día en la Argentina */
+export function peritoAFormulario(p: PeritoFicha): PeritoBorrador {
+  return {
+    tipoPerito: p.tipo,
+    nombre: p.nombre,
+    telefono: p.telefono,
+    email: p.email,
+    fechaSolicitud: hoyArgentina(new Date(p.fechaSolicitud)),
+    fechaCierre: p.fechaCierre ? hoyArgentina(new Date(p.fechaCierre)) : null,
+    cerrado: p.cerrado,
   }
 }
 

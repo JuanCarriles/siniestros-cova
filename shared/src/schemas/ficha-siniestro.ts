@@ -117,6 +117,8 @@ export type VehiculosYPartesFicha = {
 /** GET /api/siniestros/:id/abogados (CU-10 1.d) */
 export type AbogadoFicha = {
   id: number
+  /** Cuántas veces se modificó: se manda al guardar, para no pisar el cambio de otro usuario (E5-07) */
+  revision: number
   nombreCompleto: string
   numeroMatricula: string | null
   telefono: string | null
@@ -127,6 +129,8 @@ export type AbogadoFicha = {
 /** GET /api/siniestros/:id/peritos (CU-10 1.e) */
 export type PeritoFicha = {
   id: number
+  /** Cuántas veces se modificó: se manda al guardar, para no pisar el cambio de otro usuario (E5-07) */
+  revision: number
   tipo: TipoPerito
   nombre: string
   telefono: string | null

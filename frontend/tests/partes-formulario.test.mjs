@@ -1,21 +1,29 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  abogadoAltaSchema,
   ocupanteAltaSchema,
+  peritoAltaSchema,
   personaExternaAltaSchema,
   titularAltaSchema,
   vehiculoAltaSchema,
 } from '../../shared/src/schemas/siniestros-alta.ts'
+import { gruposRepresentables } from '../src/features/siniestros/abogados-alta.ts'
 import {
+  abogadoAFormulario,
   aseguradorasPara,
   externaAFormulario,
+  idDePersona,
   ocupanteAFormulario,
   opcionesPara,
+  peritoAFormulario,
   personasDelSiniestro,
+  representablesDeFicha,
+  representantesDeFicha,
   titularAFormulario,
   vehiculoAFormulario,
 } from '../src/features/siniestros/ficha/partes-formulario.ts'
-import { documentoRepetido } from '../src/features/siniestros/personas-alta.ts'
+import { documentoRepetido, nombresPersonas } from '../src/features/siniestros/personas-alta.ts'
 
 // Ficha del siniestro (E5-06): modificar un vehículo o una persona abre el formulario del alta con lo guardado
 
@@ -129,6 +137,74 @@ test('el aviso de documento repetido no salta con la propia persona, sí con otr
   const personas = personasDelSiniestro({ vehiculos: [vehiculo], personasFuera: [] })
   assert.equal(documentoRepetido(personas, '27884102', 'p11'), null)
   assert.equal(documentoRepetido(personas, '27884102', null), 'titular del vehículo AA456EF')
+})
+
+// E5-07: abogados y peritos
+
+test('el abogado precarga el formulario con sus representados como claves de persona', () => {
+  const abogado = abogadoAFormulario({
+    id: 4,
+    nombreCompleto: 'Luis Maidana',
+    numeroMatricula: null,
+    telefono: '341 400-0001',
+    email: null,
+    representa: [
+      { id: 11, nombre: 'Norma Quiroga' },
+      { id: 12, nombre: null },
+    ],
+  })
+  assert.deepEqual(abogado.representados, ['p11', 'p12'])
+  assert.deepEqual(abogado.representados.map(idDePersona), [11, 12])
+  assert.deepEqual(errores(abogadoAltaSchema.safeParse(sinClave(abogado))), [])
+})
+
+test('las personas guardadas se agrupan como en el paso 3 del alta, con su abogado actual', () => {
+  const conAbogado = {
+    vehiculos: [
+      {
+        ...vehiculo,
+        titular: { ...vehiculo.titular, abogado: { id: 4, nombreCompleto: 'Luis Maidana' } },
+      },
+    ],
+    personasFuera: [{ id: 13, ...persona, nombre: 'Rita Paz', rolSinVehiculo: null }],
+  }
+  const grupos = gruposRepresentables(
+    representablesDeFicha(conAbogado),
+    nombresPersonas(personasDelSiniestro(conAbogado)),
+  )
+  assert.deepEqual(
+    grupos.map((g) => [g.titulo, g.personas.map((p) => [p.clave, p.nombre, p.detalle])]),
+    [
+      [
+        'Vehículo AA456EF · Tercero',
+        [
+          ['p11', 'Norma Quiroga', 'Titular'],
+          ['p12', 'Desconocido 1', 'Ocupante · en la caja'],
+        ],
+      ],
+      ['Fuera de los vehículos', [['p13', 'Rita Paz', 'Fuera de los vehículos']]],
+    ],
+  )
+  const representantes = representantesDeFicha(conAbogado)
+  assert.deepEqual([...representantes], [['p11', { clave: 'a4', nombreCompleto: 'Luis Maidana' }]])
+})
+
+test('las fechas del perito vuelven como su día en la Argentina', () => {
+  const perito = peritoAFormulario({
+    id: 9,
+    tipo: 'CESVI',
+    nombre: 'Jorge Benítez',
+    telefono: null,
+    email: null,
+    // 1 de octubre a las 23 en la Argentina: en UTC ya es el 2
+    fechaSolicitud: '2026-10-02T02:00:00.000Z',
+    fechaCierre: null,
+    cerrado: false,
+  })
+  assert.deepEqual([perito.fechaSolicitud, perito.fechaCierre], ['2026-10-01', null])
+  // cerrado sale de la fecha de cierre: el formulario no lo manda
+  const { cerrado: _cerrado, ...enviado } = perito
+  assert.deepEqual(errores(peritoAltaSchema.safeParse(enviado)), [])
 })
 
 test('un catálogo dado de baja que el registro tiene guardado sigue en su lista y se conserva', () => {
