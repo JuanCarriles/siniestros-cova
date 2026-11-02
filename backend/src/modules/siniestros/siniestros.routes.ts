@@ -15,6 +15,8 @@ import type { crearServicioCrearSiniestro } from './siniestros-alta-crear.servic
 import type { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import type { crearServicioSiniestros } from './siniestros.service.ts'
+import type { crearServicioReasignacion } from './siniestros-reasignacion.service.ts'
+import { reasignarSiniestroSchema } from '@cova/shared/schemas/reasignacion-siniestro'
 
 /** Lectura de cada pestaña de la ficha (CU-10). Cada historia suma sus acciones en su propio servicio. */
 type PestanaFicha = {
@@ -49,9 +51,10 @@ export function crearSiniestrosRouter(deps: {
   alta: ReturnType<typeof crearServicioAltaSiniestros>
   creacion: ReturnType<typeof crearServicioCrearSiniestro>
   ficha: Record<(typeof PESTANAS_FICHA)[number], PestanaFicha>
+  reasignacion: ReturnType<typeof crearServicioReasignacion>
   requerirSesion: RequestHandler
 }) {
-  const { servicio, alta, creacion, operaciones, ficha, requerirSesion } = deps
+  const { servicio, alta, creacion, operaciones, ficha, reasignacion, requerirSesion } = deps
   const router = Router()
   router.use(requerirSesion, requerirRol('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'))
 
@@ -112,6 +115,20 @@ export function crearSiniestrosRouter(deps: {
       confirmarSiniestroSchema.parse(req.body),
     )
     res.status(204).end()
+  })
+  router.get('/:id/reasignacion', soloAdministracion, async (req, res) => {
+    res.set('Cache-Control', 'no-store')
+    res.json(await reasignacion.opciones(usuarioDeSesion(req), idSchema.parse(req.params.id)))
+  })
+  router.patch('/:id/reasignacion', soloAdministracion, async (req, res) => {
+    res.set('Cache-Control', 'no-store')
+    res.json(
+      await reasignacion.reasignar(
+        usuarioDeSesion(req),
+        idSchema.parse(req.params.id),
+        reasignarSiniestroSchema.parse(req.body),
+      ),
+    )
   })
   router.get('/:id', async (req, res) => {
     res.json(await servicio.obtener(usuarioDeSesion(req), idSchema.parse(req.params.id)))

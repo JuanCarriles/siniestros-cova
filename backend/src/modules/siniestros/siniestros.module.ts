@@ -1,6 +1,8 @@
 import { configCorreo } from '../../config/correo.ts'
 import { env } from '../../config/env.ts'
 import { crearCorreoAsignacion } from '../../lib/correo-asignacion.ts'
+import { crearCorreoReasignacion } from '../../lib/correo-reasignacion.ts'
+import { crearServicioReasignacion } from './siniestros-reasignacion.service.ts'
 import { crearAlmacenamientoR2, type AlmacenamientoR2 } from '../../lib/r2.ts'
 import { getPrisma } from '../../lib/prisma.ts'
 import { requerirSesion } from '../auth/auth.module.ts'
@@ -96,5 +98,10 @@ export const siniestrosRouter = crearSiniestrosRouter({
     documentos: crearServicioDocumentosFicha(db),
     historial: crearServicioHistorialFicha(db),
   },
+  reasignacion: crearServicioReasignacion({
+    transaccion: (trabajo) => getPrisma().$transaction(trabajo, { timeout: 15_000 }),
+    enviarAviso: crearCorreoReasignacion(configCorreo),
+    urlSistema: env.APP_URL,
+  }),
   requerirSesion,
 })

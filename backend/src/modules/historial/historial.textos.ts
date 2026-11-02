@@ -24,6 +24,11 @@ const evento = (tipoEvento: TipoEventoHistorial, descripcion: string): EventoHis
 })
 
 export const eventoHistorial = {
+  reasignacionPor: (autor: Persona, anterior: string, nuevo: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.REASIGNACION,
+      `${nombreCompleto(autor)} reasignó el caso de ${anterior} a ${nuevo} el ${formatearFecha(fecha)}`,
+    ),
   bajaSiniestro: (autor: Persona, fecha: Date) =>
     evento(
       TipoEventoHistorial.BAJA_SINIESTRO,

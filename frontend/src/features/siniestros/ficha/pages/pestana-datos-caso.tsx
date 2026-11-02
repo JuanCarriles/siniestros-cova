@@ -1,4 +1,10 @@
-import { FileText, Flag, MapPin, UsersRound } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useRevalidator } from 'react-router'
+import { FileText, Flag, MapPin, UsersRound, UserRoundCheck } from 'lucide-react'
+import { usePanel } from '@/components/layout/panel-context'
+import { Aviso } from '@/components/aviso'
+import { Button } from '@/components/ui/button'
+import { ReasignarSiniestroDialog } from '../components/reasignar-siniestro-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Dato } from '../../components/dato'
 import { BloqueFicha, PestanaFicha } from '../components/pestana-ficha'
@@ -9,8 +15,68 @@ import { useFicha } from '../hooks/use-ficha'
 export function PestanaDatosCaso() {
   const ficha = useFicha()
   const { hecho, lugar } = ficha
+  const { usuario } = usePanel()
+  const revalidator = useRevalidator()
+  const botonReasignar = useRef<HTMLButtonElement>(null)
+  const [reasignando, setReasignando] = useState(false)
+  const [mensaje, setMensaje] = useState<string | null>(null)
+  const [falloCorreo, setFalloCorreo] = useState(false)
+  useEffect(() => {
+    if (!mensaje) return
+    const temporizador = window.setTimeout(() => setMensaje(null), 6000)
+    return () => window.clearTimeout(temporizador)
+  }, [mensaje])
   return (
-    <PestanaFicha titulo="Datos del caso">
+    <PestanaFicha
+      titulo="Datos del caso"
+      acciones={
+        usuario.tipo !== 'GESTOR' &&
+        !ficha.fechaBaja && (
+          <Button
+            ref={botonReasignar}
+            variant="outline"
+            onClick={() => {
+              setMensaje(null)
+              setFalloCorreo(false)
+              setReasignando(true)
+            }}
+          >
+            <UserRoundCheck aria-hidden="true" />
+            Reasignar
+          </Button>
+        )
+      }
+    >
+      {mensaje && (
+        <Aviso tipo="exito" className="mb-5">
+          {mensaje}
+        </Aviso>
+      )}
+      {falloCorreo && (
+        <Aviso tipo="info" className="mb-5">
+          La reasignación quedó guardada y se enviaron los avisos internos, pero no se pudieron
+          enviar todos los mails. No hace falta repetir la operación; consultá la configuración de
+          correo con la administración.
+        </Aviso>
+      )}
+      {reasignando && (
+        <ReasignarSiniestroDialog
+          key={ficha.id}
+          ficha={ficha}
+          elementoAlCerrar={() => botonReasignar.current}
+          onCerrar={() => setReasignando(false)}
+          onHecho={(resultado, nombre) => {
+            setReasignando(false)
+            setMensaje(
+              `El siniestro quedó asignado a ${nombre}. El cambio se registró en el historial.`,
+            )
+            setFalloCorreo(!resultado.correosEnviados)
+            window.dispatchEvent(new Event('cova:notificaciones'))
+            void revalidator.revalidate()
+          }}
+        />
+      )}
+
       <div className="grid gap-5 lg:grid-cols-2">
         <BloqueFicha icono={FileText} titulo="Póliza">
           <dl className="grid gap-x-6 gap-y-4 text-lg sm:grid-cols-2">
