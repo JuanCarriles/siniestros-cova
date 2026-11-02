@@ -27,9 +27,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { vehiculoVacio, type VehiculoBorrador } from '../borrador-alta'
+import { vehiculoVacio } from '../borrador-alta'
+import { campoDelError, mensajeDelError } from '../errores-servidor'
 
-const aFormulario = (v: VehiculoBorrador): VehiculoAltaInput => ({
+const aFormulario = (v: VehiculoAltaData): VehiculoAltaInput => ({
   rolAccidente: v.rolAccidente,
   marca: v.marca ?? '',
   modelo: v.modelo ?? '',
@@ -56,7 +57,8 @@ function vehiculoNuevo(hayAsegurado: boolean, idAseguradoraSiniestro: string): V
 
 // CU-09 pasos 7-9 (E4-05). Solo el rol y el dominio son obligatorios. El dominio no se puede repetir en el
 // siniestro (9.a); un segundo vehículo asegurado se permite, pero se avisa. Se monta mientras está abierto: cada
-// apertura empieza con su vehículo o vacía.
+// apertura empieza con su vehículo o vacía. Lo usan el alta (guarda en el borrador) y la ficha (CU-10 1.c.1 y
+// 1.c.5, guarda en el servidor: si lo rechaza, el error queda en su campo o arriba, y el modal sigue abierto).
 export function VehiculoDialog({
   vehiculo,
   otros,
@@ -67,13 +69,14 @@ export function VehiculoDialog({
   elementoAlCerrar,
 }: {
   /** null: agregar uno nuevo */
-  vehiculo: VehiculoBorrador | null
-  /** Los demás vehículos del alta (sin el que se está modificando) */
-  otros: VehiculoBorrador[]
+  vehiculo: VehiculoAltaData | null
+  /** Los demás vehículos del siniestro (sin el que se está modificando) */
+  otros: Pick<VehiculoAltaData, 'rolAccidente' | 'dominio'>[]
   aseguradoras: OpcionesAltaSiniestro['aseguradoras']
   /** Aseguradora del siniestro: se propone para el vehículo asegurado */
   idAseguradoraSiniestro: string
-  onGuardar: (datos: VehiculoAltaData) => void
+  /** Puede esperar al servidor: si falla, el modal sigue abierto con el error */
+  onGuardar: (datos: VehiculoAltaData) => void | Promise<void>
   onCerrar: () => void
   elementoAlCerrar: () => HTMLElement | null
 }) {
@@ -91,7 +94,7 @@ export function VehiculoDialog({
     setValue,
     getValues,
     setError,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<VehiculoAltaInput, unknown, VehiculoAltaData>({
     resolver: zodResolver(vehiculoAltaSchema),
     defaultValues: vehiculo
@@ -116,7 +119,7 @@ export function VehiculoDialog({
   }
 
   const guardar = (seguir: boolean) =>
-    handleSubmit((datos) => {
+    handleSubmit(async (datos) => {
       setAgregado(null)
       // CU-09 9.a: el mismo dominio no puede estar dos veces en el siniestro (sin contar espacios ni guiones)
       const dominio = normalizarDominio(datos.dominio)
@@ -128,7 +131,20 @@ export function VehiculoDialog({
         )
         return
       }
-      onGuardar(datos)
+      try {
+        await onGuardar(datos)
+      } catch (err) {
+        const campo = campoDelError(err, ['dominio', 'idAseguradora'] as const)
+        if (campo) setError(campo, { message: mensajeDelError(err, '') }, { shouldFocus: true })
+        else
+          setError('root', {
+            message: mensajeDelError(
+              err,
+              'No se pudo guardar. Revisá la conexión y probá de nuevo.',
+            ),
+          })
+        return
+      }
       if (!seguir) return onCerrar()
       // El siguiente arranca como tercero si ya quedó cargado un asegurado
       const conAsegurado = hayAsegurado || datos.rolAccidente === 'ASEGURADO'
@@ -324,17 +340,29 @@ export function VehiculoDialog({
             />
           </div>
 
+          {errors.root && (
+            <Aviso tipo="error" enfocar>
+              {errors.root.message}
+            </Aviso>
+          )}
           <DialogFooter className="gap-3">
-            <Button type="button" variant="outline" onClick={onCerrar}>
+            <Button type="button" variant="outline" onClick={onCerrar} disabled={isSubmitting}>
               Cancelar
             </Button>
             {nuevo && (
-              <Button type="button" variant="outline" onClick={(e) => void guardar(true)(e)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={(e) => void guardar(true)(e)}
+              >
                 <Plus aria-hidden="true" />
                 Guardar y agregar otro
               </Button>
             )}
-            <Button type="submit">{nuevo ? 'Agregar vehículo' : 'Guardar cambios'}</Button>
+            <Button type="submit" loading={isSubmitting}>
+              {nuevo ? 'Agregar vehículo' : 'Guardar cambios'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

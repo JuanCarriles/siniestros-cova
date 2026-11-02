@@ -91,6 +91,12 @@ export type OpcionesAltaSiniestro = {
   usuarios: { id: number; nombre: string; tipoUsuario: TipoUsuario; casosActivos: number }[]
 }
 
+/** Los formularios de vehículos y personas (alta y ficha): sin ajustadores ni usuarios asignables */
+export type OpcionesPartes = Pick<
+  OpcionesAltaSiniestro,
+  'aseguradoras' | 'paises' | 'provincias' | 'tiposDocumento'
+>
+
 // ------------------------------------------------------------------ Paso 2: vehículos (CU-09 pasos 6-10, E4-05)
 
 export const ANIO_VEHICULO_MINIMO = 1900

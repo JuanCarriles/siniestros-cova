@@ -7,7 +7,16 @@ import {
   filtrosSiniestrosSchema,
 } from '@cova/shared/schemas/siniestros'
 import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
-import { crearSiniestroSchema, datosCasoSchema } from '@cova/shared/schemas/siniestros-alta'
+import {
+  agregarPersonaSchema,
+  modificarPersonaSchema,
+  modificarVehiculoSchema,
+} from '@cova/shared/schemas/partes-siniestro'
+import {
+  crearSiniestroSchema,
+  datosCasoSchema,
+  vehiculoAltaSchema,
+} from '@cova/shared/schemas/siniestros-alta'
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import { nombreOriginalUtf8, recibirArchivo } from '../../middlewares/recibir-archivo.ts'
 import { HttpError } from '../../utils/httpError.ts'
@@ -15,6 +24,8 @@ import type { crearServicioCrearSiniestro } from './siniestros-alta-crear.servic
 import type { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
 import type { crearServicioSiniestros } from './siniestros.service.ts'
+import type { crearServicioPersonasGestion } from './personas/personas-gestion.service.ts'
+import type { crearServicioVehiculosGestion } from './vehiculos/vehiculos-gestion.service.ts'
 
 /** Lectura de cada pestaña de la ficha (CU-10). Cada historia suma sus acciones en su propio servicio. */
 type PestanaFicha = {
@@ -37,6 +48,14 @@ export const PESTANAS_FICHA = [
 // GET /api/siniestros/:id             cabecera, datos del caso y cantidades de cada pestaña
 // GET /api/siniestros/:id/vehiculos   vehículos con titular y ocupantes, y personas fuera de los vehículos
 // GET /api/siniestros/:id/abogados | peritos | novedades | documentos | historial
+// Vehículos y personas desde la ficha (CU-10 1.c, E5-06), con el mismo control de acceso:
+// GET   /api/siniestros/partes/opciones                    catálogos de los formularios
+// POST  /api/siniestros/:id/vehiculos                      agrega un vehículo
+// PUT   /api/siniestros/:id/vehiculos/:idVehiculo          lo modifica ({ revision, datos }: 409 si cambió)
+// PATCH /api/siniestros/:id/vehiculos/:idVehiculo/baja     baja lógica (409 si tiene personas)
+// POST  /api/siniestros/:id/personas                       titular, ocupante o persona fuera
+// PUT   /api/siniestros/:id/personas/:idPersona            la modifica ({ revision, datos }: 409 si cambió)
+// PATCH /api/siniestros/:id/personas/:idPersona/baja       baja lógica
 // Alta (solo administrador y superadministrador):
 // GET  /api/siniestros/alta/opciones
 // POST /api/siniestros/alta/datos-caso   valida el paso 1 (204 o el error con su campo)
@@ -49,9 +68,11 @@ export function crearSiniestrosRouter(deps: {
   alta: ReturnType<typeof crearServicioAltaSiniestros>
   creacion: ReturnType<typeof crearServicioCrearSiniestro>
   ficha: Record<(typeof PESTANAS_FICHA)[number], PestanaFicha>
+  vehiculos: ReturnType<typeof crearServicioVehiculosGestion>
+  personas: ReturnType<typeof crearServicioPersonasGestion>
   requerirSesion: RequestHandler
 }) {
-  const { servicio, alta, creacion, operaciones, ficha, requerirSesion } = deps
+  const { servicio, alta, creacion, operaciones, ficha, vehiculos, personas, requerirSesion } = deps
   const router = Router()
   router.use(requerirSesion, requerirRol('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'))
 
@@ -90,6 +111,9 @@ export function crearSiniestrosRouter(deps: {
   router.get('/opciones', async (req, res) => {
     res.json(await servicio.opciones(usuarioDeSesion(req)))
   })
+  router.get('/partes/opciones', async (_req, res) => {
+    res.json(await alta.opcionesPartes())
+  })
 
   router.patch(
     '/:id/baja',
@@ -126,6 +150,64 @@ export function crearSiniestrosRouter(deps: {
       res.json(await ficha[pestana].listar(usuarioDeSesion(req), idSchema.parse(req.params.id)))
     })
   }
+
+  router.post('/:id/vehiculos', async (req, res) => {
+    res
+      .status(201)
+      .json(
+        await vehiculos.agregar(
+          usuarioDeSesion(req),
+          idSchema.parse(req.params.id),
+          vehiculoAltaSchema.parse(req.body),
+        ),
+      )
+  })
+  router.put('/:id/vehiculos/:idVehiculo', async (req, res) => {
+    await vehiculos.modificar(
+      usuarioDeSesion(req),
+      idSchema.parse(req.params.id),
+      idSchema.parse(req.params.idVehiculo),
+      modificarVehiculoSchema.parse(req.body),
+    )
+    res.status(204).end()
+  })
+  router.patch('/:id/vehiculos/:idVehiculo/baja', async (req, res) => {
+    await vehiculos.darDeBaja(
+      usuarioDeSesion(req),
+      idSchema.parse(req.params.id),
+      idSchema.parse(req.params.idVehiculo),
+    )
+    res.status(204).end()
+  })
+  router.post('/:id/personas', async (req, res) => {
+    res
+      .status(201)
+      .json(
+        await personas.agregar(
+          usuarioDeSesion(req),
+          idSchema.parse(req.params.id),
+          agregarPersonaSchema.parse(req.body),
+        ),
+      )
+  })
+  // Los datos se validan en el servicio: el formulario depende de si es titular, ocupante o persona fuera
+  router.put('/:id/personas/:idPersona', async (req, res) => {
+    await personas.modificar(
+      usuarioDeSesion(req),
+      idSchema.parse(req.params.id),
+      idSchema.parse(req.params.idPersona),
+      modificarPersonaSchema.parse(req.body),
+    )
+    res.status(204).end()
+  })
+  router.patch('/:id/personas/:idPersona/baja', async (req, res) => {
+    await personas.darDeBaja(
+      usuarioDeSesion(req),
+      idSchema.parse(req.params.id),
+      idSchema.parse(req.params.idPersona),
+    )
+    res.status(204).end()
+  })
 
   return router
 }

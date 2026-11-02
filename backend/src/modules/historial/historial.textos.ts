@@ -82,4 +82,58 @@ export const eventoHistorial = {
       TipoEventoHistorial.MENSAJE,
       `${nombreCompleto(autor)} envió un mensaje en el chat el ${formatearFecha(fecha)}`,
     ),
+
+  // Partes desde la ficha (CU-10 1.c, E5-06). De una modificación se nombran los campos que cambiaron, sin sus
+  // valores: el historial no repite datos personales.
+
+  /** "Pedro González agregó el vehículo AE123CD el 20/10/2026" */
+  vehiculoAgregado: (autor: Persona, dominio: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.VEHICULO,
+      `${nombreCompleto(autor)} agregó el vehículo ${dominio} el ${formatearFecha(fecha)}`,
+    ),
+  /** "Pedro González modificó el vehículo AE123CD (color y daños) el 20/10/2026" */
+  vehiculoModificado: (autor: Persona, dominio: string, campos: string[], fecha: Date) =>
+    evento(
+      TipoEventoHistorial.VEHICULO,
+      `${nombreCompleto(autor)} modificó el vehículo ${dominio} (${enumerar(campos)}) el ${formatearFecha(fecha)}`,
+    ),
+  /** "Pedro González dio de baja el vehículo AE123CD el 20/10/2026" */
+  vehiculoDadoDeBaja: (autor: Persona, dominio: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.VEHICULO,
+      `${nombreCompleto(autor)} dio de baja el vehículo ${dominio} el ${formatearFecha(fecha)}`,
+    ),
+
+  /** "Pedro González agregó a Ana Ruiz como titular del vehículo AE123CD el 20/10/2026" */
+  personaAgregada: (autor: Persona, persona: string, como: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.PERSONA,
+      `${nombreCompleto(autor)} agregó a ${persona} como ${como} el ${formatearFecha(fecha)}`,
+    ),
+  /** "Pedro González modificó los datos de Ana Ruiz, titular del vehículo AE123CD (documento y teléfono) el 20/10/2026" */
+  personaModificada: (
+    autor: Persona,
+    persona: string,
+    como: string,
+    campos: string[],
+    fecha: Date,
+  ) =>
+    evento(
+      TipoEventoHistorial.PERSONA,
+      `${nombreCompleto(autor)} modificó los datos de ${persona}, ${como} (${enumerar(campos)}) el ${formatearFecha(fecha)}`,
+    ),
+  /** "Pedro González dio de baja a Ana Ruiz, titular del vehículo AE123CD, el 20/10/2026" */
+  personaDadaDeBaja: (autor: Persona, persona: string, como: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.PERSONA,
+      `${nombreCompleto(autor)} dio de baja a ${persona}, ${como}, el ${formatearFecha(fecha)}`,
+    ),
+}
+
+/** "dominio", "dominio y color", "dominio, color y daños" */
+function enumerar(campos: string[]): string {
+  return campos.length <= 1
+    ? (campos[0] ?? '')
+    : `${campos.slice(0, -1).join(', ')} y ${campos[campos.length - 1]}`
 }

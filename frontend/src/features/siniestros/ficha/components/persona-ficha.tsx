@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, LogIn, LogOut } from 'lucide-react'
+import { Eye, LogIn, LogOut, Pencil } from 'lucide-react'
 import type { PersonaFicha, PersonaVehiculoFicha } from '@cova/shared/schemas/ficha-siniestro'
 import { GRAVEDADES_LESION } from '@cova/shared/schemas/siniestros-alta'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils'
 import { email, telefono } from '../../components/contacto'
 import { Dato } from '../../components/dato'
+import { BotonQuitar } from '../../components/tarjeta-persona'
 import { dia, direccionDe, nombreDe } from '../formato'
 
 /** Dónde aparece la persona: decide qué datos propios se muestran */
@@ -55,13 +56,19 @@ function Lesion({ persona }: { persona: PersonaFicha }) {
 }
 
 // Tarjeta de una persona del siniestro (CU-10 1.c): lo que se necesita a mano para llamarla o ubicarla, y el
-// detalle completo en un modal
+// detalle completo en un modal. Con acciones (E5-06), también se modifica y se da de baja desde acá; sin ellas
+// (caso cerrado o dado de baja), solo se consulta.
 export function TarjetaPersonaFicha({
   persona: enFicha,
   onVerDetalle,
+  acciones,
 }: {
   persona: PersonaEnFicha
   onVerDetalle: (boton: HTMLElement) => void
+  acciones?: {
+    onModificar: (boton: HTMLElement) => void
+    onDarDeBaja: (boton: HTMLElement) => void
+  }
 }) {
   const { persona, rol } = enFicha
   const situacion = situacionDe(enFicha)
@@ -96,7 +103,7 @@ export function TarjetaPersonaFicha({
         {situacion.texto}
       </p>
       <Lesion persona={persona} />
-      <div className="mt-1 flex flex-wrap items-end justify-between gap-3 border-t-2 border-line pt-3">
+      <div className="mt-1 grid gap-3 border-t-2 border-line pt-3">
         <dl className="grid gap-0.5">
           {documentoDe(persona) && (
             <div>
@@ -117,14 +124,34 @@ export function TarjetaPersonaFicha({
             </dd>
           </div>
         </dl>
-        <Button
-          variant="outline"
-          onClick={(e) => onVerDetalle(e.currentTarget)}
-          aria-label={`Ver detalle de ${nombre}`}
-        >
-          <Eye aria-hidden="true" />
-          Ver detalle
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={(e) => onVerDetalle(e.currentTarget)}
+            aria-label={`Ver detalle de ${nombre}`}
+          >
+            <Eye aria-hidden="true" />
+            Ver detalle
+          </Button>
+          {acciones && (
+            <>
+              <Button
+                variant="outline"
+                onClick={(e) => acciones.onModificar(e.currentTarget)}
+                aria-label={`Modificar a ${nombre}`}
+              >
+                <Pencil aria-hidden="true" />
+                Modificar
+              </Button>
+              <BotonQuitar
+                etiqueta={`Dar de baja a ${nombre}`}
+                onClick={(e) => acciones.onDarDeBaja(e.currentTarget)}
+              >
+                Dar de baja
+              </BotonQuitar>
+            </>
+          )}
+        </div>
       </div>
     </article>
   )

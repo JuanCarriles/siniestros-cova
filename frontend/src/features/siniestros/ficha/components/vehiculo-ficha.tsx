@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Car, Eye, KeyRound, LogIn, UsersRound } from 'lucide-react'
+import { Car, Eye, KeyRound, LogIn, Pencil, Trash2, UserPlus, UsersRound } from 'lucide-react'
 import type { VehiculoFicha } from '@cova/shared/schemas/ficha-siniestro'
 import { ROLES_ACCIDENTE, USOS_VEHICULO } from '@cova/shared/schemas/siniestros-alta'
 import { Button } from '@/components/ui/button'
@@ -21,18 +21,34 @@ import { TarjetaPersonaFicha, type PersonaEnFicha } from './persona-ficha'
 
 const personasDe = (v: VehiculoFicha) => (v.titular ? 1 : 0) + v.ocupantes.length
 
+/** Lo que se puede hacer con el vehículo y sus personas (E5-06). Sin acciones, la tarjeta es de solo lectura. */
+export type AccionesVehiculo = {
+  onModificar: (boton: HTMLElement) => void
+  onDarDeBaja: (boton: HTMLElement) => void
+  onAgregarPersona: (modo: 'titular' | 'ocupante', boton: HTMLElement) => void
+  onModificarPersona: (persona: PersonaEnFicha, boton: HTMLElement) => void
+  onDarDeBajaPersona: (persona: PersonaEnFicha, boton: HTMLElement) => void
+}
+
+// Botón sobre la franja oscura del vehículo
+const botonEnFranja =
+  'border-on-navy bg-transparent text-on-navy hover:bg-navy-hover hover:text-on-navy'
+
 // Un vehículo del siniestro (CU-10 1.c): sus datos principales en la franja de arriba, después el titular y los
-// ocupantes. El asegurado se distingue por el color de su rol, como en el alta.
+// ocupantes. El asegurado se distingue por el color de su rol, como en el alta. Con acciones (CU-10 1.c.1 a 1.c.6),
+// cada bloque tiene sus botones: el vehículo arriba, el titular y los ocupantes en su lugar.
 export function TarjetaVehiculo({
   vehiculo: v,
   titulo,
   onVerVehiculo,
   onVerPersona,
+  acciones,
 }: {
   vehiculo: VehiculoFicha
   titulo: string
   onVerVehiculo: (boton: HTMLElement) => void
   onVerPersona: (persona: PersonaEnFicha, boton: HTMLElement) => void
+  acciones?: AccionesVehiculo
 }) {
   const asegurado = v.rolAccidente === 'ASEGURADO'
   const rol = v.rolAccidente ? ROLES_ACCIDENTE[v.rolAccidente] : 'Sin rol'
@@ -40,6 +56,12 @@ export function TarjetaVehiculo({
   // Como en el listado: asegurado es solo el titular del vehículo asegurado; todos los demás son terceros
   const rolTitular = asegurado ? 'Asegurado' : 'Tercero'
   const titularIba = v.titular?.ibaEnVehiculo ? v.titular : null
+  const enFichaTitular: PersonaEnFicha | null = v.titular && {
+    tipo: 'titular',
+    persona: v.titular,
+    rol: rolTitular,
+    vehiculo,
+  }
   return (
     <article
       aria-label={`${titulo}: ${vehiculo}`}
@@ -61,15 +83,39 @@ export function TarjetaVehiculo({
             </span>
             {titulo}
           </h3>
-          <Button
-            variant="outline"
-            className="border-on-navy bg-transparent text-on-navy hover:bg-navy-hover hover:text-on-navy"
-            onClick={(e) => onVerVehiculo(e.currentTarget)}
-            aria-label={`Ver detalle del vehículo ${v.dominio}`}
-          >
-            <Eye aria-hidden="true" />
-            Ver detalle
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className={botonEnFranja}
+              onClick={(e) => onVerVehiculo(e.currentTarget)}
+              aria-label={`Ver detalle del vehículo ${v.dominio}`}
+            >
+              <Eye aria-hidden="true" />
+              Ver detalle
+            </Button>
+            {acciones && (
+              <>
+                <Button
+                  variant="outline"
+                  className={botonEnFranja}
+                  onClick={(e) => acciones.onModificar(e.currentTarget)}
+                  aria-label={`Modificar el vehículo ${v.dominio}`}
+                >
+                  <Pencil aria-hidden="true" />
+                  Modificar
+                </Button>
+                <Button
+                  variant="outline"
+                  className={botonEnFranja}
+                  onClick={(e) => acciones.onDarDeBaja(e.currentTarget)}
+                  aria-label={`Dar de baja el vehículo ${v.dominio}`}
+                >
+                  <Trash2 aria-hidden="true" />
+                  Dar de baja
+                </Button>
+              </>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <p className="text-2xl font-bold">{descripcionVehiculo(v)}</p>
@@ -98,21 +144,31 @@ export function TarjetaVehiculo({
           Titular del vehículo
         </h4>
         <div className="p-4 pt-0">
-          {v.titular ? (
+          {enFichaTitular ? (
             <TarjetaPersonaFicha
-              persona={{ tipo: 'titular', persona: v.titular, rol: rolTitular, vehiculo }}
-              onVerDetalle={(boton) =>
-                v.titular &&
-                onVerPersona(
-                  { tipo: 'titular', persona: v.titular, rol: rolTitular, vehiculo },
-                  boton,
-                )
+              persona={enFichaTitular}
+              onVerDetalle={(boton) => onVerPersona(enFichaTitular, boton)}
+              acciones={
+                acciones && {
+                  onModificar: (boton) => acciones.onModificarPersona(enFichaTitular, boton),
+                  onDarDeBaja: (boton) => acciones.onDarDeBajaPersona(enFichaTitular, boton),
+                }
               }
             />
           ) : (
-            <p className="rounded-lg border-2 border-dashed border-owner-border bg-card p-4 text-muted-foreground">
-              El titular no está identificado.
-            </p>
+            <div className="grid justify-items-start gap-3 rounded-lg border-2 border-dashed border-owner-border bg-card p-4">
+              <p className="text-muted-foreground">El titular no está identificado.</p>
+              {acciones && (
+                <Button
+                  variant="outline"
+                  onClick={(e) => acciones.onAgregarPersona('titular', e.currentTarget)}
+                  aria-label={`Agregar titular del vehículo ${v.dominio}`}
+                >
+                  <UserPlus aria-hidden="true" />
+                  Agregar titular
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </section>
@@ -135,17 +191,40 @@ export function TarjetaVehiculo({
               </span>
             </p>
           )}
-          {v.ocupantes.map((o) => (
-            <TarjetaPersonaFicha
-              key={o.id}
-              persona={{ tipo: 'ocupante', persona: o, rol: 'Tercero', vehiculo }}
-              onVerDetalle={(boton) =>
-                onVerPersona({ tipo: 'ocupante', persona: o, rol: 'Tercero', vehiculo }, boton)
-              }
-            />
-          ))}
+          {v.ocupantes.map((o) => {
+            const enFicha: PersonaEnFicha = {
+              tipo: 'ocupante',
+              persona: o,
+              rol: 'Tercero',
+              vehiculo,
+            }
+            return (
+              <TarjetaPersonaFicha
+                key={o.id}
+                persona={enFicha}
+                onVerDetalle={(boton) => onVerPersona(enFicha, boton)}
+                acciones={
+                  acciones && {
+                    onModificar: (boton) => acciones.onModificarPersona(enFicha, boton),
+                    onDarDeBaja: (boton) => acciones.onDarDeBajaPersona(enFicha, boton),
+                  }
+                }
+              />
+            )
+          })}
           {v.ocupantes.length === 0 && !titularIba && (
             <p className="text-muted-foreground">No hay ocupantes cargados.</p>
+          )}
+          {acciones && (
+            <Button
+              variant="outline"
+              className="justify-self-start"
+              onClick={(e) => acciones.onAgregarPersona('ocupante', e.currentTarget)}
+              aria-label={`Agregar ocupante del vehículo ${v.dominio}`}
+            >
+              <UserPlus aria-hidden="true" />
+              Agregar ocupante
+            </Button>
           )}
         </div>
       </section>
