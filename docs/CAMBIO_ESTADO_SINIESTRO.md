@@ -56,3 +56,22 @@ y consultá el historial. Como administrador comprobá el aviso y confirmá el e
 puede consultar el caso cerrado, pero ya no ve el botón. Como administrador conservás la posibilidad de reabrirlo.
 Abrí el modal y hacé clic fuera: debe conservar la elección. Cancelá y comprobá el foco en Cambiar estado;
 volvé a abrir y confirmá: el foco debe ir al aviso de éxito.
+
+## Restricción del cierre (E5-05)
+
+El gestor puede cambiar los estados operativos de sus casos y llegar a **Solicitud de cierre**, pero no
+confirmar un estado `esCierre` ni reabrir un caso cerrado. Solo administrador y superadministrador confirman
+el cierre. El catálogo sigue siendo configurable: no se decide el permiso por el nombre o id del estado.
+
+El servidor bloquea primero el siniestro y luego toma un bloqueo compartido del usuario antes de consultar
+su rol vigente. Así una sesión vieja de un administrador degradado mientras esperaba no permite cerrar;
+el rol y la baja del autor no pueden cambiar entre la autorización y el guardado.
+
+La solicitud, historial y avisos se guardan en la misma transacción. Se notifica a todos los administradores
+y superadministrador activos, excluyendo al autor y sin duplicados. No se notifica a usuarios dados de baja
+ni a otros gestores. Solicitar el cierre no carga `fechaCierre`; confirmarlo como administración sí.
+
+Las pruebas HTTP conectadas al servicio y PostgreSQL comprueban catálogo filtrado, petición directa de cierre
+rechazada, rol inventado en el cuerpo, caso ajeno, historial y destinatarios de la solicitud, confirmación por
+ambos roles administrativos y cambio de rol mientras la operación espera. Usan una base temporal aislada.
+No se agregan migraciones ni cambios de Docker para E5-05.

@@ -135,8 +135,8 @@ export function CambiarEstadoDialog({
               </div>
               {esGestor && (
                 <Aviso tipo="info">
-                  Podés solicitar el cierre del caso. Un administrador debe revisarlo y confirmar el
-                  cierre definitivo.
+                  Como gestor podés avanzar hasta Solicitud de cierre. Solo un administrador o
+                  superadministrador puede confirmar el cierre definitivo.
                 </Aviso>
               )}
               <fieldset disabled={enviando} className="grid gap-2">

@@ -76,8 +76,11 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
     cambiar(usuario: SesionUsuario, id: number, datos: CambiarEstadoSiniestro): Promise<void> {
       const cambio = cambiarEstadoSiniestroSchema.parse(datos)
       return base.transaccion(async (tx) => {
-        const actor = await autorizar(tx, usuario)
         await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${id} FOR UPDATE`
+        // El rol pudo cambiar mientras esperábamos el siniestro. Se lee después del bloqueo y se
+        // mantiene estable hasta confirmar el cambio, en el mismo orden que la reasignación.
+        await tx.$queryRaw`SELECT "id" FROM "Usuario" WHERE "id" = ${usuario.id} FOR SHARE`
+        const actor = await autorizar(tx, usuario)
         const caso = await buscar(tx, id, actor)
         if (caso.estadoSiniestro.id !== cambio.idEstadoAnterior)
           throw new HttpError(

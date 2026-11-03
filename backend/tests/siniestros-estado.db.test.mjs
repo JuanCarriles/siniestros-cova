@@ -3,6 +3,11 @@ import test from 'node:test'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import pg from 'pg'
+import express from 'express'
+import cookieParser from 'cookie-parser'
+import { crearRequerirSesion } from '../src/middlewares/autenticar.ts'
+import { errorHandler } from '../src/middlewares/errorHandler.ts'
+import { crearSiniestrosRouter } from '../src/modules/siniestros/siniestros.routes.ts'
 import { opcionesCambioEstadoSchema } from '@cova/shared/schemas/cambio-estado-siniestro'
 import { bandejaNotificacionesSchema } from '@cova/shared/schemas/bandeja-notificaciones'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
@@ -13,7 +18,7 @@ import { crearServicioDashboardAdministrador } from '../src/modules/dashboard/da
 test(
   'cambio de estado real: permisos, catálogo, historial, movimiento, cierre, concurrencia y avisos privados',
   { timeout: 90_000 },
-  async () => {
+  async (t) => {
     const original = process.env.DATABASE_URL
     assert.ok(original, 'Hace falta DATABASE_URL local con permiso CREATEDB')
     const conexion = new URL(original)
@@ -357,6 +362,180 @@ test(
       assert.equal(pagina2.items.length, 5)
       assert.equal(pagina2.pagina, 2)
       assert.equal(new Set([...pagina1.items, ...pagina2.items].map((n) => n.id)).size, 25)
+
+      // E5-05 por HTTP real: no alcanza con ocultar Cierre enviado en el selector.
+      const actoresHTTP = { gestor, ajeno, admin, superadmin }
+      let servicioHTTP = servicio
+      const app = express()
+      app.use(express.json(), cookieParser())
+      app.use(
+        '/api/siniestros',
+        crearSiniestrosRouter({
+          requerirSesion: crearRequerirSesion({
+            duracionMs: 1000,
+            validar: async (token) =>
+              actoresHTTP[token] ? { usuario: actoresHTTP[token], renovada: false } : null,
+          }),
+          estados: {
+            opciones: (...args) => servicioHTTP.opciones(...args),
+            cambiar: (...args) => servicioHTTP.cambiar(...args),
+          },
+        }),
+      )
+      app.use(errorHandler)
+      const server = app.listen(0, '127.0.0.1')
+      await new Promise((ok) => server.once('listening', ok))
+      t.after(() => new Promise((ok) => server.close(ok)))
+      const pedir = (token, id, accion, body) =>
+        fetch(`http://127.0.0.1:${server.address().port}/api/siniestros/${id}/${accion}`, {
+          method: body ? 'PATCH' : 'GET',
+          headers: {
+            ...(token ? { cookie: `cova_sesion=${token}` } : {}),
+            ...(body ? { 'content-type': 'application/json' } : {}),
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        })
+      const cuerpo = (desde, hacia) => ({ idEstadoAnterior: desde.id, idEstadoSiniestro: hacia.id })
+      const propioHTTP = await caso()
+      const previoHTTP = await prisma.siniestro.findUniqueOrThrow({ where: { id: propioHTTP.id } })
+      assert.equal((await pedir(null, propioHTTP.id, 'estados')).status, 401)
+      const catalogoHTTP = await pedir('gestor', propioHTTP.id, 'estados')
+      assert.equal(catalogoHTTP.status, 200)
+      const opcionesHTTP = opcionesCambioEstadoSchema.parse(await catalogoHTTP.json())
+      assert.ok(opcionesHTTP.estados.some((e) => e.id === solicitud.id))
+      assert.ok(opcionesHTTP.estados.every((e) => !e.esCierre))
+      assert.equal((await pedir('ajeno', propioHTTP.id, 'estados')).status, 403)
+      assert.equal(
+        (await pedir('ajeno', propioHTTP.id, 'estado', cuerpo(inicial, solicitud))).status,
+        403,
+      )
+      const cierreProhibido = await pedir(
+        'gestor',
+        propioHTTP.id,
+        'estado',
+        cuerpo(inicial, cierre),
+      )
+      assert.equal(cierreProhibido.status, 403)
+      assert.match((await cierreProhibido.json()).error, /Solo un administrador/)
+      assert.equal(
+        (
+          await pedir('gestor', propioHTTP.id, 'estado', {
+            ...cuerpo(inicial, cierre),
+            tipoUsuario: 'SUPER_ADMINISTRADOR',
+          })
+        ).status,
+        400,
+      )
+      assert.deepEqual(
+        await prisma.siniestro.findUniqueOrThrow({ where: { id: propioHTTP.id } }),
+        previoHTTP,
+      )
+      assert.equal(
+        await prisma.historialSiniestro.count({ where: { idSiniestro: propioHTTP.id } }),
+        0,
+      )
+      assert.equal(await prisma.notificacion.count({ where: { idSiniestro: propioHTTP.id } }), 0)
+
+      assert.equal(
+        (await pedir('gestor', propioHTTP.id, 'estado', cuerpo(inicial, solicitud))).status,
+        204,
+      )
+      const solicitadoHTTP = await prisma.siniestro.findUniqueOrThrow({
+        where: { id: propioHTTP.id },
+      })
+      assert.equal(solicitadoHTTP.idEstadoSiniestro, solicitud.id)
+      assert.equal(solicitadoHTTP.fechaCierre, null)
+      const historialHTTP = await prisma.historialSiniestro.findFirstOrThrow({
+        where: { idSiniestro: propioHTTP.id },
+      })
+      assert.equal(historialHTTP.idUsuario, gestor.id)
+      assert.equal(historialHTTP.fechaEvento.toISOString(), ahora.toISOString())
+      const notificacionesHTTP = await prisma.notificacion.findMany({
+        where: { idSiniestro: propioHTTP.id },
+        orderBy: { idUsuario: 'asc' },
+      })
+      assert.deepEqual(
+        notificacionesHTTP.map((n) => n.idUsuario),
+        [admin.id, superadmin.id, otroAdmin.id].sort((a, b) => a - b),
+      )
+      assert.ok(notificacionesHTTP.every((n) => !n.leida && n.mensaje.includes(solicitud.nombre)))
+      assert.equal(
+        (await pedir('gestor', propioHTTP.id, 'estado', cuerpo(solicitud, solicitud))).status,
+        409,
+      )
+      assert.equal(await prisma.notificacion.count({ where: { idSiniestro: propioHTTP.id } }), 3)
+      assert.equal(
+        (await pedir('admin', propioHTTP.id, 'estado', cuerpo(solicitud, cierre))).status,
+        204,
+      )
+      assert.equal(
+        (await pedir('gestor', propioHTTP.id, 'estado', cuerpo(cierre, inicial))).status,
+        409,
+      )
+      assert.equal((await pedir('gestor', propioHTTP.id, 'estados')).status, 409)
+      const otroCierreHTTP = await caso()
+      assert.equal(
+        (await pedir('superadmin', otroCierreHTTP.id, 'estado', cuerpo(inicial, cierre))).status,
+        204,
+      )
+
+      // Si se degrada al administrador mientras espera el bloqueo, su sesión vieja no permite cerrar.
+      const pendiente = await caso({ idUsuario: admin.id })
+      let avisarPausa, liberarPausa
+      const pausado = new Promise((ok) => {
+        avisarPausa = ok
+      })
+      const continuar = new Promise((ok) => {
+        liberarPausa = ok
+      })
+      servicioHTTP = crearServicioEstadoSiniestro(
+        {
+          transaccion: (trabajo) =>
+            prisma.$transaction(
+              (tx) =>
+                trabajo(
+                  new Proxy(tx, {
+                    get(obj, clave) {
+                      if (clave === '$queryRaw')
+                        return async (partes, ...valores) => {
+                          if (
+                            partes.join('').includes('FROM "Siniestro"') &&
+                            valores[0] === pendiente.id
+                          ) {
+                            avisarPausa()
+                            await continuar
+                          }
+                          return tx.$queryRaw(partes, ...valores)
+                        }
+                      return Reflect.get(obj, clave)
+                    },
+                  }),
+                ),
+              { timeout: 15000 },
+            ),
+        },
+        () => ahora,
+      )
+      const peticionPendiente = pedir('admin', pendiente.id, 'estado', cuerpo(inicial, cierre))
+      await pausado
+      try {
+        await prisma.usuario.update({ where: { id: admin.id }, data: { tipoUsuario: 'GESTOR' } })
+      } finally {
+        liberarPausa()
+      }
+      assert.equal((await peticionPendiente).status, 403)
+      const trasRechazo = await prisma.siniestro.findUniqueOrThrow({ where: { id: pendiente.id } })
+      assert.equal(trasRechazo.idEstadoSiniestro, inicial.id)
+      assert.equal(trasRechazo.fechaCierre, null)
+      assert.equal(
+        await prisma.historialSiniestro.count({ where: { idSiniestro: pendiente.id } }),
+        0,
+      )
+      assert.equal(await prisma.notificacion.count({ where: { idSiniestro: pendiente.id } }), 0)
+      await prisma.usuario.update({
+        where: { id: admin.id },
+        data: { tipoUsuario: 'ADMINISTRADOR' },
+      })
     } finally {
       await disconnectPrisma()
       process.env.DATABASE_URL = original
