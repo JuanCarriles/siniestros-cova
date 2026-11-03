@@ -108,13 +108,25 @@ test(
       const cambiar = (actor, casoId, desde, hacia) =>
         servicio.cambiar(actor, casoId, { idEstadoAnterior: desde.id, idEstadoSiniestro: hacia.id })
 
-      for (const accion of [
-        () => servicio.opciones(gestor, siniestro.id),
-        () => cambiar(gestor, siniestro.id, inicial, nuevo),
-        () =>
-          cambiar({ ...gestor, tipoUsuario: 'SUPER_ADMINISTRADOR' }, siniestro.id, inicial, nuevo),
-      ])
-        await assert.rejects(accion, { status: 403 })
+      // El gestor consulta solo sus casos y nunca recibe estados de cierre en el catálogo.
+      const opcionesGestor = opcionesCambioEstadoSchema.parse(
+        await servicio.opciones(gestor, siniestro.id),
+      )
+      assert.deepEqual(
+        opcionesGestor.estados.map((e) => e.id),
+        [inicial.id, nuevo.id],
+      )
+      for (const actor of [ajeno, { ...ajeno, tipoUsuario: 'SUPER_ADMINISTRADOR' }]) {
+        await assert.rejects(servicio.opciones(actor, siniestro.id), { status: 403 })
+        await assert.rejects(cambiar(actor, siniestro.id, inicial, nuevo), { status: 403 })
+      }
+      for (const actor of [gestor, { ...gestor, tipoUsuario: 'SUPER_ADMINISTRADOR' }])
+        await assert.rejects(cambiar(actor, siniestro.id, inicial, cierre), { status: 403 })
+      assert.equal(
+        await prisma.historialSiniestro.count({ where: { idSiniestro: siniestro.id } }),
+        1,
+      )
+      assert.equal(await prisma.notificacion.count({ where: { idSiniestro: siniestro.id } }), 0)
       await assert.rejects(cambiar(retirado, siniestro.id, inicial, nuevo), { status: 401 })
       await assert.rejects(servicio.opciones(admin, 999999), { status: 404 })
       const opciones = opcionesCambioEstadoSchema.parse(
@@ -265,6 +277,41 @@ test(
         }),
         1,
       )
+
+      // RF-18: el gestor solicita el cierre; administración recibe el aviso y lo confirma.
+      const solicitud = await estado('Solicitud de cierre')
+      const casoGestor = await caso()
+      await cambiar(gestor, casoGestor.id, inicial, solicitud)
+      const pedido = await prisma.siniestro.findUniqueOrThrow({ where: { id: casoGestor.id } })
+      assert.equal(pedido.idEstadoSiniestro, solicitud.id)
+      assert.equal(pedido.fechaCierre, null)
+      assert.equal(pedido.fechaUltimoMovimiento.toISOString(), ahora.toISOString())
+      assert.equal(pedido.demorado, false)
+      const eventoGestor = await prisma.historialSiniestro.findFirstOrThrow({
+        where: { idSiniestro: casoGestor.id },
+      })
+      assert.equal(eventoGestor.idUsuario, gestor.id)
+      assert.equal(eventoGestor.tipoEvento, 'CAMBIO_ESTADO')
+      assert.equal(eventoGestor.fechaEvento.toISOString(), ahora.toISOString())
+      const avisosGestor = await prisma.notificacion.findMany({
+        where: { idSiniestro: casoGestor.id },
+        orderBy: { idUsuario: 'asc' },
+      })
+      assert.deepEqual(
+        avisosGestor.map((n) => n.idUsuario),
+        [admin.id, superadmin.id, otroAdmin.id].sort((a, b) => a - b),
+      )
+      await cambiar(admin, casoGestor.id, solicitud, cierre)
+      for (const actor of [gestor, { ...gestor, tipoUsuario: 'ADMINISTRADOR' }]) {
+        await assert.rejects(servicio.opciones(actor, casoGestor.id), { status: 409 })
+        await assert.rejects(cambiar(actor, casoGestor.id, cierre, inicial), { status: 409 })
+      }
+      assert.equal(
+        await prisma.historialSiniestro.count({ where: { idSiniestro: casoGestor.id } }),
+        2,
+      )
+      // Mantener aisladas las comprobaciones de la bandeja original de este test.
+      await prisma.notificacion.deleteMany({ where: { idSiniestro: casoGestor.id } })
 
       const bandeja = bandejaNotificacionesSchema.parse(await avisos.listar(gestor, 1))
       assert.ok(bandeja.items.length > 0)

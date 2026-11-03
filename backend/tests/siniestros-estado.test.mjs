@@ -7,7 +7,7 @@ import { errorHandler } from '../src/middlewares/errorHandler.ts'
 import { crearSiniestrosRouter } from '../src/modules/siniestros/siniestros.routes.ts'
 import { crearNotificacionesRouter } from '../src/modules/notificaciones/notificaciones.routes.ts'
 
-test('HTTP: cambio de estado solo para administración y avisos ligados a la sesión', async (t) => {
+test('HTTP: cambio de estado para los tres roles autenticados y avisos ligados a la sesión', async (t) => {
   const actores = Object.fromEntries(
     ['GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'].map((tipoUsuario, i) => [
       tipoUsuario,
@@ -67,12 +67,11 @@ test('HTTP: cambio de estado solo para administración y avisos ligados a la ses
     ['/siniestros/7/estados', 'GET'],
     ['/siniestros/7/estado', 'PATCH', cambio],
   ]) {
-    const respuesta = await pedir('GESTOR', ruta, metodo, body)
-    assert.equal(respuesta.status, 403)
-    assert.match((await respuesta.json()).error, /permiso/)
+    const respuesta = await pedir(null, ruta, metodo, body)
+    assert.equal(respuesta.status, 401)
   }
   assert.equal(llamadas.length, 0)
-  for (const rol of ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']) {
+  for (const rol of ['GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']) {
     const opciones = await pedir(rol, '/siniestros/7/estados')
     assert.equal(opciones.status, 200)
     assert.equal(opciones.headers.get('cache-control'), 'no-store')

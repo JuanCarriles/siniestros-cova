@@ -23,10 +23,14 @@ import { cn } from '@/lib/utils'
 
 export function CambiarEstadoDialog({
   ficha,
+  esGestor,
+  elementoAlCerrar,
   onCerrar,
   onHecho,
 }: {
   ficha: FichaSiniestro
+  esGestor: boolean
+  elementoAlCerrar: () => HTMLElement | null
   onCerrar: () => void
   onHecho: (mensaje: string) => void
 }) {
@@ -86,6 +90,17 @@ export function CambiarEstadoDialog({
     >
       <DialogContent
         showCloseButton={!enviando}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          if (enviando) event.preventDefault()
+        }}
+        onCloseAutoFocus={(event) => {
+          const elemento = elementoAlCerrar()
+          if (elemento) {
+            event.preventDefault()
+            elemento.focus()
+          }
+        }}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
           titulo.current?.focus()
@@ -118,6 +133,12 @@ export function CambiarEstadoDialog({
                 <span className="font-semibold">Estado actual</span>
                 <EstadoChip estado={datos.estadoActual.nombre} />
               </div>
+              {esGestor && (
+                <Aviso tipo="info">
+                  Podés solicitar el cierre del caso. Un administrador debe revisarlo y confirmar el
+                  cierre definitivo.
+                </Aviso>
+              )}
               <fieldset disabled={enviando} className="grid gap-2">
                 <legend className="mb-2 font-bold">Nuevo estado</legend>
                 <p className="mb-1 text-sm text-muted-foreground">
@@ -182,7 +203,7 @@ export function CambiarEstadoDialog({
           )}
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={enviando}>
+              <Button type="button" variant="outline" disabled={enviando}>
                 Cancelar
               </Button>
             </DialogClose>

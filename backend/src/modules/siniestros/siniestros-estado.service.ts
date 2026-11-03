@@ -8,6 +8,7 @@ import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
+import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 
 type Base = { transaccion<T>(trabajo: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> }
 const detalleEstado = { id: true, nombre: true, descripcion: true, esCierre: true } as const
@@ -17,17 +18,14 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
   async function autorizar(tx: Prisma.TransactionClient, usuario: SesionUsuario) {
     const actor = await tx.usuario.findFirst({
       where: { id: usuario.id, eliminado: false },
-      select: { id: true, nombres: true, apellidos: true, tipoUsuario: true },
+      select: { id: true, nombres: true, apellidos: true, email: true, tipoUsuario: true },
     })
     if (!actor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
-    if (actor.tipoUsuario !== 'ADMINISTRADOR' && actor.tipoUsuario !== 'SUPER_ADMINISTRADOR')
-      throw new HttpError(
-        403,
-        'Solo un administrador o superadministrador puede cambiar el estado del siniestro.',
-      )
     return actor
   }
-  async function buscar(tx: Prisma.TransactionClient, id: number) {
+  async function buscar(tx: Prisma.TransactionClient, id: number, actor: SesionUsuario) {
+    // Usa el rol vigente en la base, no el que pudiera haber quedado en la sesión.
+    if (actor.tipoUsuario === 'GESTOR') await exigirAccesoSiniestro(tx, actor, id)
     const caso = await tx.siniestro.findUnique({
       where: { id },
       select: {
@@ -52,15 +50,23 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
         409,
         'El siniestro está dado de baja. Reactivalo antes de cambiar su estado.',
       )
+    if (actor.tipoUsuario === 'GESTOR' && caso.estadoSiniestro.esCierre)
+      throw new HttpError(
+        409,
+        'El siniestro está cerrado. Solo un administrador puede cambiar su estado.',
+      )
     return caso
   }
   return {
     opciones(usuario: SesionUsuario, id: number): Promise<OpcionesCambioEstado> {
       return base.transaccion(async (tx) => {
-        await autorizar(tx, usuario)
-        const caso = await buscar(tx, id)
+        const actor = await autorizar(tx, usuario)
+        const caso = await buscar(tx, id, actor)
         const estados = await tx.estadoSiniestro.findMany({
-          where: { eliminado: false },
+          where: {
+            eliminado: false,
+            ...(actor.tipoUsuario === 'GESTOR' ? { esCierre: false } : {}),
+          },
           select: detalleEstado,
           orderBy: { id: 'asc' },
         })
@@ -72,7 +78,7 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
       return base.transaccion(async (tx) => {
         const actor = await autorizar(tx, usuario)
         await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${id} FOR UPDATE`
-        const caso = await buscar(tx, id)
+        const caso = await buscar(tx, id, actor)
         if (caso.estadoSiniestro.id !== cambio.idEstadoAnterior)
           throw new HttpError(
             409,
@@ -86,6 +92,11 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
           throw new HttpError(
             400,
             'El estado seleccionado ya no está disponible. Volvé a consultar los estados.',
+          )
+        if (actor.tipoUsuario === 'GESTOR' && nuevo.esCierre)
+          throw new HttpError(
+            403,
+            'Solo un administrador puede confirmar el cierre del siniestro. Podés solicitar el cierre para que lo revise.',
           )
         if (nuevo.id === caso.estadoSiniestro.id)
           throw new HttpError(409, 'El siniestro ya tiene ese estado. Elegí uno diferente.')

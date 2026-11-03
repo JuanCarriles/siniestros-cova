@@ -12,7 +12,7 @@ export const opcionesCambioEstadoSchema = z.strictObject({
 })
 export const cambiarEstadoSiniestroSchema = z.strictObject({
   idEstadoSiniestro: z.int().positive(),
-  // Evita confirmar sobre un estado que otro administrador ya cambió.
+  // Evita confirmar sobre un estado que otro usuario ya cambió.
   idEstadoAnterior: z.int().positive(),
 })
 export type EstadoDisponible = z.output<typeof estadoDisponibleSchema>
