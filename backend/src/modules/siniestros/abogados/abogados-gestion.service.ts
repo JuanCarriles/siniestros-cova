@@ -23,8 +23,8 @@ const ETIQUETAS: Record<keyof ReturnType<typeof datosAbogado>, string> = {
   email: 'email',
 }
 
-/** "Ana Ruiz y Juan Paz", "Ana Ruiz y 2 personas sin nombre" */
-function nombresRepresentados(personas: { nombreCompletoRazonSocial: string | null }[]) {
+/** "Ana Ruiz y Juan Paz", "Ana Ruiz y 2 personas sin nombre". También la usa el alta del siniestro (E5-09). */
+export function nombresRepresentados(personas: { nombreCompletoRazonSocial: string | null }[]) {
   const nombres = personas.flatMap((p) => p.nombreCompletoRazonSocial?.trim() || [])
   const sinNombre = personas.length - nombres.length
   if (sinNombre === 1) nombres.push('una persona sin nombre')

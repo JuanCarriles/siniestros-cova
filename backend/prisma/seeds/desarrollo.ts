@@ -1222,10 +1222,15 @@ export async function seedDesarrollo(
     const desde = s.asignadoHaceDias
     const hasta = s.ultimoMovimientoHaceDias
 
-    // Asignación (RF-10) y reasignación (RF-12): las hace el supervisor
+    // Alta (E5-09), asignación (RF-10) y reasignación (RF-12): las hace el supervisor
     if (s.reasignadoDe) {
       const anterior = obtener(usuarios, s.reasignadoDe, 'el usuario')
       const fechaOriginal = haceDias(s.asignadoHaceDias + 7, 9)
+      await historial(
+        idSupervisor,
+        eventoHistorial.altaSiniestro(supervisor, fechaOriginal),
+        fechaOriginal,
+      )
       await historial(
         idSupervisor,
         eventoHistorial.asignacion(anterior, fechaOriginal),
@@ -1249,6 +1254,11 @@ export async function seedDesarrollo(
         fechaAsignacion,
       )
     } else {
+      await historial(
+        idSupervisor,
+        eventoHistorial.altaSiniestro(supervisor, fechaAsignacion),
+        fechaAsignacion,
+      )
       await historial(
         idSupervisor,
         eventoHistorial.asignacion(asignado, fechaAsignacion),

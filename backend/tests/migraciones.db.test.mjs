@@ -13,6 +13,7 @@ const NUMERO_UNICO = '20261028120000_numero_siniestro_unico'
 const PARTES_CONCURRENCIA = '20261104120000_partes_concurrencia'
 const ABOGADOS_PERITOS_CONCURRENCIA = '20261104130000_abogados_peritos_concurrencia'
 const NOVEDADES_AUTOR = '20261105120000_novedades_autor'
+const HISTORIAL_ALTA_EXISTENTES = '20261106120100_historial_alta_existentes'
 
 if (process.env.NODE_ENV === 'production') throw new Error('No correr en producción')
 if (!process.env.DATABASE_URL) throw new Error('Falta DATABASE_URL')
@@ -284,6 +285,62 @@ test('migración novedades_autor: las novedades anteriores quedan a nombre del u
     ])
     // De acá en adelante, toda novedad dice quién la cargó
     await assert.rejects(novedad(caso), { code: '23502' })
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración historial_alta_existentes: cada siniestro empieza por su alta, a nombre de quien hizo la primera asignación', async () => {
+  const { db, borrar } = await baseHasta(HISTORIAL_ALTA_EXISTENTES)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const conAsignaciones = await siniestro('S-1')
+    const sinAsignacion = await siniestro('S-2')
+    const yaTieneAlta = await siniestro('S-3')
+    const direccion = await uno(`INSERT INTO "Direccion" DEFAULT VALUES RETURNING id`)
+    const ana = await uno(
+      `INSERT INTO "Usuario" (nombres, apellidos, documento, telefono, email, contrasena, "tipoUsuario", "idDireccion")
+       VALUES ('Ana', 'Ruiz', '0', '0', 'ana@b.test', '-', 'ADMINISTRADOR', $1) RETURNING id`,
+      [direccion],
+    )
+    const { rows: autores } = await db.query(`SELECT id FROM "Usuario" WHERE id <> $1`, [ana])
+    const otro = autores[0].id
+    const evento = (idSiniestro, tipo, idUsuario, fecha, eliminado = false) =>
+      uno(
+        `INSERT INTO "HistorialSiniestro" ("tipoEvento", descripcion, "fechaEvento", "idSiniestro", "idUsuario", eliminado, "fechaBaja")
+         VALUES ($1, '-', $2, $3, $4, $5, CASE WHEN $5 THEN now() END) RETURNING id`,
+        [tipo, fecha, idSiniestro, idUsuario, eliminado],
+      )
+    // Las 23:30 del 19/10 en la Argentina son las 02:30 del 20/10 en UTC: el texto dice 19/10
+    await evento(conAsignaciones, 'ASIGNACION', otro, '2026-10-19T00:00:00Z', true)
+    await evento(conAsignaciones, 'ASIGNACION', ana, '2026-10-20T02:30:00Z')
+    await evento(conAsignaciones, 'REASIGNACION', otro, '2026-10-25T12:00:00Z')
+    await evento(conAsignaciones, 'ASIGNACION', otro, '2026-10-26T12:00:00Z')
+    await evento(sinAsignacion, 'NOVEDAD', ana, '2026-10-20T12:00:00Z')
+    await evento(yaTieneAlta, 'ALTA_SINIESTRO', ana, '2026-10-20T12:00:00Z')
+    await evento(yaTieneAlta, 'ASIGNACION', ana, '2026-10-20T12:00:00Z')
+
+    await db.query(await sql(HISTORIAL_ALTA_EXISTENTES))
+    // Correrla de nuevo no duplica nada
+    await db.query(await sql(HISTORIAL_ALTA_EXISTENTES))
+    const { rows } = await db.query(
+      `SELECT "idSiniestro", "idUsuario", descripcion, "fechaEvento" FROM "HistorialSiniestro"
+       WHERE "tipoEvento" = 'ALTA_SINIESTRO' ORDER BY "idSiniestro", id`,
+    )
+    assert.deepEqual(rows, [
+      {
+        idSiniestro: conAsignaciones,
+        idUsuario: ana,
+        descripcion: 'Ana Ruiz dio de alta el siniestro el 19/10/2026',
+        fechaEvento: new Date('2026-10-20T02:29:59.999Z'),
+      },
+      {
+        idSiniestro: yaTieneAlta,
+        idUsuario: ana,
+        descripcion: '-',
+        fechaEvento: new Date('2026-10-20T12:00:00Z'),
+      },
+    ])
   } finally {
     await borrar()
   }
