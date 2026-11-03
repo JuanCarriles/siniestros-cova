@@ -7,6 +7,7 @@ import {
   filtrosSiniestrosSchema,
 } from '@cova/shared/schemas/siniestros'
 import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
+import { novedadSchema } from '@cova/shared/schemas/novedades'
 import {
   abogadoFichaSchema,
   agregarPersonaSchema,
@@ -32,6 +33,7 @@ import type { crearServicioAbogadosGestion } from './abogados/abogados-gestion.s
 import type { crearServicioPeritosGestion } from './peritos/peritos-gestion.service.ts'
 import type { crearServicioPersonasGestion } from './personas/personas-gestion.service.ts'
 import type { crearServicioVehiculosGestion } from './vehiculos/vehiculos-gestion.service.ts'
+import type { crearServicioNovedadesGestion } from '../novedades/novedades-gestion.service.ts'
 
 /** Lectura de cada pestaña de la ficha (CU-10). Cada historia suma sus acciones en su propio servicio. */
 type PestanaFicha = {
@@ -69,6 +71,8 @@ export const PESTANAS_FICHA = [
 // POST  /api/siniestros/:id/peritos                        carga un perito (uno de cada tipo como máximo)
 // PUT   /api/siniestros/:id/peritos/:idPerito              lo modifica ({ revision, datos }); el cierre es movimiento
 // PATCH /api/siniestros/:id/peritos/:idPerito/baja         baja lógica
+// Novedades desde la ficha (CU-10 1.f.1, E5-08), con el mismo control de acceso. No se editan ni se borran:
+// POST  /api/siniestros/:id/novedades                      carga una novedad (movimiento del caso; avisa)
 // Alta (solo administrador y superadministrador):
 // GET  /api/siniestros/alta/opciones
 // POST /api/siniestros/alta/datos-caso   valida el paso 1 (204 o el error con su campo)
@@ -85,10 +89,11 @@ export function crearSiniestrosRouter(deps: {
   personas: ReturnType<typeof crearServicioPersonasGestion>
   abogados: ReturnType<typeof crearServicioAbogadosGestion>
   peritos: ReturnType<typeof crearServicioPeritosGestion>
+  novedades: ReturnType<typeof crearServicioNovedadesGestion>
   requerirSesion: RequestHandler
 }) {
   const { servicio, alta, creacion, operaciones, ficha, requerirSesion } = deps
-  const { vehiculos, personas, abogados, peritos } = deps
+  const { vehiculos, personas, abogados, peritos, novedades } = deps
   const router = Router()
   router.use(requerirSesion, requerirRol('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'))
 
@@ -280,6 +285,18 @@ export function crearSiniestrosRouter(deps: {
       idSchema.parse(req.params.idPerito),
     )
     res.status(204).end()
+  })
+
+  router.post('/:id/novedades', async (req, res) => {
+    res
+      .status(201)
+      .json(
+        await novedades.cargar(
+          usuarioDeSesion(req),
+          idSchema.parse(req.params.id),
+          novedadSchema.parse(req.body),
+        ),
+      )
   })
 
   return router

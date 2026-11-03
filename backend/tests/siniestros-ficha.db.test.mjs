@@ -194,18 +194,21 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
               {
                 idSiniestro,
                 descripcion: 'Segunda',
+                idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
                 fechaCarga: new Date('2026-02-03T12:00:00Z'),
               },
               {
                 idSiniestro,
                 descripcion: 'Primera',
+                idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
                 fechaCarga: new Date('2026-02-02T12:00:00Z'),
               },
               {
                 idSiniestro,
                 descripcion: 'Baja',
+                idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
                 eliminado: true,
                 fechaBaja: ahora,
@@ -328,10 +331,12 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
           )
 
           const novedades = await crearServicioNovedadesFicha(tx).listar(sesionA, idSiniestro)
+          // Novedades: de la más nueva a la más vieja, con el nombre y el tipo de quien la cargó
           assert.deepEqual(
             novedades.map((n) => n.descripcion),
-            ['Primera', 'Segunda'],
+            ['Segunda', 'Primera'],
           )
+          assert.deepEqual(novedades[0].autor, { nombre: 'Ana Prueba', tipoUsuario: 'GESTOR' })
 
           // Documentos: del más nuevo al más viejo, sin la clave de R2
           const documentos = await crearServicioDocumentosFicha(tx).listar(sesionA, idSiniestro)

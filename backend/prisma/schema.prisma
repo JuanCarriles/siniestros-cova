@@ -131,6 +131,7 @@ model Usuario {
   mensajes            MensajeChat[]
   lecturasMensajes    LecturaMensajeChat[]
   documentosSiniestro DocumentoSiniestro[]
+  novedadesSiniestro  NovedadSiniestro[]
   siniestros          Siniestro[]
   sesiones            Sesion[]
   recuperacion        RecuperacionContrasena?
@@ -269,15 +270,20 @@ model DocumentoSiniestro {
 model NovedadSiniestro {
   id          Int       @id @default(autoincrement())
   descripcion String
-  /// Nombre y apellido del usuario asignado al siniestro al momento de cargarla (texto, no FK).
+  /// Nombre y apellido de quien la cargó, tal como era en ese momento. La ficha muestra el de idUsuario.
   autor       String
   fechaCarga  DateTime  @default(now()) @db.Timestamptz(3)
+  /// Quien la cargó (E5-08): de acá salen su nombre y su tipo de usuario en la ficha. Las novedades no se
+  /// editan ni se borran desde el sistema; solo se van con el borrado físico del siniestro.
+  idUsuario   Int
   idSiniestro Int
   eliminado   Boolean   @default(false)
   fechaBaja   DateTime? @db.Timestamptz(3)
 
+  usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  @@index([idUsuario])
   @@index([idSiniestro, eliminado, fechaCarga])
 }
 
@@ -299,10 +305,10 @@ model Perito {
 
   siniestro Siniestro  @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   direccion Direccion? @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
-
-  @@index([idSiniestro])
   // Un perito activo de cada tipo por siniestro: índice parcial "Perito_tipo_activo_key", creado a mano en la
   // migración 20261104130000_abogados_peritos_concurrencia (Prisma no declara índices parciales). Falla con P2002.
+
+  @@index([idSiniestro])
 }
 
 model Aseguradora {
@@ -372,12 +378,12 @@ model Vehiculo {
   aseguradora          Aseguradora?         @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro            Siniestro            @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   personasInvolucradas PersonaInvolucrada[]
-
-  @@index([idAseguradora])
-  @@index([idSiniestro])
   // Dominio único entre los vehículos activos del siniestro, sin espacios ni guiones y sin distinguir mayúsculas:
   // índice parcial "Vehiculo_dominio_activo_key", creado a mano en la migración 20261104120000_partes_concurrencia
   // (Prisma no declara índices parciales ni sobre expresiones). Un repetido falla con P2002.
+
+  @@index([idAseguradora])
+  @@index([idSiniestro])
 }
 
 model TipoDocumento {
@@ -422,13 +428,13 @@ model PersonaInvolucrada {
   abogado       Abogado?       @relation(fields: [idAbogado], references: [id], onDelete: Restrict, onUpdate: Restrict)
   tipoDocumento TipoDocumento? @relation(fields: [idTipoDocumento], references: [id], onDelete: Restrict, onUpdate: Restrict)
   vehiculo      Vehiculo?      @relation(fields: [idVehiculo], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // Un titular activo por vehículo: índice parcial "PersonaInvolucrada_titular_activo_key", creado a mano en la
+  // migración 20261104120000_partes_concurrencia (Prisma no declara índices parciales). Un segundo falla con P2002.
 
   @@index([idSiniestro])
   @@index([idAbogado])
   @@index([idTipoDocumento])
   @@index([idVehiculo])
-  // Un titular activo por vehículo: índice parcial "PersonaInvolucrada_titular_activo_key", creado a mano en la
-  // migración 20261104120000_partes_concurrencia (Prisma no declara índices parciales). Un segundo falla con P2002.
 }
 
 model EstadoSiniestro {
@@ -480,6 +486,9 @@ model Siniestro {
   novedades            NovedadSiniestro[]
   peritos              Perito[]
   personasInvolucradas PersonaInvolucrada[]
+  // Único por aseguradora sin distinguir mayúsculas: índice "Siniestro_idAseguradora_numeroSiniestro_key" sobre
+  // (idAseguradora, lower(numeroSiniestro)), creado a mano en la migración 20261028120000_numero_siniestro_unico
+  // (Prisma no declara índices sobre expresiones). Un alta repetida falla con P2002.
 
   @@index([idEstadoSiniestro, eliminado])
   @@index([idAseguradora, eliminado])
@@ -487,9 +496,6 @@ model Siniestro {
   @@index([idAjustador])
   @@index([idDireccion])
   @@index([numeroSiniestro])
-  // Único por aseguradora sin distinguir mayúsculas: índice "Siniestro_idAseguradora_numeroSiniestro_key" sobre
-  // (idAseguradora, lower(numeroSiniestro)), creado a mano en la migración 20261028120000_numero_siniestro_unico
-  // (Prisma no declara índices sobre expresiones). Un alta repetida falla con P2002.
 }
 
 /// Una recuperación vigente por usuario. Sólo hashes de desafíos/tokens y del código vinculado al desafío.

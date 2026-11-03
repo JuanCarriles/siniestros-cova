@@ -140,12 +140,12 @@ export type PeritoFicha = {
   cerrado: boolean
 }
 
-/** GET /api/siniestros/:id/novedades (CU-10 1.f), de la más vieja a la más nueva */
+/** GET /api/siniestros/:id/novedades (CU-10 1.f), de la más nueva a la más vieja (E5-08: queda junto al campo de carga) */
 export type NovedadFicha = {
   id: number
   descripcion: string
-  autor: string
   fechaCarga: string
+  autor: { nombre: string; tipoUsuario: TipoUsuario }
 }
 
 /** GET /api/siniestros/:id/documentos (CU-10 1.g), del más nuevo al más viejo */

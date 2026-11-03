@@ -7,7 +7,7 @@ import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 import type { TipoPersona } from './partes-datos.ts'
 
 // Reglas comunes para agregar, modificar y dar de baja vehículos y personas (CU-10 1.c, E5-06), abogados y peritos
-// (1.d y 1.e, E5-07) desde la ficha.
+// (1.d y 1.e, E5-07) desde la ficha. Cargar una novedad (1.f.1, E5-08) usa las mismas comprobaciones.
 
 export type Tx = Prisma.TransactionClient
 export type Transaccion = <T>(trabajo: (tx: Tx) => Promise<T>) => Promise<T>
@@ -43,8 +43,9 @@ export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestr
 }
 
 /**
- * Cuenta como movimiento del caso: reinicia los días sin movimiento (RF-19). Desde la ficha, de vehículos, personas,
- * abogados y peritos solo lo hace registrar el cierre de una pericia (E5-07); lo demás queda en el historial.
+ * Cuenta como movimiento del caso: reinicia los días sin movimiento (RF-19). Desde la ficha lo hacen cargar una
+ * novedad (E5-08) y registrar el cierre de una pericia (E5-07). Los demás cambios de vehículos, personas, abogados y
+ * peritos quedan en el historial, pero no son movimiento.
  */
 export async function registrarMovimiento(tx: Tx, idSiniestro: number, fecha: Date) {
   await tx.siniestro.update({

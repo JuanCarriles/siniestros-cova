@@ -1267,7 +1267,13 @@ export async function seedDesarrollo(
     for (const [i, descripcion] of s.novedades.entries()) {
       const fechaCarga = haceDias(diasNovedades[i] ?? hasta, 11)
       await tx.novedadSiniestro.create({
-        data: { idSiniestro, descripcion, autor: nombreCompleto(asignado), fechaCarga },
+        data: {
+          idSiniestro,
+          idUsuario: idAsignado,
+          descripcion,
+          autor: nombreCompleto(asignado),
+          fechaCarga,
+        },
       })
       await historial(idAsignado, eventoHistorial.novedad(asignado, fechaCarga), fechaCarga)
       await notificar(
