@@ -319,6 +319,7 @@ model Aseguradora {
   eliminado Boolean   @default(false)
   fechaBaja DateTime? @db.Timestamptz(3)
 
+  // Nombre único sin distinguir mayúsculas ni espacios de borde: índice de expresión en 20261105130000_maestros_unicos.
   ajustadores Ajustador[]
   vehiculos   Vehiculo[]
   siniestros  Siniestro[]
@@ -334,6 +335,7 @@ model Ajustador {
   eliminado     Boolean   @default(false)
   fechaBaja     DateTime? @db.Timestamptz(3)
 
+  // Email único sin distinguir mayúsculas ni espacios de borde: índice de expresión en 20261105130000_maestros_unicos.
   aseguradora Aseguradora @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestros  Siniestro[]
 
@@ -453,6 +455,8 @@ model EstadoSiniestro {
 
 model Siniestro {
   id                    Int       @id @default(autoincrement())
+  /// Control de cambios simultáneos de los datos del caso; no cuenta como movimiento.
+  revision              Int       @default(0)
   numeroSiniestro       String
   numeroPoliza          String
   fechaAsignacion       DateTime  @db.Timestamptz(3)

@@ -25,9 +25,7 @@ export const asignacionEdicionSchema = z.strictObject({
   idAjustador: opcional(idSchema),
 })
 const comunes = {
-  version: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/, 'Volvé a abrir la edición para consultar los datos actuales.'),
+  revision: z.number().int().min(0),
   hecho: hechoEdicionSchema,
   lugar: datosCasoSchema.shape.lugar,
 }
@@ -44,7 +42,7 @@ export type DatosEdicionCaso = Pick<
   'poliza' | 'asignacion' | 'hecho' | 'lugar'
 >
 export type EdicionCaso = {
-  version: string
+  revision: number
   datos: DatosEdicionCaso
   puedeEditarAsignacion: boolean
   opciones: {
