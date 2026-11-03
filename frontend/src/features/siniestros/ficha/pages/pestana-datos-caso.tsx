@@ -1,4 +1,12 @@
-import { FileText, Flag, MapPin, UsersRound } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { useRevalidator } from 'react-router'
+import { FileText, Flag, MapPin, Pencil, UsersRound, UserRoundCheck } from 'lucide-react'
+import { usePanel } from '@/components/layout/panel-context'
+import { Aviso } from '@/components/aviso'
+import { Button } from '@/components/ui/button'
+import { ReasignarSiniestroDialog } from '../components/reasignar-siniestro-dialog'
+import { EditarDatosCaso } from '../components/editar-datos-caso'
+import { actualizarNotificaciones } from '@/features/notificaciones/actualizar-notificaciones'
 import { Badge } from '@/components/ui/badge'
 import { Dato } from '../../components/dato'
 import { BloqueFicha, PestanaFicha } from '../components/pestana-ficha'
@@ -9,8 +17,95 @@ import { useFicha } from '../hooks/use-ficha'
 export function PestanaDatosCaso() {
   const ficha = useFicha()
   const { hecho, lugar } = ficha
+  const { usuario } = usePanel()
+  const revalidator = useRevalidator()
+  const botonReasignar = useRef<HTMLButtonElement>(null)
+  const [editando, setEditando] = useState(false)
+  const [reasignando, setReasignando] = useState(false)
+  const [mensaje, setMensaje] = useState<string | null>(null)
+  const [falloCorreo, setFalloCorreo] = useState(false)
+  if (editando)
+    return (
+      <EditarDatosCaso
+        ficha={ficha}
+        onCancelar={() => setEditando(false)}
+        onHecho={(resultado) => {
+          setEditando(false)
+          setMensaje(
+            resultado.modificado
+              ? 'Los datos del caso se actualizaron y el cambio quedó registrado en el historial.'
+              : 'No había cambios para guardar.',
+          )
+          void revalidator.revalidate()
+        }}
+      />
+    )
   return (
-    <PestanaFicha titulo="Datos del caso">
+    <PestanaFicha
+      titulo="Datos del caso"
+      acciones={
+        !ficha.fechaBaja &&
+        !ficha.estado.esCierre && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMensaje(null)
+                setFalloCorreo(false)
+                setEditando(true)
+              }}
+            >
+              <Pencil aria-hidden="true" />
+              Modificar datos
+            </Button>
+            {usuario.tipo !== 'GESTOR' && (
+              <Button
+                ref={botonReasignar}
+                variant="outline"
+                onClick={() => {
+                  setMensaje(null)
+                  setFalloCorreo(false)
+                  setReasignando(true)
+                }}
+              >
+                <UserRoundCheck aria-hidden="true" />
+                Reasignar
+              </Button>
+            )}
+          </div>
+        )
+      }
+    >
+      {mensaje && (
+        <Aviso tipo="exito" className="mb-5">
+          {mensaje}
+        </Aviso>
+      )}
+      {falloCorreo && (
+        <Aviso tipo="info" className="mb-5">
+          La reasignación quedó guardada y se enviaron los avisos internos, pero no se pudieron
+          enviar todos los mails. No hace falta repetir la operación; consultá la configuración de
+          correo con la administración.
+        </Aviso>
+      )}
+      {reasignando && (
+        <ReasignarSiniestroDialog
+          key={ficha.id}
+          ficha={ficha}
+          elementoAlCerrar={() => botonReasignar.current}
+          onCerrar={() => setReasignando(false)}
+          onHecho={(resultado, nombre) => {
+            setReasignando(false)
+            setMensaje(
+              `El siniestro quedó asignado a ${nombre}. El cambio se registró en el historial.`,
+            )
+            setFalloCorreo(!resultado.correosEnviados)
+            actualizarNotificaciones()
+            void revalidator.revalidate()
+          }}
+        />
+      )}
+
       <div className="grid gap-5 lg:grid-cols-2">
         <BloqueFicha icono={FileText} titulo="Póliza">
           <dl className="grid gap-x-6 gap-y-4 text-lg sm:grid-cols-2">

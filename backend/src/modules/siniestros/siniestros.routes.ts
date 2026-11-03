@@ -33,6 +33,11 @@ import type { crearServicioAbogadosGestion } from './abogados/abogados-gestion.s
 import type { crearServicioPeritosGestion } from './peritos/peritos-gestion.service.ts'
 import type { crearServicioPersonasGestion } from './personas/personas-gestion.service.ts'
 import type { crearServicioVehiculosGestion } from './vehiculos/vehiculos-gestion.service.ts'
+import { cambiarEstadoSiniestroSchema } from '@cova/shared/schemas/cambio-estado-siniestro'
+import type { crearServicioEstadoSiniestro } from './siniestros-estado.service.ts'
+import type { crearServicioEdicionCaso } from './siniestros-edicion.service.ts'
+import type { crearServicioReasignacion } from './siniestros-reasignacion.service.ts'
+import { reasignarSiniestroSchema } from '@cova/shared/schemas/reasignacion-siniestro'
 import type { crearServicioNovedadesGestion } from '../novedades/novedades-gestion.service.ts'
 
 /** Lectura de cada pestaña de la ficha (CU-10). Cada historia suma sus acciones en su propio servicio. */
@@ -80,6 +85,9 @@ export const PESTANAS_FICHA = [
 // DELETE /api/siniestros/alta/documentos  { clave } lo quita
 // POST   /api/siniestros/alta             crea el siniestro con todo lo cargado y avisa al asignado
 export function crearSiniestrosRouter(deps: {
+  reasignacion: ReturnType<typeof crearServicioReasignacion>
+  edicion: ReturnType<typeof crearServicioEdicionCaso>
+  estados: ReturnType<typeof crearServicioEstadoSiniestro>
   operaciones: ReturnType<typeof crearServicioBajasSiniestros>
   servicio: ReturnType<typeof crearServicioSiniestros>
   alta: ReturnType<typeof crearServicioAltaSiniestros>
@@ -92,7 +100,17 @@ export function crearSiniestrosRouter(deps: {
   novedades: ReturnType<typeof crearServicioNovedadesGestion>
   requerirSesion: RequestHandler
 }) {
-  const { servicio, alta, creacion, operaciones, ficha, requerirSesion } = deps
+  const {
+    servicio,
+    alta,
+    creacion,
+    operaciones,
+    estados,
+    edicion,
+    reasignacion,
+    ficha,
+    requerirSesion,
+  } = deps
   const { vehiculos, personas, abogados, peritos, novedades } = deps
   const router = Router()
   router.use(requerirSesion, requerirRol('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'))
@@ -136,6 +154,26 @@ export function crearSiniestrosRouter(deps: {
     res.json(await alta.opcionesPartes())
   })
 
+  router.get('/:id/edicion', async (req, res) => {
+    res.set('Cache-Control', 'no-store')
+    res.json(await edicion.obtener(usuarioDeSesion(req), idSchema.parse(req.params.id)))
+  })
+  router.patch('/:id/datos', async (req, res) => {
+    res.json(await edicion.modificar(usuarioDeSesion(req), idSchema.parse(req.params.id), req.body))
+  })
+  router.get('/:id/estados', async (req, res) => {
+    res.set('Cache-Control', 'no-store')
+    res.json(await estados.opciones(usuarioDeSesion(req), idSchema.parse(req.params.id)))
+  })
+  router.patch('/:id/estado', async (req, res) => {
+    await estados.cambiar(
+      usuarioDeSesion(req),
+      idSchema.parse(req.params.id),
+      cambiarEstadoSiniestroSchema.parse(req.body),
+    )
+    res.status(204).end()
+  })
+
   router.patch(
     '/:id/baja',
     requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'),
@@ -157,6 +195,20 @@ export function crearSiniestrosRouter(deps: {
       confirmarSiniestroSchema.parse(req.body),
     )
     res.status(204).end()
+  })
+  router.get('/:id/reasignacion', soloAdministracion, async (req, res) => {
+    res.set('Cache-Control', 'no-store')
+    res.json(await reasignacion.opciones(usuarioDeSesion(req), idSchema.parse(req.params.id)))
+  })
+  router.patch('/:id/reasignacion', soloAdministracion, async (req, res) => {
+    res.set('Cache-Control', 'no-store')
+    res.json(
+      await reasignacion.reasignar(
+        usuarioDeSesion(req),
+        idSchema.parse(req.params.id),
+        reasignarSiniestroSchema.parse(req.body),
+      ),
+    )
   })
   router.get('/:id', async (req, res) => {
     res.json(await servicio.obtener(usuarioDeSesion(req), idSchema.parse(req.params.id)))

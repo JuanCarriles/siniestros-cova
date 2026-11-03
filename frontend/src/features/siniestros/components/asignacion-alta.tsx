@@ -19,6 +19,9 @@ export function AsignacionAlta({
   onCambiar,
   error,
   grupoRef,
+  titulo = 'Asignación',
+  leyenda = '¿A quién se le asigna?',
+  descripcion = 'Quien lo reciba va a ver el aviso en el sistema y por mail. Los casos activos ayudan a repartir la carga.',
 }: {
   usuarios: OpcionesAltaSiniestro['usuarios']
   valor: number | null
@@ -26,6 +29,9 @@ export function AsignacionAlta({
   error: string | null
   /** Para llevar el foco al grupo cuando falta elegir */
   grupoRef?: Ref<HTMLFieldSetElement>
+  titulo?: string
+  leyenda?: string
+  descripcion?: string
 }) {
   const id = useId()
   const [busqueda, setBusqueda] = useState('')
@@ -49,12 +55,9 @@ export function AsignacionAlta({
           >
             <UserCheck className="size-5" />
           </span>
-          Asignación
+          {titulo}
         </h2>
-        <p className="text-muted-foreground">
-          Quien lo reciba va a ver el aviso en el sistema y por mail. Los casos activos ayudan a
-          repartir la carga.
-        </p>
+        <p className="text-muted-foreground">{descripcion}</p>
       </div>
 
       {usuarios.length > 6 && (
@@ -76,7 +79,7 @@ export function AsignacionAlta({
         className="grid gap-3 rounded-lg focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
       >
         <legend className="mb-3 text-lg font-bold">
-          ¿A quién se le asigna?{' '}
+          {leyenda}{' '}
           <span className="text-base font-normal text-muted-foreground">(obligatorio)</span>
         </legend>
         {error && (
