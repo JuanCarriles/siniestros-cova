@@ -230,14 +230,23 @@ test(
         numeroPoliza: 'POL-2',
         sucursal: 'Rosario',
       }
-      await assert.rejects(servicio.modificar(admin, s.id, { ...adminCambio, asignacion: { ...adminCambio.asignacion, idUsuario: otro.id } }), { name: 'ZodError' })
+      await assert.rejects(
+        servicio.modificar(admin, s.id, {
+          ...adminCambio,
+          asignacion: { ...adminCambio.asignacion, idUsuario: otro.id },
+        }),
+        { name: 'ZodError' },
+      )
       await servicio.modificar(superadmin, s.id, adminCambio)
       const editado = await prisma.siniestro.findUniqueOrThrow({ where: { id: s.id } })
       assert.equal(editado.numeroSiniestro, 'ACTUALIZADO')
       assert.equal(editado.numeroPoliza, 'POL-2')
       assert.equal(editado.idUsuario, gestor.id)
       assert.equal(await prisma.notificacion.count({ where: { idSiniestro: s.id } }), 0)
-      const eventos = await prisma.historialSiniestro.findMany({ where: { idSiniestro: s.id }, orderBy: { id: 'asc' } })
+      const eventos = await prisma.historialSiniestro.findMany({
+        where: { idSiniestro: s.id },
+        orderBy: { id: 'asc' },
+      })
       assert.equal(eventos.length, 2)
       assert.equal(eventos[0].id, historial[0].id)
       assert.equal(eventos[1].tipoEvento, 'MODIFICACION_DATOS')

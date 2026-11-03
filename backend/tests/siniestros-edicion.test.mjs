@@ -43,7 +43,13 @@ test('contratos: el gestor no puede incluir póliza, asignación ni autor/fechas
     asignacion: { idAjustador: '' },
   }
   assert.equal(editarCasoAdministradorSchema.parse(admin).poliza.numeroSiniestro, 'S-1')
-  assert.equal(editarCasoAdministradorSchema.safeParse({ ...admin, asignacion: { ...admin.asignacion, idUsuario: 9 } }).success, false)
+  assert.equal(
+    editarCasoAdministradorSchema.safeParse({
+      ...admin,
+      asignacion: { ...admin.asignacion, idUsuario: 9 },
+    }).success,
+    false,
+  )
 })
 
 test('HTTP: sesión e id válidos; el servicio recibe al actor de la cookie y el cuerpo para validar por rol', async (t) => {
@@ -98,4 +104,3 @@ test('HTTP: sesión e id válidos; el servicio recibe al actor de la cookie y el
   assert.equal((await pedir('/7/datos', 'valida', 'PATCH', { hecho: {} })).status, 200)
   assert.deepEqual(llamadas.pop(), [actor, 7, { hecho: {} }])
 })
-

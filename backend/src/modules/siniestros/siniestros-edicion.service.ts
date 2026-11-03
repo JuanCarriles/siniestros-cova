@@ -39,6 +39,7 @@ const seleccion = {
   fechaUltimoMovimiento: true,
   eliminado: true,
   eliminacionEnCurso: true,
+  estadoSiniestro: { select: { esCierre: true } },
   usuario: { select: persona },
   aseguradora: { select: { nombre: true } },
   ajustador: { select: { nombres: true, apellidos: true, idAseguradora: true } },
@@ -86,10 +87,7 @@ const texto = (valor: unknown) =>
         ? String(valor)
         : 'Sin especificar'
 
-export function crearServicioEdicionCaso(
-  deps: Base,
-  reloj = () => new Date(),
-) {
+export function crearServicioEdicionCaso(deps: Base, reloj = () => new Date()) {
   async function actorDe(tx: Prisma.TransactionClient, usuario: SesionUsuario) {
     const actor = await tx.usuario.findFirst({
       where: { id: usuario.id, eliminado: false },
@@ -111,6 +109,11 @@ export function crearServicioEdicionCaso(
       throw new HttpError(
         409,
         'No se pueden modificar los datos de un siniestro dado de baja o con eliminación pendiente.',
+      )
+    if (s.estadoSiniestro.esCierre)
+      throw new HttpError(
+        409,
+        'Este siniestro está cerrado: se puede consultar, pero no modificar.',
       )
     return s
   }

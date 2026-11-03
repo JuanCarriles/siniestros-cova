@@ -37,7 +37,7 @@ export function PestanaDatosCaso() {
     <PestanaFicha
       titulo="Datos del caso"
       acciones={
-        !ficha.fechaBaja && (
+        !ficha.fechaBaja && !ficha.estado.esCierre && (
           <Button
             variant="outline"
             onClick={() => {

@@ -1,9 +1,9 @@
 # Edición de datos del caso por rol (CU-10 2.a, 4.a, 4.b y 5.a)
 
 En la pestaña Datos del caso, Modificar datos habilita la edición en los cuatro bloques del mockup.
-Administradores y superadministrador editan póliza, asignación, hecho y lugar. Un gestor solo puede editar
+Administradores y superadministrador editan póliza, asignación (solo ajustador), hecho y lugar. Un gestor solo puede editar
 hecho y lugar de un caso asignado a él; los otros bloques quedan deshabilitados. El servidor vuelve a consultar
-el rol y rechaza los cuerpos que intenten incluir campos protegidos. No se editan casos de baja ni con borrado pendiente.
+el rol y rechaza los cuerpos que intenten incluir campos protegidos. No se editan casos cerrados, de baja ni con borrado pendiente.
 
 GET /api/siniestros/:id/edicion entrega datos, catálogos vigentes y una versión de la lectura.
 PATCH /api/siniestros/:id/datos valida Zod según el rol, vuelve a comprobar el acceso y bloquea el siniestro
