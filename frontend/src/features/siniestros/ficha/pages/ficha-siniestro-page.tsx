@@ -1,5 +1,5 @@
 import { actualizarNotificaciones } from '@/features/notificaciones/actualizar-notificaciones'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate, useRevalidator } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import { usePanel } from '@/components/layout/panel-context'
@@ -24,6 +24,9 @@ export function FichaSiniestroPage() {
   const [cambiandoEstado, setCambiandoEstado] = useState(false)
   const [avisoEstado, setAvisoEstado] = useState<string | null>(null)
   const revalidator = useRevalidator()
+  const botonEstado = useRef<HTMLButtonElement>(null)
+  const avisoEstadoRef = useRef<HTMLDivElement>(null)
+  const esGestor = panel.usuario.tipo === 'GESTOR'
   // Cuántos pasos atrás quedó el listado: 1 al llegar navegando, uno más por cada pestaña abierta, 0 si se entró
   // directo a la dirección (no hay listado detrás)
   const pasosAlListado =
@@ -47,14 +50,15 @@ export function FichaSiniestroPage() {
       </Button>
 
       {avisoEstado && (
-        <Aviso tipo="exito" className="mb-4">
+        <Aviso ref={avisoEstadoRef} tipo="exito" className="mb-4">
           {avisoEstado}
         </Aviso>
       )}
       <CabeceraFicha
         ficha={ficha}
+        botonEstadoRef={botonEstado}
         onCambiarEstado={
-          panel.usuario.tipo === 'ADMINISTRADOR' || panel.usuario.tipo === 'SUPER_ADMINISTRADOR'
+          !ficha.fechaBaja && (!esGestor || !ficha.estado.esCierre)
             ? () => {
                 setAvisoEstado(null)
                 setCambiandoEstado(true)
@@ -80,6 +84,8 @@ export function FichaSiniestroPage() {
       {cambiandoEstado && (
         <CambiarEstadoDialog
           ficha={ficha}
+          esGestor={esGestor}
+          elementoAlCerrar={() => avisoEstadoRef.current ?? botonEstado.current}
           onCerrar={() => setCambiandoEstado(false)}
           onHecho={(mensaje) => {
             setCambiandoEstado(false)

@@ -156,11 +156,11 @@ export function crearSiniestrosRouter(deps: {
   router.patch('/:id/datos', async (req, res) => {
     res.json(await edicion.modificar(usuarioDeSesion(req), idSchema.parse(req.params.id), req.body))
   })
-  router.get('/:id/estados', soloAdministracion, async (req, res) => {
+  router.get('/:id/estados', async (req, res) => {
     res.set('Cache-Control', 'no-store')
     res.json(await estados.opciones(usuarioDeSesion(req), idSchema.parse(req.params.id)))
   })
-  router.patch('/:id/estado', soloAdministracion, async (req, res) => {
+  router.patch('/:id/estado', async (req, res) => {
     await estados.cambiar(
       usuarioDeSesion(req),
       idSchema.parse(req.params.id),

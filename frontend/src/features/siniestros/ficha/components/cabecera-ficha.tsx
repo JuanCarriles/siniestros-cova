@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import {
   ArrowLeftRight,
   Building2,
@@ -69,10 +69,12 @@ export function CabeceraFicha({
   ficha,
   onVerAjustador,
   onCambiarEstado,
+  botonEstadoRef,
 }: {
   ficha: FichaSiniestro
   onVerAjustador: () => void
   onCambiarEstado?: () => void
+  botonEstadoRef?: Ref<HTMLButtonElement>
 }) {
   return (
     <header className="@container mb-4 overflow-hidden rounded-2xl border bg-card shadow-card">
@@ -96,7 +98,7 @@ export function CabeceraFicha({
             <TooltipContent>{ficha.estado.descripcion}</TooltipContent>
           </Tooltip>
           {onCambiarEstado && !ficha.fechaBaja && (
-            <Button onClick={onCambiarEstado} className="ml-auto shrink-0">
+            <Button ref={botonEstadoRef} onClick={onCambiarEstado} className="ml-auto shrink-0">
               <ArrowLeftRight aria-hidden="true" />
               Cambiar estado
             </Button>
