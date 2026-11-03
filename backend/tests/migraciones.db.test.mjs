@@ -248,3 +248,127 @@ test('migración abogados_peritos_concurrencia: con dos peritos activos del mism
     await borrar()
   }
 })
+
+test('migración revision_datos_caso: conserva casos, historial y movimiento e inicia revisiones en cero', async () => {
+  const migracion = '20261105120000_revision_datos_caso'
+  const { db, borrar } = await baseHasta(migracion)
+  try {
+    const { siniestro } = await datosBase(db)
+    const id = await siniestro('CONSERVAR')
+    await db.query(
+      `UPDATE "Siniestro" SET causa = 'Texto previo', demorado = true, "fechaUltimoMovimiento" = '2026-10-01T12:00:00Z' WHERE id = $1`,
+      [id],
+    )
+    const anterior = (await db.query('SELECT * FROM "Siniestro" WHERE id = $1', [id])).rows[0]
+    await db.query(await sql(migracion))
+    const { revision, ...conservado } = (
+      await db.query('SELECT * FROM "Siniestro" WHERE id = $1', [id])
+    ).rows[0]
+    assert.equal(revision, 0)
+    assert.deepEqual(conservado, anterior)
+    const nuevo = await siniestro('NUEVO')
+    assert.equal(
+      (await db.query('SELECT revision FROM "Siniestro" WHERE id = $1', [nuevo])).rows[0].revision,
+      0,
+    )
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración maestros_unicos: une relaciones sin perder expedientes, vehículos ni historial', async () => {
+  const nombre = '20261105130000_maestros_unicos'
+  const { db, borrar } = await baseHasta(nombre)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const s1 = await siniestro('S-1'),
+      s2 = await siniestro('S-2')
+    const original = (await db.query('SELECT * FROM "Siniestro" WHERE id = $1', [s1])).rows[0]
+    const aseguradora = original.idAseguradora
+    const duplicada = await uno(
+      `INSERT INTO "Aseguradora" (nombre) VALUES (' PRUEBA ') RETURNING id`,
+    )
+    const ajustador = (idAseguradora, email) =>
+      uno(
+        `INSERT INTO "Ajustador" (nombres, apellidos, telefono, email, "idAseguradora") VALUES ('Ana', 'Pérez', '123', $2, $1) RETURNING id`,
+        [idAseguradora, email],
+      )
+    const a1 = await ajustador(aseguradora, 'ana@example.invalid'),
+      a2 = await ajustador(duplicada, ' ANA@EXAMPLE.INVALID ')
+    await db.query('UPDATE "Siniestro" SET "idAjustador" = $2 WHERE id = $1', [s1, a1])
+    await db.query(
+      'UPDATE "Siniestro" SET "idAseguradora" = $2, "idAjustador" = $3 WHERE id = $1',
+      [s2, duplicada, a2],
+    )
+    const v = await uno(
+      `INSERT INTO "Vehiculo" (dominio, "idSiniestro", "idAseguradora") VALUES ('AA111AA', $1, $2) RETURNING id`,
+      [s2, duplicada],
+    )
+    await db.query(
+      `INSERT INTO "HistorialSiniestro" ("idSiniestro", "idUsuario", "tipoEvento", descripcion, "fechaEvento") VALUES ($1, $2, 'ASIGNACION', 'Evento previo', now())`,
+      [s2, original.idUsuario],
+    )
+    const antes = (await db.query('SELECT * FROM "Siniestro" ORDER BY id')).rows
+    const historial = (await db.query('SELECT * FROM "HistorialSiniestro" ORDER BY id')).rows
+    await db.query(await sql(nombre))
+    assert.equal((await db.query('SELECT count(*)::int n FROM "Aseguradora"')).rows[0].n, 1)
+    assert.equal((await db.query('SELECT count(*)::int n FROM "Ajustador"')).rows[0].n, 1)
+    assert.deepEqual(
+      (await db.query('SELECT * FROM "Siniestro" ORDER BY id')).rows,
+      antes.map((s) => ({ ...s, idAseguradora: aseguradora, idAjustador: a1 })),
+    )
+    assert.deepEqual(
+      (await db.query('SELECT * FROM "HistorialSiniestro" ORDER BY id')).rows,
+      historial,
+    )
+    assert.equal(
+      (await db.query('SELECT "idAseguradora" FROM "Vehiculo" WHERE id = $1', [v])).rows[0]
+        .idAseguradora,
+      aseguradora,
+    )
+    await assert.rejects(db.query(`INSERT INTO "Aseguradora" (nombre) VALUES ('prueba')`), {
+      code: '23505',
+    })
+    await assert.rejects(ajustador(aseguradora, ' ANA@example.invalid '), { code: '23505' })
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración maestros_unicos: si hay datos incompatibles o números que colisionan, no modifica nada', async () => {
+  const nombre = '20261105130000_maestros_unicos'
+  const { db, borrar } = await baseHasta(nombre)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const caso = await siniestro('MISMO')
+    const a = (await db.query('SELECT "idAseguradora" FROM "Siniestro" WHERE id = $1', [caso]))
+      .rows[0].idAseguradora
+    const b = await uno(
+      `INSERT INTO "Aseguradora" (nombre, eliminado, "fechaBaja") VALUES ('prueba', true, now()) RETURNING id`,
+    )
+    await assert.rejects(db.query(await sql(nombre)), /estados distintos/)
+    await db.query('ROLLBACK')
+    assert.equal((await db.query('SELECT count(*)::int n FROM "Aseguradora"')).rows[0].n, 2)
+    await db.query('UPDATE "Aseguradora" SET eliminado = false, "fechaBaja" = null WHERE id = $1', [
+      b,
+    ])
+    await db.query(
+      `INSERT INTO "Ajustador" (nombres, apellidos, email, telefono, "idAseguradora") VALUES ('Ana', 'A', 'x@example.invalid', '1', $1), ('Otra', 'B', 'X@example.invalid', '2', $2)`,
+      [a, b],
+    )
+    await assert.rejects(db.query(await sql(nombre)), /datos distintos/)
+    await db.query('ROLLBACK')
+    assert.equal((await db.query('SELECT count(*)::int n FROM "Ajustador"')).rows[0].n, 2)
+    await db.query(`UPDATE "Ajustador" SET email = 'otro@example.invalid' WHERE nombres = 'Otra'`)
+    const otro = await siniestro('OTRO')
+    await db.query(
+      `UPDATE "Siniestro" SET "numeroSiniestro" = 'mismo', "idAseguradora" = $2 WHERE id = $1`,
+      [otro, b],
+    )
+    await assert.rejects(db.query(await sql(nombre)), /repetiría números/)
+    await db.query('ROLLBACK')
+    assert.equal((await db.query('SELECT count(*)::int n FROM "Siniestro"')).rows[0].n, 2)
+  } finally {
+    await borrar()
+  }
+})

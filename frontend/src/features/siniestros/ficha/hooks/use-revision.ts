@@ -9,9 +9,9 @@ import { ApiError } from '@/lib/api'
  * servidor lo rechaza: el modal muestra el aviso, la ficha se actualiza detrás y la revisión pasa a la actual, así
  * que guardar de nuevo, ya avisado, reemplaza esos cambios.
  */
-export function useRevision() {
+export function useRevision(inicial = 0) {
   const revalidator = useRevalidator()
-  const revision = useRef(0)
+  const revision = useRef(inicial)
   return {
     abrir: (actual: number) => {
       revision.current = actual

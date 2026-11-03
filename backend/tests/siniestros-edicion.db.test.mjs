@@ -122,7 +122,7 @@ test(
         sucursal: null,
       })
       const pedido = (edicion, administra = true) => ({
-        version: edicion.version,
+        revision: edicion.revision,
         hecho: edicion.datos.hecho,
         lugar: edicion.datos.lugar,
         ...(administra
@@ -185,8 +185,9 @@ test(
         assert.equal(actualizado[campo], originalCaso[campo])
       assert.equal(actualizado.causa, cambioGestor.hecho.causa)
       assert.equal(actualizado.horaOcurrencia.toISOString().slice(11, 19), '18:40:25')
-      assert.equal(actualizado.fechaUltimoMovimiento.toISOString(), ahora.toISOString())
-      assert.equal(actualizado.demorado, false)
+      assert.equal(actualizado.fechaUltimoMovimiento.toISOString(), antes.toISOString())
+      assert.equal(actualizado.demorado, true)
+      assert.equal(actualizado.revision, 1)
       assert.notEqual(actualizado.idDireccion, lugarCompartido.id)
       assert.equal(actualizado.direccion.pisoDepartamento, '2 A')
       assert.equal(
@@ -202,7 +203,10 @@ test(
         historial[0].descripcion.includes('Causa') &&
           historial[0].descripcion.includes('Nueva dirección'),
       )
-      await assert.rejects(servicio.modificar(gestor, s.id, cambioGestor), { status: 409 })
+      // Repetir lo que ya quedó guardado es un no-op, incluso con la revisión anterior.
+      assert.deepEqual(await servicio.modificar(gestor, s.id, cambioGestor), { modificado: false })
+      assert.equal(await prisma.historialSiniestro.count({ where: { idSiniestro: s.id } }), 1)
+      assert.equal((await servicio.obtener(gestor, s.id)).revision, 1)
       const edicionAdmin = await servicio.obtener(admin, s.id)
       assert.equal(edicionAdmin.puedeEditarAsignacion, true)
       assert.equal('usuarios' in edicionAdmin.opciones, false)
@@ -242,6 +246,9 @@ test(
       assert.equal(editado.numeroSiniestro, 'ACTUALIZADO')
       assert.equal(editado.numeroPoliza, 'POL-2')
       assert.equal(editado.idUsuario, gestor.id)
+      assert.equal(editado.revision, 2)
+      assert.equal(editado.fechaUltimoMovimiento.toISOString(), antes.toISOString())
+      assert.equal(editado.demorado, true)
       assert.equal(await prisma.notificacion.count({ where: { idSiniestro: s.id } }), 0)
       const eventos = await prisma.historialSiniestro.findMany({
         where: { idSiniestro: s.id },
@@ -281,6 +288,11 @@ test(
         (await prisma.siniestro.findUniqueOrThrow({ where: { id: s.id } })).sucursal,
         'Rosario',
       )
+      assert.equal(
+        (await servicio.obtener(admin, s.id)).revision,
+        2,
+        'el rollback también revierte la revisión',
+      )
       // Dos casos distintos que se intentan numerar igual: el índice único resuelve la carrera.
       const c1 = await caso(),
         c2 = await caso()
@@ -298,6 +310,100 @@ test(
         await prisma.historialSiniestro.count({ where: { idSiniestro: { in: [c1.id, c2.id] } } }),
         1,
       )
+      // Formularios sobre el mismo caso: una sola escritura inicial; el segundo recibe la revisión actual.
+      const compartido = await caso()
+      const lectura = await servicio.obtener(admin, compartido.id)
+      const uno = pedido(lectura),
+        dos = pedido(lectura)
+      uno.hecho = { ...uno.hecho, causa: 'Escrito por A' }
+      dos.hecho = { ...dos.hecho, causa: 'Escrito por B' }
+      const simultaneos = await Promise.allSettled([
+        servicio.modificar(admin, compartido.id, uno),
+        servicio.modificar(superadmin, compartido.id, dos),
+      ])
+      assert.equal(simultaneos.filter((r) => r.status === 'fulfilled').length, 1)
+      const rechazo = simultaneos.find((r) => r.status === 'rejected').reason
+      assert.equal(rechazo.status, 409)
+      assert.deepEqual(rechazo.details, { codigo: 'REGISTRO_DESACTUALIZADO', revision: 1 })
+      const ganador = await prisma.siniestro.findUniqueOrThrow({ where: { id: compartido.id } })
+      const perdedor = ganador.causa === uno.hecho.causa ? dos : uno
+      assert.equal(ganador.revision, 1)
+      assert.equal(
+        await prisma.historialSiniestro.count({ where: { idSiniestro: compartido.id } }),
+        1,
+      )
+      // El segundo guardado, después del aviso, conserva y guarda el texto del formulario perdedor.
+      await servicio.modificar(admin, compartido.id, {
+        ...perdedor,
+        revision: rechazo.details.revision,
+      })
+      const reintentado = await prisma.siniestro.findUniqueOrThrow({ where: { id: compartido.id } })
+      assert.equal(reintentado.causa, perdedor.hecho.causa)
+      assert.equal(reintentado.revision, 2)
+      assert.equal(reintentado.fechaUltimoMovimiento.toISOString(), antes.toISOString())
+
+      // Novedades/movimientos y cambios de nombres o email no invalidan una edición de los datos del caso.
+      const independiente = await caso({ idAjustador: ajustador.id })
+      const abierto = pedido(await servicio.obtener(admin, independiente.id))
+      const movimiento = new Date('2026-11-02T17:00:00Z')
+      await prisma.siniestro.update({
+        where: { id: independiente.id },
+        data: { fechaUltimoMovimiento: movimiento, demorado: false },
+      })
+      await prisma.usuario.update({
+        where: { id: gestor.id },
+        data: { email: 'nuevo@example.invalid' },
+      })
+      await prisma.aseguradora.update({
+        where: { id: aseguradora.id },
+        data: { nombre: 'Nombre corregido' },
+      })
+      await prisma.ajustador.update({
+        where: { id: ajustador.id },
+        data: { nombres: 'Nombre actualizado' },
+      })
+      abierto.hecho = { ...abierto.hecho, causa: 'No se pierde por un movimiento' }
+      await servicio.modificar(admin, independiente.id, abierto)
+      const sinConflicto = await prisma.siniestro.findUniqueOrThrow({
+        where: { id: independiente.id },
+      })
+      assert.equal(sinConflicto.causa, abierto.hecho.causa)
+      assert.equal(sinConflicto.revision, 1)
+      assert.equal(sinConflicto.fechaUltimoMovimiento.toISOString(), movimiento.toISOString())
+      assert.equal(sinConflicto.demorado, false)
+
+      // Conservar referencias retiradas que ya tenía el caso al abrir el formulario.
+      const retirados = await caso({ idAjustador: ajustador.id, idDireccion: lugarCompartido.id })
+      const conRetirados = pedido(await servicio.obtener(admin, retirados.id))
+      await prisma.aseguradora.update({
+        where: { id: aseguradora.id },
+        data: { eliminado: true, fechaBaja: ahora },
+      })
+      await prisma.ajustador.update({
+        where: { id: ajustador.id },
+        data: { eliminado: true, fechaBaja: ahora },
+      })
+      await prisma.provincia.update({
+        where: { id: provincia.id },
+        data: { eliminado: true, fechaBaja: ahora },
+      })
+      conRetirados.hecho = { ...conRetirados.hecho, causa: 'Conservar los datos existentes' }
+      await servicio.modificar(admin, retirados.id, conRetirados)
+      const mantenido = await prisma.siniestro.findUniqueOrThrow({ where: { id: retirados.id } })
+      assert.equal(mantenido.idAseguradora, aseguradora.id)
+      assert.equal(mantenido.idAjustador, ajustador.id)
+      assert.equal(mantenido.idDireccion, lugarCompartido.id)
+
+      const cierre = await prisma.estadoSiniestro.create({
+        data: { nombre: 'Cierre enviado', descripcion: 'Cerrado', esCierre: true },
+      })
+      const cerrado = await caso({ idEstadoSiniestro: cierre.id })
+      for (const actor of [admin, superadmin, gestor]) {
+        await assert.rejects(servicio.obtener(actor, cerrado.id), { status: 409 })
+        await assert.rejects(servicio.modificar(actor, cerrado.id, adminCambio), { status: 409 })
+      }
+      assert.equal(await prisma.historialSiniestro.count({ where: { idSiniestro: cerrado.id } }), 0)
+
       for (const extra of [{ eliminado: true, fechaBaja: ahora }, { eliminacionEnCurso: true }]) {
         const bloqueado = await caso(extra)
         await assert.rejects(servicio.obtener(admin, bloqueado.id), { status: 409 })
