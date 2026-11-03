@@ -1,10 +1,13 @@
+import { actualizarNotificaciones } from '@/features/notificaciones/actualizar-notificaciones'
 import { useState } from 'react'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router'
+import { Link, Outlet, useLocation, useNavigate, useRevalidator } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
 import { usePanel } from '@/components/layout/panel-context'
 import { Button } from '@/components/ui/button'
 import { PartesDialog, type PedidoPartes } from '../../components/partes-dialog'
 import { CabeceraFicha } from '../components/cabecera-ficha'
+import { CambiarEstadoDialog } from '../components/cambiar-estado-dialog'
+import { Aviso } from '@/components/aviso'
 import { PestanasFicha } from '../components/pestanas-ficha'
 import { useFicha } from '../hooks/use-ficha'
 
@@ -18,6 +21,9 @@ export function FichaSiniestroPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [partes, setPartes] = useState<PedidoPartes | null>(null)
+  const [cambiandoEstado, setCambiandoEstado] = useState(false)
+  const [avisoEstado, setAvisoEstado] = useState<string | null>(null)
+  const revalidator = useRevalidator()
   // Cuántos pasos atrás quedó el listado: 1 al llegar navegando, uno más por cada pestaña abierta, 0 si se entró
   // directo a la dirección (no hay listado detrás)
   const pasosAlListado =
@@ -40,8 +46,21 @@ export function FichaSiniestroPage() {
         </Link>
       </Button>
 
+      {avisoEstado && (
+        <Aviso tipo="exito" className="mb-4">
+          {avisoEstado}
+        </Aviso>
+      )}
       <CabeceraFicha
         ficha={ficha}
+        onCambiarEstado={
+          panel.usuario.tipo === 'ADMINISTRADOR' || panel.usuario.tipo === 'SUPER_ADMINISTRADOR'
+            ? () => {
+                setAvisoEstado(null)
+                setCambiandoEstado(true)
+              }
+            : undefined
+        }
         onVerAjustador={() =>
           setPartes({
             siniestro: { id: ficha.id, numeroSiniestro: ficha.numeroSiniestro },
@@ -58,6 +77,18 @@ export function FichaSiniestroPage() {
       <Outlet context={panel} />
 
       <PartesDialog pedido={partes} onCerrar={() => setPartes(null)} />
+      {cambiandoEstado && (
+        <CambiarEstadoDialog
+          ficha={ficha}
+          onCerrar={() => setCambiandoEstado(false)}
+          onHecho={(mensaje) => {
+            setCambiandoEstado(false)
+            setAvisoEstado(mensaje)
+            actualizarNotificaciones()
+            void revalidator.revalidate()
+          }}
+        />
+      )}
     </>
   )
 }
