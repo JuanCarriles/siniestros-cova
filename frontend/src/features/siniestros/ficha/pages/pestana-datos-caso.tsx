@@ -1,4 +1,9 @@
-import { FileText, Flag, MapPin, UsersRound } from 'lucide-react'
+import { useState } from 'react'
+import { useRevalidator } from 'react-router'
+import { FileText, Flag, MapPin, Pencil, UsersRound } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Aviso } from '@/components/aviso'
+import { EditarDatosCaso } from '../components/editar-datos-caso'
 import { Badge } from '@/components/ui/badge'
 import { Dato } from '../../components/dato'
 import { BloqueFicha, PestanaFicha } from '../components/pestana-ficha'
@@ -9,8 +14,48 @@ import { useFicha } from '../hooks/use-ficha'
 export function PestanaDatosCaso() {
   const ficha = useFicha()
   const { hecho, lugar } = ficha
+  const [editando, setEditando] = useState(false)
+  const [mensaje, setMensaje] = useState<string | null>(null)
+  const revalidator = useRevalidator()
+  if (editando)
+    return (
+      <EditarDatosCaso
+        ficha={ficha}
+        onCancelar={() => setEditando(false)}
+        onHecho={(resultado) => {
+          setEditando(false)
+          setMensaje(
+            resultado.modificado
+              ? 'Los datos del caso se actualizaron y el cambio quedó registrado en el historial.'
+              : 'No había cambios para guardar.',
+          )
+          void revalidator.revalidate()
+        }}
+      />
+    )
   return (
-    <PestanaFicha titulo="Datos del caso">
+    <PestanaFicha
+      titulo="Datos del caso"
+      acciones={
+        !ficha.fechaBaja && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setMensaje(null)
+              setEditando(true)
+            }}
+          >
+            <Pencil aria-hidden="true" />
+            Modificar datos
+          </Button>
+        )
+      }
+    >
+      {mensaje && (
+        <Aviso tipo="exito" className="mb-4">
+          {mensaje}
+        </Aviso>
+      )}
       <div className="grid gap-5 lg:grid-cols-2">
         <BloqueFicha icono={FileText} titulo="Póliza">
           <dl className="grid gap-x-6 gap-y-4 text-lg sm:grid-cols-2">

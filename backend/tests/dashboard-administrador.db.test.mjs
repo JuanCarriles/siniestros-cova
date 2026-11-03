@@ -8,6 +8,8 @@ import { filtrosSiniestrosSchema } from '@cova/shared/schemas/siniestros'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
 import { crearServicioDashboardAdministrador } from '../src/modules/dashboard/dashboard-administrador.service.ts'
 import { crearServicioSiniestros } from '../src/modules/siniestros/siniestros.service.ts'
+import { crearServicioBajasSiniestros } from '../src/modules/siniestros/siniestros-bajas.service.ts'
+import { crearServicioHistorialFicha } from '../src/modules/historial/historial-ficha.service.ts'
 
 test(
   'PostgreSQL aislado: dashboard administrativo y ficha con responsable obligatorio',
@@ -153,7 +155,7 @@ test(
       )
       assert.equal(resumen.demorados.items[0].asegurado, 'Héctor Balbuena')
       assert.equal(resumen.demorados.items[0].gestor.id, admin.id)
-      assert.equal(resumen.actividad.total, 6)
+      assert.equal(resumen.actividad.total, 7)
       assert.equal(resumen.actividad.items.length, 5)
       assert.equal(resumen.actividad.items[0].siniestro.id, demorados[0].id)
       const todos = await servicio.obtener(superadmin, { ver: 'demorados', pagina: 1 })
@@ -167,10 +169,10 @@ test(
         new Set([...todos.demorados.items, ...segunda.demorados.items].map((s) => s.id)).size,
         31,
       )
-      assert.equal(
-        (await servicio.obtener(admin, { ver: 'actividad', pagina: 1 })).actividad.items.length,
-        6,
-      )
+      const historialCompleto = await servicio.obtener(admin, { ver: 'actividad', pagina: 1 })
+      assert.equal(historialCompleto.actividad.items.length, 7)
+      assert.ok(historialCompleto.actividad.items.some((e) => e.siniestro.id === dadoBaja.id))
+      assert.ok(!historialCompleto.actividad.items.some((e) => e.siniestro.id === borrando.id))
       assert.ok(!('sinAsignar' in resumen))
       const [columna] =
         await prisma.$queryRaw`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Siniestro' AND column_name = 'idUsuario'`
@@ -185,6 +187,49 @@ test(
         admin.id,
       )
       await assert.rejects(listado.obtener(gestor, demorados[29].id), { status: 403 })
+
+      // Una baja real agrega un evento; no reemplaza ni oculta los anteriores en el dashboard.
+      const anterior = await evento(antes, { descripcion: 'Actividad anterior a la baja' })
+      const operaciones = crearServicioBajasSiniestros({
+        base: { transaccion: (trabajo) => prisma.$transaction(trabajo) },
+        almacenamiento: () => {
+          throw new Error('La baja lógica no debe usar R2')
+        },
+        reloj: () => ahora,
+      })
+      await operaciones.darDeBaja(admin, antes.id)
+      const trasBaja = await servicio.obtener(admin, { ver: 'actividad', pagina: 1 })
+      const eventosDelCaso = trasBaja.actividad.items.filter((e) => e.siniestro.id === antes.id)
+      assert.equal(trasBaja.actividad.total, historialCompleto.actividad.total + 2)
+      assert.equal(trasBaja.totalSiniestros, resumen.totalSiniestros - 1)
+      assert.equal(trasBaja.actividad.items[0].id, eventosDelCaso[0].id)
+      assert.equal(eventosDelCaso.length, 2)
+      assert.match(eventosDelCaso[0].descripcion, /dio de baja lógica/)
+      assert.equal(eventosDelCaso[0].fecha, ahora.toISOString())
+      assert.equal(eventosDelCaso[0].autor, 'Admin Prueba')
+      assert.equal(eventosDelCaso[1].id, anterior.id)
+      for (const eventoPrevio of historialCompleto.actividad.items)
+        assert.ok(trasBaja.actividad.items.some((e) => e.id === eventoPrevio.id))
+      for (const actor of [admin, superadmin]) {
+        assert.equal((await listado.obtener(actor, antes.id)).fechaBaja, ahora.toISOString())
+        const particular = await crearServicioHistorialFicha(prisma).listar(actor, antes.id)
+        assert.deepEqual(
+          particular.map((e) => e.id),
+          [anterior.id, eventosDelCaso[0].id],
+        )
+        assert.equal(particular.at(-1).tipo, 'BAJA_SINIESTRO')
+      }
+      await assert.rejects(listado.obtener(gestor, antes.id), { status: 403 })
+      await operaciones.darDeBaja(admin, antes.id)
+      assert.equal(
+        (await servicio.obtener(admin, { pagina: 1 })).actividad.total,
+        trasBaja.actividad.total,
+      )
+      await operaciones.reactivar(admin, antes.id)
+      const trasReactivar = await servicio.obtener(admin, { ver: 'actividad', pagina: 1 })
+      assert.equal(trasReactivar.actividad.total, trasBaja.actividad.total + 1)
+      for (const eventoDeBaja of eventosDelCaso)
+        assert.ok(trasReactivar.actividad.items.some((e) => e.id === eventoDeBaja.id))
     } finally {
       await disconnectPrisma()
       process.env.DATABASE_URL = original
