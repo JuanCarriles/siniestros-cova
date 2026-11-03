@@ -16,7 +16,6 @@ export const siniestroSchema = z.strictObject({
   numeroSiniestro: textoSchema,
   numeroPoliza: textoSchema,
   fechaAsignacion: fechaHoraSchema,
-  demorado: booleanoSchema,
   menorEdadInvolucrado: booleanoSchema,
   idEstadoSiniestro: idSchema,
   idAseguradora: idSchema,

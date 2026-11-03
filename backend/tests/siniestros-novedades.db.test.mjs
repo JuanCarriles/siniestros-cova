@@ -51,7 +51,6 @@ test('PostgreSQL: cargar y leer novedades desde la ficha', async () => {
                 numeroPoliza: 'P',
                 fechaAsignacion: new Date('2026-09-01T12:00:00Z'),
                 fechaUltimoMovimiento: ultimoMovimiento,
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idEstadoSiniestro: abierto.id,
                 idAseguradora: aseguradora.id,

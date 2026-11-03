@@ -1,6 +1,5 @@
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import {
-  DIAS_DEMORADO,
   type FiltrosSiniestros,
   type OpcionesSiniestros,
   type PaginaSiniestros,
@@ -12,6 +11,7 @@ import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { aDireccion, dia, hora, nombreDe, selectDireccion } from './ficha.ts'
 import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
+import { sinMovimiento } from './demora.ts'
 
 type BaseSiniestros = Pick<
   Prisma.TransactionClient,
@@ -155,18 +155,14 @@ export function crearServicioSiniestros(
       const where: Prisma.SiniestroWhereInput = conBajas ? base : { ...base, eliminado: false }
 
       // RF-19: demorado = abierto y sin movimientos en 72 h (o sin movimientos desde la asignación)
-      const limite = new Date(ahora.getTime() - DIAS_DEMORADO * DIA_MS)
       const [total, activos, demorados, bajas] = await Promise.all([
         prisma.siniestro.count({ where }),
         prisma.siniestro.count({ where: { ...base, eliminado: false } }),
         prisma.siniestro.count({
           where: {
-            ...base,
-            eliminado: false,
-            estadoSiniestro: { esCierre: false },
-            OR: [
-              { fechaUltimoMovimiento: { lte: limite } },
-              { fechaUltimoMovimiento: null, fechaAsignacion: { lte: limite } },
+            AND: [
+              { ...base, eliminado: false, estadoSiniestro: { esCierre: false } },
+              sinMovimiento(ahora),
             ],
           },
         }),

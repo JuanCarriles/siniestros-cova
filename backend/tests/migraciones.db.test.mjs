@@ -469,3 +469,28 @@ test('migración maestros_unicos: si hay datos incompatibles o números que coli
     await borrar()
   }
 })
+
+test('migración semaforo_demora: borra la bandera guardada sin tocar los casos y suma los avisos de demora', async () => {
+  const migracion = '20261107120000_semaforo_demora'
+  const { db, borrar } = await baseHasta(migracion)
+  try {
+    const { siniestro } = await datosBase(db)
+    const id = await siniestro('S-1')
+    await db.query(
+      `UPDATE "Siniestro" SET demorado = true, "fechaUltimoMovimiento" = '2026-10-01T12:00:00Z' WHERE id = $1`,
+      [id],
+    )
+    const { demorado: _, ...anterior } = (
+      await db.query('SELECT * FROM "Siniestro" WHERE id = $1', [id])
+    ).rows[0]
+    await db.query(await sql(migracion))
+    const despues = (await db.query('SELECT * FROM "Siniestro" WHERE id = $1', [id])).rows[0]
+    assert.deepEqual(despues, anterior, 'el caso queda igual, sin la columna')
+    const { rows } = await db.query(
+      `SELECT unnest(enum_range(NULL::"TipoNotificacion"))::text AS tipo`,
+    )
+    assert.ok(['CASO_DEMORADO', 'CASO_EN_ALERTA'].every((t) => rows.some((r) => r.tipo === t)))
+  } finally {
+    await borrar()
+  }
+})

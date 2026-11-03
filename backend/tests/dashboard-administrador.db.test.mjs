@@ -90,7 +90,6 @@ test(
             idUsuario: gestor.id,
             fechaAsignacion: hace(300),
             fechaUltimoMovimiento: hace(1),
-            demorado: false,
             menorEdadInvolucrado: false,
             ...extra,
           },

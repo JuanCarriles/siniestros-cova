@@ -52,7 +52,6 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
                 numeroSiniestro: `PRUEBA-${marca}-${++secuencia}`,
                 numeroPoliza: 'POL-PRUEBA',
                 fechaAsignacion: ahora,
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idUsuario: gestor.id,
                 idAseguradora: aseguradora.id,

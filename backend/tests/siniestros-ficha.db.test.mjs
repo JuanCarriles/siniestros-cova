@@ -70,7 +70,6 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
               sucursal: 'Casa central',
               fechaAsignacion: new Date(ahora.getTime() - 10 * DIA),
               fechaUltimoMovimiento: new Date(ahora.getTime() - 4 * DIA - 60_000),
-              demorado: false,
               menorEdadInvolucrado: true,
               causa: 'Colisión por alcance',
               fechaOcurrencia: new Date('2026-01-27T00:00:00Z'),
