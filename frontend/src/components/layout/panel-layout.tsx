@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Form, Link, NavLink, Outlet, useLocation, useNavigation } from 'react-router'
 import { ArrowRight, LogOut, Menu, PanelLeftClose, PanelLeftOpen, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { NotificacionesPanel } from '@/features/notificaciones/notificaciones-panel'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -329,9 +330,12 @@ export function PanelLayout({ usuario, basePath }: PanelBase) {
               </p>
             </div>
           </div>
-          <Badge variant="outline" className="max-w-full border-input text-sm">
-            {roleLabels[usuario.tipo]}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-3">
+            <NotificacionesPanel basePath={basePath} />
+            <Badge variant="outline" className="max-w-full border-input text-sm">
+              {roleLabels[usuario.tipo]}
+            </Badge>
+          </div>
         </header>
         <main
           ref={main}
