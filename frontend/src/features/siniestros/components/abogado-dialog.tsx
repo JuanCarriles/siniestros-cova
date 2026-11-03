@@ -21,6 +21,10 @@ import {
 import { cn } from '@/lib/utils'
 import type { GrupoRepresentables } from '../abogados-alta'
 import type { AbogadoBorrador } from '../borrador-alta'
+import { campoDelError, mensajeDelError } from '../errores-servidor'
+
+/** Quién representa hoy a una persona: basta con saber cuál es y su nombre */
+type Representante = Pick<AbogadoBorrador, 'clave' | 'nombreCompleto'>
 
 type AbogadoFormulario = Omit<AbogadoAltaInput, 'representados'> & { representados: string[] }
 
@@ -41,7 +45,8 @@ const aFormulario = (a: AbogadoBorrador): AbogadoFormulario => ({
 })
 
 // CU-09 pasos 24-26 (E4-08). Solo el nombre y a quién representa son obligatorios (25.b); puede representar a
-// varias personas (25.a). Una persona que ya tiene otro abogado se puede elegir: al guardar, pasa a este.
+// varias personas (25.a). Una persona que ya tiene otro abogado se puede elegir: al guardar, pasa a este. La ficha
+// (CU-10 1.d, E5-07) usa el mismo formulario: ahí guardar espera al servidor y, si rechaza, el modal sigue abierto.
 export function AbogadoDialog({
   abogado,
   grupos,
@@ -52,11 +57,11 @@ export function AbogadoDialog({
 }: {
   /** null: cargar uno nuevo */
   abogado: AbogadoBorrador | null
-  /** Las personas del paso 2, agrupadas por vehículo */
+  /** Las personas del siniestro, agrupadas por vehículo */
   grupos: GrupoRepresentables[]
   /** Quién representa hoy a cada persona */
-  representantes: Map<string, AbogadoBorrador>
-  onGuardar: (datos: AbogadoAltaData) => void
+  representantes: Map<string, Representante>
+  onGuardar: (datos: AbogadoAltaData) => void | Promise<void>
   onCerrar: () => void
   elementoAlCerrar: () => HTMLElement | null
 }) {
@@ -68,7 +73,8 @@ export function AbogadoDialog({
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    setError,
+    formState: { errors, isSubmitting },
   } = useForm<AbogadoFormulario, unknown, AbogadoAltaData>({
     resolver: zodResolver(abogadoAltaSchema),
     defaultValues: abogado ? aFormulario(abogado) : abogadoVacio,
@@ -86,8 +92,22 @@ export function AbogadoDialog({
     formulario.current?.querySelector<HTMLElement>('input[name=nombreCompleto]')?.focus()
 
   const guardar = (seguir: boolean) =>
-    handleSubmit((datos) => {
-      onGuardar(datos)
+    handleSubmit(async (datos) => {
+      setAgregado(null)
+      try {
+        await onGuardar(datos)
+      } catch (err) {
+        const campo = campoDelError(err, ['nombreCompleto', 'representados'] as const)
+        if (campo) setError(campo, { message: mensajeDelError(err, '') }, { shouldFocus: true })
+        else
+          setError('root', {
+            message: mensajeDelError(
+              err,
+              'No se pudo guardar. Revisá la conexión y probá de nuevo.',
+            ),
+          })
+        return
+      }
       if (!seguir) return onCerrar()
       reset(abogadoVacio)
       setAgregado('Se agregó el abogado. Ya podés cargar el siguiente.')
@@ -95,8 +115,14 @@ export function AbogadoDialog({
     })
 
   return (
-    <Dialog open onOpenChange={(abrir) => !abrir && onCerrar()}>
+    <Dialog
+      open
+      onOpenChange={(abrir) => {
+        if (!abrir && !isSubmitting) onCerrar()
+      }}
+    >
       <DialogContent
+        showCloseButton={!isSubmitting}
         size="wide"
         onInteractOutside={(e) => e.preventDefault()}
         onOpenAutoFocus={(e) => {
@@ -257,17 +283,29 @@ export function AbogadoDialog({
             </p>
           )}
 
+          {errors.root && (
+            <Aviso tipo="error" enfocar>
+              {errors.root.message}
+            </Aviso>
+          )}
           <DialogFooter className="gap-3">
-            <Button type="button" variant="outline" onClick={onCerrar}>
+            <Button type="button" variant="outline" onClick={onCerrar} disabled={isSubmitting}>
               Cancelar
             </Button>
             {nuevo && (
-              <Button type="button" variant="outline" onClick={(e) => void guardar(true)(e)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={(e) => void guardar(true)(e)}
+              >
                 <Plus aria-hidden="true" />
                 Guardar y agregar otro
               </Button>
             )}
-            <Button type="submit">{nuevo ? 'Agregar abogado' : 'Guardar cambios'}</Button>
+            <Button type="submit" loading={isSubmitting}>
+              {nuevo ? 'Agregar abogado' : 'Guardar cambios'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

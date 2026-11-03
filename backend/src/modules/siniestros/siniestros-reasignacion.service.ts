@@ -48,6 +48,7 @@ async function obtenerCaso(tx: Tx, id: number) {
       eliminado: true,
       eliminacionEnCurso: true,
       usuario: { select: seleccionUsuario },
+      estadoSiniestro: { select: { esCierre: true } },
     },
   })
   if (!caso) throw new HttpError(404, 'El siniestro no existe.')
@@ -56,6 +57,8 @@ async function obtenerCaso(tx: Tx, id: number) {
       409,
       'No se puede reasignar un siniestro dado de baja o con una eliminación pendiente.',
     )
+  if (caso.estadoSiniestro.esCierre)
+    throw new HttpError(409, 'Este siniestro está cerrado: se puede consultar, pero no modificar.')
   return caso
 }
 
@@ -140,23 +143,26 @@ export function crearServicioReasignacion(deps: Deps, reloj = () => new Date()) 
             { codigo: 'USUARIO_NO_DISPONIBLE' },
           )
         const ahora = reloj()
-        const anterior = caso.usuario
+        const anterior = await tx.usuario.findUniqueOrThrow({
+          where: { id: caso.idUsuario },
+          select: seleccionUsuario,
+        })
         const nombreAnterior = anterior ? nombreCompleto(anterior) : 'Sin responsable'
         const nombreNuevo = nombreCompleto(nuevo)
         const autor = nombreCompleto(actor)
         await tx.siniestro.update({
           where: { id },
-          data: { idUsuario: nuevo.id, fechaUltimoMovimiento: ahora, demorado: false },
+          data: { idUsuario: nuevo.id },
         })
         await tx.historialSiniestro.create({
           data: {
             idSiniestro: id,
             idUsuario: actor.id,
             fechaEvento: ahora,
-            ...eventoHistorial.reasignacionPor(actor, nombreAnterior, nombreNuevo, ahora),
+            ...eventoHistorial.reasignacion(anterior, nuevo, ahora),
           },
         })
-        const destinatarios = [...(anterior ? [anterior] : []), nuevo]
+        const destinatarios = [anterior, nuevo].filter((destinatario) => !destinatario.eliminado)
         await tx.notificacion.createMany({
           data: destinatarios.map((u) => ({
             idUsuario: u.id,

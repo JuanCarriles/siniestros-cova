@@ -246,7 +246,7 @@ export function DashboardAdministradorPage({
           datos={dashboard.actividad}
           ver={ver}
           descripcion={`${dashboard.actividad.total} movimientos`}
-          vacio="Todavía no hay actividad registrada en los siniestros disponibles."
+          vacio="Todavía no hay actividad registrada en los siniestros."
         >
           <ol className="divide-y">
             {dashboard.actividad.items.map((evento) => (

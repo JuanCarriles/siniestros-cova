@@ -1,10 +1,7 @@
 import {
   type CrearSiniestroData,
   type DocumentoAlta,
-  type OcupanteAltaData,
-  type PersonaExternaAltaData,
   type SiniestroCreado,
-  type TitularAltaData,
 } from '@cova/shared/schemas/siniestros-alta'
 import { TipoNotificacion, type Prisma } from '../../generated/prisma/client.ts'
 import type { AvisoAsignacion } from '../../lib/correo-asignacion.ts'
@@ -14,14 +11,19 @@ import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
 import { validarArchivoPlantilla } from '../plantillas/validar-archivo.ts'
+import {
+  datosAbogado,
+  datosDireccion,
+  datosPersona,
+  datosPerito,
+  datosVehiculo,
+  dia,
+  type PersonaPorTipo,
+  type TipoPersona,
+} from './partes-datos.ts'
 
 type Actor = { id: number }
-type Persona = TitularAltaData | OcupanteAltaData | PersonaExternaAltaData
 
-// Las fechas sin hora (AAAA-MM-DD) van a columnas Date; las de los peritos, a Timestamptz: al mediodía de la
-// Argentina, para que ningún huso las corra de día.
-const dia = (fecha: string) => new Date(`${fecha}T00:00:00Z`)
-const diaArgentina = (fecha: string) => new Date(`${fecha}T12:00:00-03:00`)
 const horaDelDia = (hora: string) => new Date(`1970-01-01T${hora}Z`)
 
 const carpetaDe = (actor: Actor) => `altas/${actor.id}`
@@ -208,25 +210,12 @@ export function crearServicioCrearSiniestro(deps: {
           throw error(400, 'La aseguradora de un vehículo ya no está disponible.')
 
         const ahora = new Date()
-        const direccion = async (d: {
-          idProvincia?: number | null
-          localidad?: string | null
-          calle?: string | null
-          codigoPostal?: string | null
-        }) =>
-          d.idProvincia || d.localidad || d.calle || d.codigoPostal
-            ? (
-                await tx.direccion.create({
-                  data: {
-                    idProvincia: d.idProvincia ?? null,
-                    localidad: d.localidad ?? null,
-                    calle: d.calle ?? null,
-                    codigoPostal: d.codigoPostal ?? null,
-                  },
-                  select: { id: true },
-                })
-              ).id
+        const direccion = async (d: Parameters<typeof datosDireccion>[0]) => {
+          const datos = datosDireccion(d)
+          return datos
+            ? (await tx.direccion.create({ data: datos, select: { id: true } })).id
             : null
+        }
 
         const siniestro = await tx.siniestro
           .create({
@@ -260,103 +249,39 @@ export function crearServicioCrearSiniestro(deps: {
         // Abogados primero: cada persona guarda el suyo (a lo sumo uno)
         const abogadoDe = new Map<string, number>()
         for (const a of alta.abogados) {
-          const { id } = await tx.abogado.create({
-            data: {
-              nombreCompleto: a.nombreCompleto,
-              numeroMatricula: a.numeroMatricula ?? null,
-              telefono: a.telefono ?? null,
-              email: a.email ?? null,
-            },
-            select: { id: true },
-          })
+          const { id } = await tx.abogado.create({ data: datosAbogado(a), select: { id: true } })
           for (const clave of a.representados) abogadoDe.set(clave, id)
         }
 
-        // Sin nombre se guarda vacío: "Desconocido N" es solo cómo se muestra
-        const persona = async (
-          { clave, datos: p }: { clave: string; datos: Persona },
-          extra: Partial<Prisma.PersonaInvolucradaUncheckedCreateInput>,
+        const persona = async <T extends TipoPersona>(
+          tipo: T,
+          { clave, datos }: { clave: string; datos: PersonaPorTipo[T] },
+          idVehiculo: number | null,
         ) =>
           tx.personaInvolucrada.create({
             data: {
               idSiniestro,
-              nombreCompletoRazonSocial: p.nombreCompletoRazonSocial ?? null,
-              idTipoDocumento: p.idTipoDocumento ?? null,
-              documento: p.documento ?? null,
-              estadoCivil: p.estadoCivil ?? null,
-              sexo: p.sexo ?? null,
-              fechaNacimiento: p.fechaNacimiento ? dia(p.fechaNacimiento) : null,
-              telefono: p.telefono ?? null,
-              email: p.email ?? null,
-              tipoLesion: p.conLesiones ? (p.tipoLesion ?? null) : null,
-              descripcionLesiones: p.conLesiones ? (p.descripcionLesiones ?? null) : null,
-              idDireccion: await direccion(p.domicilio),
+              idVehiculo,
+              ...datosPersona(tipo, datos),
+              idDireccion: await direccion(datos.domicilio),
               idAbogado: abogadoDe.get(clave) ?? null,
-              ...extra,
             },
             select: { id: true },
           })
-        const lugar = (p: { lugar?: string | null; lugarOtro?: string | null }) =>
-          (p.lugar === 'Otro' ? p.lugarOtro : p.lugar) ?? null
-        const permiso = (p: TitularAltaData | OcupanteAltaData) => ({
-          numeroPermisoConducir: p.numeroPermisoConducir ?? null,
-          fechaVencimientoCarnet: p.fechaVencimientoCarnet ? dia(p.fechaVencimientoCarnet) : null,
-        })
 
         for (const { datos: v, titular, ocupantes } of alta.vehiculos) {
           const { id: idVehiculo } = await tx.vehiculo.create({
-            data: {
-              idSiniestro,
-              dominio: v.dominio,
-              rolAccidente: v.rolAccidente,
-              marca: v.marca ?? null,
-              modelo: v.modelo ?? null,
-              version: v.version ?? null,
-              numeroChasis: v.numeroChasis ?? null,
-              numeroMotor: v.numeroMotor ?? null,
-              anio: v.anio ?? null,
-              uso: v.uso ?? null,
-              tipo: v.tipo ?? null,
-              color: v.color ?? null,
-              idAseguradora: v.idAseguradora ?? null,
-              acreedorPrendario: v.acreedorPrendario ?? null,
-              descripcionDanos: v.descripcionDanos ?? null,
-            },
+            data: { idSiniestro, ...datosVehiculo(v) },
             select: { id: true },
           })
-          if (titular)
-            await persona(titular, {
-              idVehiculo,
-              esPropietario: true,
-              esOcupante: titular.datos.ibaEnVehiculo,
-              rolEnVehiculo: titular.datos.ibaEnVehiculo ? lugar(titular.datos) : null,
-              ...permiso(titular.datos),
-            })
-          for (const o of ocupantes)
-            await persona(o, {
-              idVehiculo,
-              esPropietario: false,
-              esOcupante: true,
-              rolEnVehiculo: lugar(o.datos),
-              relacionPropietario: o.datos.relacionPropietario ?? null,
-              ...permiso(o.datos),
-            })
+          if (titular) await persona('titular', titular, idVehiculo)
+          for (const o of ocupantes) await persona('ocupante', o, idVehiculo)
         }
-        for (const p of alta.personasExternas)
-          await persona(p, { esOcupante: false, rolSinVehiculo: p.datos.rolSinVehiculo })
+        for (const p of alta.personasExternas) await persona('externa', p, null)
 
         for (const p of alta.peritos)
           await tx.perito.create({
-            data: {
-              idSiniestro,
-              tipoPerito: p.tipoPerito,
-              nombre: p.nombre,
-              telefono: p.telefono ?? null,
-              email: p.email ?? null,
-              fechaSolicitud: diaArgentina(p.fechaSolicitud),
-              fechaCierre: p.fechaCierre ? diaArgentina(p.fechaCierre) : null,
-              cerrado: p.cerrado,
-            },
+            data: { idSiniestro, tipoPerito: p.tipoPerito, ...datosPerito(p) },
           })
 
         // Cada documento se copia a la carpeta del siniestro y se registra con esa clave: si R2 falla, no se crea

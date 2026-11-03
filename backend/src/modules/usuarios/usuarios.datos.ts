@@ -1,5 +1,6 @@
 import type { Prisma } from '../../generated/prisma/client.ts'
 import type { UsuarioAltaData } from '@cova/shared/schemas/usuarios-abm'
+import { usosDeDireccion } from '../../lib/direcciones.ts'
 import { HttpError } from '../../utils/httpError.ts'
 
 export type TransaccionUsuarios = Pick<
@@ -47,19 +48,8 @@ export async function guardarDireccion(
   id: number,
   direccion: UsuarioAltaData['direccion'],
 ) {
-  const vinculada = await tx.direccion.findUniqueOrThrow({
-    where: { id },
-    select: {
-      _count: { select: { usuarios: true, siniestros: true } },
-      perito: { select: { id: true } },
-      personaInvolucrada: { select: { id: true } },
-    },
-  })
-  const compartida =
-    vinculada._count.usuarios > 1 ||
-    vinculada._count.siniestros > 0 ||
-    vinculada.perito !== null ||
-    vinculada.personaInvolucrada !== null
+  const usos = await usosDeDireccion(tx, id)
+  const compartida = usos.usuarios > 1 || usos.siniestros > 0 || usos.perito || usos.persona
   return compartida
     ? tx.direccion.create({ data: direccion, select: { id: true } })
     : tx.direccion.update({ where: { id }, data: direccion, select: { id: true } })

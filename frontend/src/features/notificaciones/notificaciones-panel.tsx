@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { api, ApiError } from '@/lib/api'
+import { suscribirActualizacionNotificaciones } from './actualizar-notificaciones'
 import { fechaHoraDe } from '@/features/siniestros/ficha/formato'
 
 // Los avisos son privados. Se consultan al abrir, al recuperar el foco y cada minuto con la pestaña visible.
@@ -55,13 +56,13 @@ export function NotificacionesPanel({ basePath }: { basePath: string }) {
     }
     const intervalo = window.setInterval(actualizar, 60_000)
     window.addEventListener('focus', actualizar)
-    window.addEventListener('cova:notificaciones', actualizar)
+    const desuscribir = suscribirActualizacionNotificaciones(actualizar)
     document.addEventListener('visibilitychange', actualizar)
     return () => {
       pendiente.current?.abort()
       window.clearInterval(intervalo)
       window.removeEventListener('focus', actualizar)
-      window.removeEventListener('cova:notificaciones', actualizar)
+      desuscribir()
       document.removeEventListener('visibilitychange', actualizar)
     }
   }, [pagina, revision, abierto])

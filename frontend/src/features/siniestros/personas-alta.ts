@@ -10,9 +10,25 @@ export type Involucrados = {
   personasExternas: PersonaExternaBorrador[]
 }
 
+/** Lo que hace falta de cada persona para nombrarla y detectar un documento repetido */
+type PersonaClave = {
+  clave: string
+  documento?: string | null
+  nombreCompletoRazonSocial?: string | null
+}
+
+/**
+ * Las personas del siniestro reducidas a lo que usan el nombre y el aviso de documento repetido. En el alta son
+ * las del borrador (Involucrados); en la ficha, las guardadas (E5-06).
+ */
+export type PersonasDelSiniestro = {
+  vehiculos: { dominio: string; titular: PersonaClave | null; ocupantes: PersonaClave[] }[]
+  personasExternas: (PersonaClave & { rolSinVehiculo: string | null })[]
+}
+
 // En el orden del alta: por vehículo, el titular y sus ocupantes; al final, las personas fuera de los vehículos.
 // Dónde está cargada cada una, para el aviso de documento repetido.
-function personasEnOrden({ vehiculos, personasExternas }: Involucrados) {
+function personasEnOrden({ vehiculos, personasExternas }: PersonasDelSiniestro) {
   return [
     ...vehiculos.flatMap((v) =>
       [
@@ -22,13 +38,13 @@ function personasEnOrden({ vehiculos, personasExternas }: Involucrados) {
     ),
     ...personasExternas.map((p) => ({
       persona: p,
-      donde: `persona fuera de los vehículos (${p.rolSinVehiculo})`,
+      donde: `persona fuera de los vehículos (${p.rolSinVehiculo ?? 'sin rol'})`,
     })),
   ]
 }
 
 /** Nombre a mostrar de cada persona. Sin nombre: "Desconocido 1", "Desconocido 2"… en el orden del alta. */
-export function nombresPersonas(involucrados: Involucrados): Map<string, string> {
+export function nombresPersonas(involucrados: PersonasDelSiniestro): Map<string, string> {
   const nombres = new Map<string, string>()
   let desconocidos = 0
   for (const { persona } of personasEnOrden(involucrados))
@@ -41,7 +57,7 @@ export function nombresPersonas(involucrados: Involucrados): Map<string, string>
  * usuario corrige el documento o cancela la carga (CU-09 13.b y 16.a).
  */
 export function documentoRepetido(
-  involucrados: Involucrados,
+  involucrados: PersonasDelSiniestro,
   documento: string | null | undefined,
   claveActual: string | null,
 ): string | null {

@@ -12,8 +12,10 @@ type Base = Pick<Prisma.TransactionClient, 'siniestro' | 'vehiculo' | 'personaIn
 
 const selectPersona = {
   id: true,
+  revision: true,
   idVehiculo: true,
   nombreCompletoRazonSocial: true,
+  idTipoDocumento: true,
   documento: true,
   estadoCivil: true,
   sexo: true,
@@ -39,7 +41,9 @@ type FilaPersona = Prisma.PersonaInvolucradaGetPayload<{ select: typeof selectPe
 function aPersona(p: FilaPersona): PersonaFicha {
   return {
     id: p.id,
+    revision: p.revision,
     nombre: nombreOpcional(p),
+    idTipoDocumento: p.idTipoDocumento,
     tipoDocumento: p.tipoDocumento?.nombre ?? null,
     documento: p.documento,
     estadoCivil: p.estadoCivil,
@@ -80,6 +84,7 @@ export function crearServicioVehiculosFicha(prisma: Base) {
           orderBy: { id: 'asc' },
           select: {
             id: true,
+            revision: true,
             rolAccidente: true,
             marca: true,
             modelo: true,
@@ -93,6 +98,7 @@ export function crearServicioVehiculosFicha(prisma: Base) {
             numeroMotor: true,
             acreedorPrendario: true,
             descripcionDanos: true,
+            idAseguradora: true,
             aseguradora: { select: { nombre: true } },
           },
         }),

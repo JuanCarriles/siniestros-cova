@@ -12,7 +12,11 @@ import type {
 // Fechas de un día: "aaaa-mm-dd"; horas: "hh:mm"; momentos: ISO.
 
 export type DireccionFicha = {
+  /** Para precargar el formulario al modificar, aunque el país esté dado de baja */
+  idPais: number | null
   pais: string | null
+  /** Para precargar el formulario al modificar */
+  idProvincia: number | null
   provincia: string | null
   localidad: string | null
   calle: string | null
@@ -52,8 +56,11 @@ export type FichaSiniestro = {
 
 export type PersonaFicha = {
   id: number
+  /** Cuántas veces se modificó: se manda al guardar, para no pisar el cambio de otro usuario (E5-06) */
+  revision: number
   /** null si se cargó sin nombre */
   nombre: string | null
+  idTipoDocumento: number | null
   tipoDocumento: string | null
   documento: string | null
   estadoCivil: string | null
@@ -80,6 +87,8 @@ export type PersonaVehiculoFicha = PersonaFicha & {
 
 export type VehiculoFicha = {
   id: number
+  /** Cuántas veces se modificó: se manda al guardar, para no pisar el cambio de otro usuario (E5-06) */
+  revision: number
   rolAccidente: RolAccidente | null
   marca: string | null
   modelo: string | null
@@ -91,6 +100,7 @@ export type VehiculoFicha = {
   color: string | null
   numeroChasis: string | null
   numeroMotor: string | null
+  idAseguradora: number | null
   aseguradora: string | null
   acreedorPrendario: string | null
   descripcionDanos: string | null
@@ -107,6 +117,8 @@ export type VehiculosYPartesFicha = {
 /** GET /api/siniestros/:id/abogados (CU-10 1.d) */
 export type AbogadoFicha = {
   id: number
+  /** Cuántas veces se modificó: se manda al guardar, para no pisar el cambio de otro usuario (E5-07) */
+  revision: number
   nombreCompleto: string
   numeroMatricula: string | null
   telefono: string | null
@@ -117,6 +129,8 @@ export type AbogadoFicha = {
 /** GET /api/siniestros/:id/peritos (CU-10 1.e) */
 export type PeritoFicha = {
   id: number
+  /** Cuántas veces se modificó: se manda al guardar, para no pisar el cambio de otro usuario (E5-07) */
+  revision: number
   tipo: TipoPerito
   nombre: string
   telefono: string | null

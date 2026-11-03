@@ -17,7 +17,7 @@ import {
   titularAltaSchema,
   type OcupanteAltaData,
   type OcupanteAltaInput,
-  type OpcionesAltaSiniestro,
+  type OpcionesPartes,
   type PersonaExternaAltaData,
   type TitularAltaData,
   type TitularAltaInput,
@@ -37,18 +37,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type {
-  OcupanteBorrador,
-  PersonaExternaBorrador,
-  TitularBorrador,
-  VehiculoBorrador,
-} from '../borrador-alta'
-import { documentoRepetido, paisDelDomicilio, type Involucrados } from '../personas-alta'
+import { campoDelError, mensajeDelError } from '../errores-servidor'
+import { documentoRepetido, paisDelDomicilio, type PersonasDelSiniestro } from '../personas-alta'
 
 /** titular y ocupante, de un vehículo; externa, alguien que no iba en ninguno (peatón, testigo…) */
 export type ModoPersona = 'titular' | 'ocupante' | 'externa'
-type PersonaBorrador = TitularBorrador | OcupanteBorrador | PersonaExternaBorrador
 type PersonaData = TitularAltaData | OcupanteAltaData | PersonaExternaAltaData
+/** La clave la identifica entre las personas del siniestro (para no avisarse a sí misma como repetida) */
+type PersonaConClave = PersonaData & { clave: string }
 
 /** Lo que se escribe en el modal: todos comparten los datos personales. El país solo filtra provincias. */
 type PersonaFormulario = Omit<TitularAltaInput, 'ibaEnVehiculo'> &
@@ -111,7 +107,7 @@ const esquemas = {
 }
 
 const texto = (valor: string | null | undefined) => valor ?? ''
-function aFormulario(p: PersonaBorrador, opciones: OpcionesAltaSiniestro): PersonaFormulario {
+function aFormulario(p: PersonaConClave, opciones: OpcionesPartes): PersonaFormulario {
   const provincia = opciones.provincias.find((x) => x.id === p.domicilio.idProvincia)
   return {
     ibaEnVehiculo: 'ibaEnVehiculo' in p ? p.ibaEnVehiculo : true,
@@ -145,7 +141,9 @@ function aFormulario(p: PersonaBorrador, opciones: OpcionesAltaSiniestro): Perso
 // CU-09 pasos 11-22 (E4-06 y E4-07). El titular empieza por si iba en el vehículo; el ocupante, por dónde iba (y,
 // si manejaba, su relación con el titular); la persona fuera de los vehículos, por su rol en el siniestro, lo único
 // obligatorio, y no tiene permiso de conducir. Las lesiones quedan detrás de "¿Tuvo lesiones?". Un documento que
-// ya está en el alta no se puede guardar (CU-09 13.b y 16.a). Se monta mientras está abierto.
+// ya está en el siniestro no se puede guardar (CU-09 13.b y 16.a). Se monta mientras está abierto. Lo usan el alta
+// (guarda en el borrador) y la ficha (CU-10 1.c.2 a 1.c.5, guarda en el servidor: si lo rechaza, el error queda en
+// su campo o arriba, y el modal sigue abierto).
 export function PersonaDialog({
   modo,
   vehiculo,
@@ -158,13 +156,14 @@ export function PersonaDialog({
 }: {
   modo: ModoPersona
   /** El vehículo del titular o del ocupante; null para una persona fuera de los vehículos */
-  vehiculo: VehiculoBorrador | null
+  vehiculo: { dominio: string } | null
   /** null: cargar una nueva */
-  persona: PersonaBorrador | null
-  /** Todo el alta, para avisar si el documento ya está cargado */
-  involucrados: Involucrados
-  opciones: OpcionesAltaSiniestro
-  onGuardar: (datos: PersonaData) => void
+  persona: PersonaConClave | null
+  /** Todas las personas del siniestro, para avisar si el documento ya está cargado */
+  involucrados: PersonasDelSiniestro
+  opciones: OpcionesPartes
+  /** Puede esperar al servidor: si falla, el modal sigue abierto con el error */
+  onGuardar: (datos: PersonaData) => void | Promise<void>
   onCerrar: () => void
   elementoAlCerrar: () => HTMLElement | null
 }) {
@@ -182,7 +181,8 @@ export function PersonaDialog({
     reset,
     setFocus,
     setValue,
-    formState: { errors, isSubmitted },
+    setError,
+    formState: { errors, isSubmitted, isSubmitting },
   } = useForm<PersonaFormulario, unknown, PersonaData>({
     resolver: zodResolver(esquemas[modo]),
     defaultValues: persona ? aFormulario(persona, opciones) : vacia,
@@ -205,10 +205,27 @@ export function PersonaDialog({
       ?.focus()
 
   const guardar = (seguir: boolean) =>
-    handleSubmit((datos) => {
+    handleSubmit(async (datos) => {
       // Documento repetido: el error ya está a la vista en el campo; se corrige o se cancela
       if (repetido) return setFocus('documento')
-      onGuardar(datos)
+      try {
+        await onGuardar(datos)
+      } catch (err) {
+        const campo = campoDelError(err, [
+          'documento',
+          'idTipoDocumento',
+          'domicilio.idProvincia',
+        ] as const)
+        if (campo) setError(campo, { message: mensajeDelError(err, '') }, { shouldFocus: true })
+        else
+          setError('root', {
+            message: mensajeDelError(
+              err,
+              'No se pudo guardar. Revisá la conexión y probá de nuevo.',
+            ),
+          })
+        return
+      }
       if (!seguir) return onCerrar()
       reset(vacia)
       setAgregado(
@@ -228,8 +245,14 @@ export function PersonaDialog({
         : `${nueva ? 'Agregar' : 'Modificar'} ocupante del vehículo ${vehiculo?.dominio ?? ''}`
 
   return (
-    <Dialog open onOpenChange={(abrir) => !abrir && onCerrar()}>
+    <Dialog
+      open
+      onOpenChange={(abrir) => {
+        if (!abrir && !isSubmitting) onCerrar()
+      }}
+    >
       <DialogContent
+        showCloseButton={!isSubmitting}
         size="wide"
         onInteractOutside={(e) => e.preventDefault()}
         onOpenAutoFocus={(e) => {
@@ -614,17 +637,27 @@ export function PersonaDialog({
             )}
           </Seccion>
 
+          {errors.root && (
+            <Aviso tipo="error" enfocar>
+              {errors.root.message}
+            </Aviso>
+          )}
           <DialogFooter className="gap-3">
-            <Button type="button" variant="outline" onClick={onCerrar}>
+            <Button type="button" variant="outline" onClick={onCerrar} disabled={isSubmitting}>
               Cancelar
             </Button>
             {modo !== 'titular' && nueva && (
-              <Button type="button" variant="outline" onClick={(e) => void guardar(true)(e)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={(e) => void guardar(true)(e)}
+              >
                 <Plus aria-hidden="true" />
                 {modo === 'externa' ? 'Guardar y agregar otra' : 'Guardar y agregar otro'}
               </Button>
             )}
-            <Button type="submit">
+            <Button type="submit" loading={isSubmitting}>
               {!nueva
                 ? 'Guardar cambios'
                 : modo === 'titular'

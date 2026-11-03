@@ -152,7 +152,8 @@ test(
       const guardado = await prisma.siniestro.findUniqueOrThrow({ where: { id: s.id } })
       assert.equal(guardado.idUsuario, nuevo.id)
       assert.equal(guardado.fechaAsignacion.toISOString(), inicial.toISOString())
-      assert.equal(guardado.fechaUltimoMovimiento.toISOString(), ahora.toISOString())
+      assert.equal(guardado.fechaUltimoMovimiento.toISOString(), inicial.toISOString())
+      assert.equal(guardado.demorado, true)
       const historial = await prisma.historialSiniestro.findMany({
         where: { idSiniestro: s.id },
         orderBy: { id: 'asc' },
@@ -162,7 +163,10 @@ test(
       assert.equal(historial[1].tipoEvento, 'REASIGNACION')
       assert.equal(historial[1].idUsuario, admin.id)
       assert.equal(historial[1].fechaEvento.toISOString(), ahora.toISOString())
-      assert.match(historial[1].descripcion, /Admin Prueba.*Anterior Prueba.*Nuevo Prueba/)
+      assert.match(
+        historial[1].descripcion,
+        /Se reasignó el caso de Anterior Prueba a Nuevo Prueba/,
+      )
       const notificaciones = await prisma.notificacion.findMany({ where: { idSiniestro: s.id } })
       assert.deepEqual(
         notificaciones.map((n) => n.idUsuario).sort((a, b) => a - b),
@@ -194,6 +198,33 @@ test(
       )
       await assert.rejects(servicio.reasignar(admin, s.id, pedido), { status: 409 })
       assert.equal(mails.length, 2)
+
+      const casoInactivo = await caso({ idUsuario: inactivo.id })
+      const antesMails = mails.length
+      await servicio.reasignar(admin, casoInactivo.id, {
+        ...pedido,
+        idUsuarioAnterior: inactivo.id,
+      })
+      assert.equal(mails.length, antesMails + 1)
+      assert.equal(mails.at(-1).email, nuevo.email)
+      const avisosInactivo = await prisma.notificacion.findMany({
+        where: { idSiniestro: casoInactivo.id },
+      })
+      assert.equal(avisosInactivo.length, 1)
+      assert.equal(avisosInactivo[0].idUsuario, nuevo.id)
+      assert.equal(await prisma.notificacion.count({ where: { idUsuario: inactivo.id } }), 0)
+      const casoCerrado = await caso({ idEstadoSiniestro: cerrado.id })
+      await assert.rejects(servicio.opciones(admin, casoCerrado.id), { status: 409 })
+      await assert.rejects(servicio.reasignar(admin, casoCerrado.id, pedido), { status: 409 })
+      assert.equal(
+        (await prisma.siniestro.findUniqueOrThrow({ where: { id: casoCerrado.id } })).idUsuario,
+        anterior.id,
+      )
+      assert.equal(
+        await prisma.historialSiniestro.count({ where: { idSiniestro: casoCerrado.id } }),
+        0,
+      )
+      assert.equal(await prisma.notificacion.count({ where: { idSiniestro: casoCerrado.id } }), 0)
 
       const simultaneo = await caso()
       const carreras = await Promise.allSettled(

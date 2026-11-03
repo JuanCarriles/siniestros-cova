@@ -15,6 +15,7 @@ export function crearServicioPeritosFicha(prisma: Base) {
         orderBy: [{ tipoPerito: 'asc' }, { fechaSolicitud: 'desc' }, { id: 'desc' }],
         select: {
           id: true,
+          revision: true,
           tipoPerito: true,
           nombre: true,
           telefono: true,

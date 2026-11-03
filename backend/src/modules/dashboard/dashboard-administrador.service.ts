@@ -62,10 +62,11 @@ export function crearServicioDashboardAdministrador(
           { fechaUltimoMovimiento: null, fechaAsignacion: { lte: limite } },
         ],
       } satisfies Prisma.SiniestroWhereInput
-      // La actividad de casos de baja sigue en su historial; este panel solo enlaza casos disponibles.
+      // La baja no borra la actividad: administradores pueden abrir estas fichas y su historial.
+      // Solo se excluyen las eliminaciones en curso, cuyo acceso está bloqueado.
       const actividad = {
         eliminado: false,
-        siniestro: visible,
+        siniestro: { eliminacionEnCurso: false },
       } satisfies Prisma.HistorialSiniestroWhereInput
       const dias = (desde: Date) =>
         Math.max(0, Math.floor((ahora.getTime() - desde.getTime()) / DIA))

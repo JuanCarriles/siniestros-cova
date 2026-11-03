@@ -132,10 +132,12 @@ test('PostgreSQL: perfil propio, casos, contraseña en cada escritura, sesiones,
           })
           const horasLimite = DIAS_DEMORADO * 24
           const limite = tiempo - horasLimite * 3_600_000
+          // Cada uno con su número: no se repite en una aseguradora (migración numero_siniestro_unico)
+          let numero = 0
           const caso = (horas, extra = {}) =>
             tx.siniestro.create({
               data: {
-                numeroSiniestro: marca,
+                numeroSiniestro: `${marca}-${++numero}`,
                 numeroPoliza: marca,
                 fechaAsignacion: new Date(tiempo - (horasLimite + 48) * 3_600_000),
                 fechaUltimoMovimiento: horas === null ? null : new Date(tiempo - horas * 3_600_000),
