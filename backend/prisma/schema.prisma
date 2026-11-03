@@ -248,6 +248,9 @@ model LecturaMensajeChat {
 
 model DocumentoSiniestro {
   id                   Int       @id @default(autoincrement())
+  /// Identifica una carga para no duplicar documentos cuando se reintenta una respuesta perdida.
+  idCarga              String?   @unique @db.Uuid
+  hashContenido        String?   @db.VarChar(64)
   nombreOriginal       String
   /// Clave relativa de R2 (siniestros/id/uuid.ext), nunca una URL firmada.
   urlArchivoSinDominio String
