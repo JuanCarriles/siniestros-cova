@@ -54,8 +54,7 @@ export function PestanaDocumentos() {
                 </span>
                 {d.imagen && (
                   <span className="text-muted-foreground">
-                    Vista: {d.imagen.ancho} × {d.imagen.alto} px ·{' '}
-                    {formatoTamanoArchivo(Number(d.imagen.tamanoBytes))}
+                    Resolución original: {d.imagen.anchoOriginal} × {d.imagen.altoOriginal} px
                   </span>
                 )}
               </span>

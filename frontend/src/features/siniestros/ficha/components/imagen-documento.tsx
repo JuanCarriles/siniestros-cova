@@ -1,4 +1,5 @@
 import { rutaArchivoDocumento } from '../documentos/rutas'
+import { VistaImagenOriginal } from './vista-imagen-original'
 import { useState } from 'react'
 import { Download, ImageOff, Maximize2 } from 'lucide-react'
 import type { DocumentoFicha } from '@cova/shared/schemas/ficha-siniestro'
@@ -13,27 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { IconoArchivo } from '@/features/plantillas/components/icono-archivo'
 
-function Vista({ documento, idSiniestro }: { documento: DocumentoFicha; idSiniestro: number }) {
-  const [error, setError] = useState(false)
-  return error ? (
-    <div
-      role="status"
-      className="grid min-h-40 justify-items-center gap-3 rounded-lg border bg-muted p-6 text-center"
-    >
-      <ImageOff aria-hidden="true" className="size-8" />
-      <p>No se pudo cargar la vista. Podés descargar el archivo original.</p>
-    </div>
-  ) : (
-    <img
-      src={rutaArchivoDocumento(idSiniestro, documento.id, 'vista')}
-      alt={`Vista de ${documento.nombreOriginal}`}
-      referrerPolicy="no-referrer"
-      onError={() => setError(true)}
-      className="max-h-[65dvh] w-full rounded-lg bg-muted object-contain"
-    />
-  )
-}
-
 export function ImagenDocumento({
   documento,
   idSiniestro,
@@ -43,7 +23,8 @@ export function ImagenDocumento({
 }) {
   const [error, setError] = useState(false)
   const imagen = documento.imagen
-  if (!imagen) return <IconoArchivo extension={documento.tipoExtension} />
+  if (!['jpg', 'jpeg', 'png'].includes(documento.tipoExtension.toLowerCase()))
+    return <IconoArchivo extension={documento.tipoExtension} />
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -52,9 +33,13 @@ export function ImagenDocumento({
           aria-label={`Ampliar ${documento.nombreOriginal}`}
           className="group relative grid h-44 w-full place-items-center overflow-hidden rounded-lg border-2 border-line bg-surface-subtle transition-colors hover:border-primary focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          {error ? (
+          {error || !imagen ? (
             <span className="grid justify-items-center gap-2 p-4 text-muted-foreground">
-              <ImageOff aria-hidden="true" className="size-8" />
+              {error ? (
+                <ImageOff aria-hidden="true" className="size-8" />
+              ) : (
+                <IconoArchivo extension={documento.tipoExtension} />
+              )}
               <span>Ampliar imagen</span>
             </span>
           ) : (
@@ -76,18 +61,14 @@ export function ImagenDocumento({
           </span>
         </button>
       </DialogTrigger>
-      <DialogContent size="wide">
+      <DialogContent size="wide" className="sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle className="break-words">{documento.nombreOriginal}</DialogTitle>
           <DialogDescription>
-            Vista de {imagen.ancho} × {imagen.alto} px. El original conserva todos los detalles.
+            Imagen original, sin recomprimir. Ajustá el tamaño o usá el zoom para leer los detalles.
           </DialogDescription>
         </DialogHeader>
-        <Vista documento={documento} idSiniestro={idSiniestro} />
-        <p className="text-muted-foreground">
-          Para leer texto pequeño o ampliar detalles, descargá el original de {imagen.anchoOriginal}{' '}
-          × {imagen.altoOriginal} px.
-        </p>
+        <VistaImagenOriginal key={documento.id} documento={documento} idSiniestro={idSiniestro} />
         <Button asChild>
           <a
             href={rutaArchivoDocumento(idSiniestro, documento.id, 'original')}

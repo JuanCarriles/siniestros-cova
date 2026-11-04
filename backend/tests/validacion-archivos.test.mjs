@@ -299,6 +299,22 @@ test('attachment: objetos y URLs firmadas de originales, vistas y miniaturas; ta
     assert.equal(r.status, 302)
     const url = new URL(r.headers.get('location'))
     assert.match(url.searchParams.get('response-content-disposition'), /^attachment;/)
+    const documento = api.documentos.find((d) => d.id === id)
+    const esperada =
+      tipo === 'original'
+        ? documento.urlArchivoSinDominio
+        : tipo === 'miniatura'
+          ? documento.claveMiniatura
+          : documento.claveImagenOptimizada
+    assert.ok(
+      decodeURIComponent(url.pathname).endsWith('/' + esperada),
+      `La ruta ${tipo} debe servir su versión correcta`,
+    )
+    if (tipo === 'original') {
+      assert.notEqual(esperada, documento.claveImagenOptimizada)
+      assert.deepEqual(Buffer.from(api.objetos.get(esperada).Body), bytes)
+    }
+
     assert.equal(url.searchParams.get('X-Amz-Expires'), '60')
     if (tipo === 'original')
       assert.ok(url.searchParams.get('response-content-disposition').includes('Inspecci%C3%B3n'))

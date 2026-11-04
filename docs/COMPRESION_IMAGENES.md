@@ -16,7 +16,7 @@ Las entradas deben ser JPG/PNG estáticos válidos, de hasta 10 MiB y 40 millone
 
 ## Legibilidad
 
-La miniatura sirve para identificar el archivo; la vista de 1600 px sirve para consultarlo. No es posible garantizar que todo texto diminuto de cualquier escaneo siga siendo legible al reducirlo. Por eso siempre se conserva y permite descargar el original, sin recomprimirlo, recortarlo ni perder resolución. El diálogo explica esta diferencia y muestra las medidas de ambas versiones.
+La miniatura sirve para identificar el archivo. Se conserva una copia optimizada de hasta 1600 px, pero el visor muestra directamente el original para evitar pérdida de nitidez por recompresión. No es posible garantizar que todo texto diminuto de cualquier escaneo siga siendo legible al reducirlo. Por eso siempre se conserva y permite descargar el original, sin recomprimirlo, recortarlo ni perder resolución. El diálogo permite Ajustar, Tamaño real (100%) y zoom, con desplazamiento horizontal y vertical. No amplía imágenes pequeñas automáticamente. Guardar imagen como desde el visor y Descargar original utilizan la misma versión original intacta.
 
 ## Acceso y datos
 
@@ -28,14 +28,14 @@ Un fallo al guardar variantes o la transacción limpia los objetos sobrantes. Lo
 
 ## Migración y ejecución
 
-`20261107130000_imagenes_documentos` añade siete columnas opcionales; no transforma ni elimina archivos o registros anteriores. Las imágenes anteriores continúan descargables, sin miniatura, hasta volver a cargarlas. No hay procesamiento retroactivo automático.
+`20261107130000_imagenes_documentos` añade siete columnas opcionales; no transforma ni elimina archivos o registros anteriores. Las imágenes anteriores continúan descargables y se pueden abrir en el visor original; si no tienen miniatura se muestra un acceso para ampliarlas. No hay procesamiento retroactivo automático.
 
 Con npm: `npm install`, `npm run prisma:migrate:deploy -w backend` y ejecutar backend/frontend. Con Docker: `docker compose up -d --build`. No se cambiaron Dockerfiles ni Compose; sharp se instala desde el lockfile en la imagen Linux.
 
 ## Prueba manual
 
 1. Subir una foto JPG y un PNG con texto/transparencia a un siniestro activo.
-2. Comprobar miniatura en la grilla y abrir Ampliar; verificar proporción y orientación.
+2. Comprobar miniatura en la grilla y abrir Ampliar; verificar proporción y orientación. Usar Tamaño real y Acercar para leer texto fino; el visor debe solicitar /original, no /vista ni /miniatura.
 3. Descargar el original y comprobar que conserva su resolución y tamaño original.
 4. Subir un PDF y verificar que no recibe derivados ni cambia su contenido.
 5. Repetir desde el paso Documentos del alta y confirmar el siniestro.
