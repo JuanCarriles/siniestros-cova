@@ -145,7 +145,8 @@ export type NovedadFicha = {
   id: number
   descripcion: string
   fechaCarga: string
-  autor: { nombre: string; tipoUsuario: TipoUsuario }
+  /** El nombre y el rol de quien la cargó, tal como eran en ese momento. Sin rol en las anteriores a E5-08. */
+  autor: { nombre: string; tipoUsuario: TipoUsuario | null }
 }
 
 /** GET /api/siniestros/:id/documentos (CU-10 1.g), del más nuevo al más viejo */

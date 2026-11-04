@@ -1044,7 +1044,10 @@ export async function seedDesarrollo(
     ).id
 
   // Usuarios
-  const usuarios = new Map<string, { id: number; nombres: string; apellidos: string }>()
+  const usuarios = new Map<
+    string,
+    { id: number; nombres: string; apellidos: string; tipoUsuario: TipoUsuario }
+  >()
   for (const u of USUARIOS_DEV) {
     const creado = await tx.usuario.create({
       data: {
@@ -1282,6 +1285,7 @@ export async function seedDesarrollo(
           idUsuario: idAsignado,
           descripcion,
           autor: nombreCompleto(asignado),
+          tipoUsuarioAutor: asignado.tipoUsuario,
           fechaCarga,
         },
       })

@@ -2,6 +2,7 @@ import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import type { NovedadData } from '@cova/shared/schemas/novedades'
 import type { ParteCreada } from '@cova/shared/schemas/partes-siniestro'
 import { TipoNotificacion } from '../../generated/prisma/client.ts'
+import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
 import {
@@ -19,11 +20,25 @@ export function crearServicioNovedadesGestion({ transaccion }: { transaccion: Tr
     async cargar(
       usuario: SesionUsuario,
       idSiniestro: number,
-      { descripcion }: NovedadData,
+      { descripcion, claveEnvio }: NovedadData,
     ): Promise<ParteCreada> {
       return transaccion(async (tx) => {
         // Acceso, bloqueo del siniestro y que no esté dado de baja ni cerrado: como los cambios de partes
         const autor = await prepararEdicion(tx, usuario, idSiniestro)
+        // El mismo envío otra vez (se perdió la respuesta y el formulario reintentó): ya está cargada, sin repetir
+        // historial ni avisos. El bloqueo del siniestro ordena dos envíos iguales a la vez.
+        const previa = await tx.novedadSiniestro.findUnique({
+          where: { claveEnvio },
+          select: { id: true, idSiniestro: true, idUsuario: true },
+        })
+        if (previa) {
+          if (previa.idSiniestro !== idSiniestro || previa.idUsuario !== usuario.id)
+            throw new HttpError(
+              409,
+              'No se pudo cargar la novedad. Volvé a cargar la página y probá de nuevo.',
+            )
+          return { id: previa.id }
+        }
         const siniestro = await tx.siniestro.findUniqueOrThrow({
           where: { id: idSiniestro },
           select: { numeroSiniestro: true, idUsuario: true },
@@ -34,6 +49,8 @@ export function crearServicioNovedadesGestion({ transaccion }: { transaccion: Tr
             idSiniestro,
             idUsuario: usuario.id,
             autor: nombreCompleto(autor),
+            tipoUsuarioAutor: autor.tipoUsuario,
+            claveEnvio,
             descripcion,
             fechaCarga: ahora,
           },
