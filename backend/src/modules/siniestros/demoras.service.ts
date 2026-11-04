@@ -1,5 +1,5 @@
 import { DIAS_ALERTA } from '@cova/shared/schemas/siniestros'
-import { TipoNotificacion } from '../../generated/prisma/client.ts'
+import { TipoNotificacion, type Prisma } from '../../generated/prisma/client.ts'
 import { formatearFecha } from '../../utils/formato.ts'
 import type { Transaccion } from './partes-edicion.ts'
 import { diasSinMovimiento, sinMovimiento } from './demora.ts'
@@ -20,8 +20,8 @@ export type ResultadoDemoras = {
 // cerrados) sin movimiento hace 72 horas o más y avisa al usuario asignado y a la administración activa:
 // - a las 72 horas, "demorado" (CASO_DEMORADO, el semáforo en amarillo);
 // - a los 7 días, "en alerta" (CASO_EN_ALERTA, el semáforo en rojo).
-// Cada aviso sale una sola vez por período sin movimiento: lo enviado desde el último movimiento no se repite, y
-// cuando el caso se mueve vuelve a empezar. Si la tarea estuvo parada y un caso ya pasó los 7 días sin aviso,
+// Cada aviso sale una sola vez por período sin movimiento y por destinatario: lo enviado desde el último movimiento no
+// se repite, y cuando el caso se mueve vuelve a empezar. Si la tarea estuvo parada y un caso ya pasó los 7 días sin aviso,
 // recibe solo el de alerta. La demora en sí no se guarda: se calcula con la misma regla que el listado.
 export function crearTareaDemoras({
   transaccion,
@@ -38,13 +38,26 @@ export function crearTareaDemoras({
         if (!bloqueo?.libre) return { revisado: false, casos: 0, avisos: 0 }
 
         const ahora = reloj()
+        const filtro = {
+          AND: [
+            { eliminado: false, eliminacionEnCurso: false, estadoSiniestro: { esCierre: false } },
+            sinMovimiento(ahora),
+          ],
+        } satisfies Prisma.SiniestroWhereInput
+        // Los candidatos se bloquean (el mismo bloqueo de fila que toman el cambio de estado, la reasignación, la baja
+        // y las cargas de la ficha) y se vuelven a leer ya bloqueados: un caso que se cerró, se movió o se reasignó
+        // mientras tanto se avisa según cómo quedó, o no se avisa. Por orden de id, como cualquier otro bloqueo.
+        const candidatos = (
+          await tx.siniestro.findMany({
+            where: filtro,
+            select: { id: true },
+            orderBy: { id: 'asc' },
+          })
+        ).map((s) => s.id)
+        if (!candidatos.length) return { revisado: true, casos: 0, avisos: 0 }
+        await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ANY(${candidatos}) ORDER BY "id" FOR UPDATE`
         const demorados = await tx.siniestro.findMany({
-          where: {
-            AND: [
-              { eliminado: false, eliminacionEnCurso: false, estadoSiniestro: { esCierre: false } },
-              sinMovimiento(ahora),
-            ],
-          },
+          where: { AND: [filtro, { id: { in: candidatos } }] },
           select: {
             id: true,
             numeroSiniestro: true,
@@ -63,7 +76,12 @@ export function crearTareaDemoras({
               in: [TipoNotificacion.CASO_DEMORADO, TipoNotificacion.CASO_EN_ALERTA],
             },
           },
-          select: { idSiniestro: true, tipoNotificacion: true, fechaCreacion: true },
+          select: {
+            idSiniestro: true,
+            idUsuario: true,
+            tipoNotificacion: true,
+            fechaCreacion: true,
+          },
         })
         const administracion = (
           await tx.usuario.findMany({
@@ -91,11 +109,15 @@ export function crearTareaDemoras({
           const dias = diasSinMovimiento(ahora, s)
           const tipo =
             dias >= DIAS_ALERTA ? TipoNotificacion.CASO_EN_ALERTA : TipoNotificacion.CASO_DEMORADO
-          const yaAvisado = enviados.some(
-            (n) =>
-              n.idSiniestro === s.id && n.tipoNotificacion === tipo && n.fechaCreacion >= desde,
+          // Por destinatario: si el caso se reasignó, el nuevo responsable recibe el aviso que ya tuvo el anterior
+          const yaAvisados = new Set(
+            enviados
+              .filter(
+                (n) =>
+                  n.idSiniestro === s.id && n.tipoNotificacion === tipo && n.fechaCreacion >= desde,
+              )
+              .map((n) => n.idUsuario),
           )
-          if (yaAvisado) return []
           const referencia = s.fechaUltimoMovimiento
             ? `último movimiento el ${formatearFecha(desde)}`
             : `sin movimientos desde la asignación, el ${formatearFecha(desde)}`
@@ -107,15 +129,17 @@ export function crearTareaDemoras({
             ...(asignadosActivos.has(s.idUsuario) ? [s.idUsuario] : []),
             ...administracion,
           ])
-          return [...destinatarios].map((idUsuario) => ({
-            idUsuario,
-            idSiniestro: s.id,
-            tipoNotificacion: tipo,
-            mensaje,
-            fechaCreacion: ahora,
-            leida: false,
-            revisada: false,
-          }))
+          return [...destinatarios]
+            .filter((id) => !yaAvisados.has(id))
+            .map((idUsuario) => ({
+              idUsuario,
+              idSiniestro: s.id,
+              tipoNotificacion: tipo,
+              mensaje,
+              fechaCreacion: ahora,
+              leida: false,
+              revisada: false,
+            }))
         })
         if (avisos.length) await tx.notificacion.createMany({ data: avisos })
         return {

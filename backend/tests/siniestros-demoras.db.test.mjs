@@ -4,6 +4,7 @@ import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
 import { crearTareaDemoras } from '../src/modules/siniestros/demoras.service.ts'
 import { registrarMovimiento } from '../src/modules/siniestros/partes-edicion.ts'
 import { crearServicioBajasSiniestros } from '../src/modules/siniestros/siniestros-bajas.service.ts'
+import { crearServicioSiniestros } from '../src/modules/siniestros/siniestros.service.ts'
 
 const DIA = 86_400_000
 const AHORA = new Date('2026-11-10T15:00:00Z')
@@ -71,7 +72,39 @@ test('PostgreSQL: avisos de casos demorados a las 72 horas y a los 7 días', asy
             fechaUltimoMovimiento: null,
             idUsuario: gestorDeBaja.id,
           })
-          const nuestros = [demorado, alDia, limite, enAlerta, cerrado, deBaja, sinMovimientos]
+          const recien = await caso('RECIEN', {
+            fechaAsignacion: new Date(AHORA.getTime() - 3_600_000),
+            fechaUltimoMovimiento: null,
+          })
+          const nuestros = [
+            demorado,
+            alDia,
+            limite,
+            enAlerta,
+            cerrado,
+            deBaja,
+            sinMovimientos,
+            recien,
+          ]
+
+          // "Más demorados primero" ordena con la misma fecha que el cálculo: el último movimiento o, si nunca hubo,
+          // la asignación. Uno asignado hace una hora va después de los quietos; cerrados y dados de baja, al final.
+          const listado = await crearServicioSiniestros(tx, () => AHORA).listar(
+            { ...admin, tipoUsuario: 'ADMINISTRADOR' },
+            {
+              pagina: 1,
+              porPagina: 25,
+              bajas: true,
+              orden: 'demora',
+              aseguradora: aseguradora.id,
+            },
+          )
+          assert.deepEqual(
+            listado.siniestros.map((s) => s.id),
+            [enAlerta, sinMovimientos, demorado, limite, alDia, recien, cerrado, deBaja].map(
+              (s) => s.id,
+            ),
+          )
           const administracion = (
             await tx.usuario.findMany({
               where: {
@@ -143,6 +176,17 @@ test('PostgreSQL: avisos de casos demorados a las 72 horas y a los 7 días', asy
           reloj = new Date(AHORA.getTime() + 3_600_000)
           await tarea.revisar()
           assert.equal((await avisos()).length, primera.length)
+
+          // Si el caso se reasigna, el nuevo responsable recibe el aviso que ya tuvo el anterior; nadie más lo repite
+          const otraGestora = await usuario('Ema', 'GESTOR')
+          await tx.siniestro.update({
+            where: { id: limite.id },
+            data: { idUsuario: otraGestora.id },
+          })
+          await tarea.revisar()
+          assert.deepEqual(resumen(await avisos(), reloj), {
+            [`${limite.id}:CASO_DEMORADO`]: [otraGestora.id],
+          })
 
           // A los 7 días, el demorado pasa a alerta (un aviso más); el que ya estaba en alerta no se repite
           reloj = new Date(AHORA.getTime() + 3 * DIA)
@@ -222,3 +266,86 @@ test('PostgreSQL: la tarea de demoras no corre dos veces a la vez', async () => 
     await disconnectPrisma()
   }
 })
+
+// Si el caso se cierra (o se mueve, o se reasigna) mientras la tarea lo revisa, el aviso sale según cómo quedó.
+// Fechas del año 2000: para ese "ahora" solo este caso está demorado y la tarea no avisa de los datos de la base.
+test('PostgreSQL: la tarea de demoras no avisa de un caso que se cerró mientras lo revisaba', async () => {
+  const prisma = getPrisma()
+  const marca = Date.now()
+  const ahora = new Date('2000-01-10T12:00:00Z')
+  const abierto = await prisma.estadoSiniestro.findFirstOrThrow({ where: { esCierre: false } })
+  const cierre = await prisma.estadoSiniestro.findFirstOrThrow({ where: { esCierre: true } })
+  const aseguradora = await prisma.aseguradora.create({ data: { nombre: `Carrera ${marca}` } })
+  const direccion = await prisma.direccion.create({ data: {} })
+  const gestora = await prisma.usuario.create({
+    data: {
+      nombres: 'Ana',
+      apellidos: 'Carrera',
+      documento: '0',
+      telefono: '0',
+      email: `ana.carrera.${marca}@example.invalid`,
+      contrasena: '-',
+      tipoUsuario: 'GESTOR',
+      idDireccion: direccion.id,
+    },
+  })
+  const caso = await prisma.siniestro.create({
+    data: {
+      numeroSiniestro: `CARRERA-${marca}`,
+      numeroPoliza: 'P',
+      fechaAsignacion: new Date('2000-01-01T12:00:00Z'),
+      fechaUltimoMovimiento: new Date('2000-01-02T12:00:00Z'),
+      menorEdadInvolucrado: false,
+      idEstadoSiniestro: abierto.id,
+      idAseguradora: aseguradora.id,
+      idUsuario: gestora.id,
+    },
+  })
+  const tarea = crearTareaDemoras({
+    transaccion: (trabajo) => prisma.$transaction(trabajo, { timeout: 30_000 }),
+    reloj: () => ahora,
+  })
+  let cerrar
+  const pausa = new Promise((resolver) => (cerrar = resolver))
+  try {
+    // Alguien cierra el caso y todavía no confirmó: la tarea lo ve abierto y espera su bloqueo
+    const cierreEnCurso = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${caso.id} FOR UPDATE`
+        await tx.siniestro.update({
+          where: { id: caso.id },
+          data: { idEstadoSiniestro: cierre.id, fechaCierre: ahora },
+        })
+        await pausa
+      },
+      { timeout: 30_000 },
+    )
+    await esperar(prisma, `state = 'idle in transaction'`)
+    const revision = tarea.revisar()
+    await esperar(prisma, `wait_event_type = 'Lock'`)
+    cerrar()
+    await cierreEnCurso
+    assert.equal((await revision).revisado, true)
+    assert.equal(await prisma.notificacion.count({ where: { idSiniestro: caso.id } }), 0)
+  } finally {
+    cerrar?.()
+    await prisma.notificacion.deleteMany({ where: { idSiniestro: caso.id } })
+    await prisma.siniestro.delete({ where: { id: caso.id } })
+    await prisma.usuario.delete({ where: { id: gestora.id } })
+    await prisma.direccion.delete({ where: { id: direccion.id } })
+    await prisma.aseguradora.delete({ where: { id: aseguradora.id } })
+    await disconnectPrisma()
+  }
+})
+
+/** Espera a que alguna conexión a esta base esté en la situación pedida (ver pg_stat_activity) */
+async function esperar(prisma, condicion) {
+  for (let intento = 0; intento < 250; intento++) {
+    const [{ cantidad }] = await prisma.$queryRawUnsafe(
+      `SELECT count(*)::int AS cantidad FROM pg_stat_activity WHERE datname = current_database() AND ${condicion}`,
+    )
+    if (cantidad > 0) return
+    await new Promise((resolver) => setTimeout(resolver, 20))
+  }
+  throw new Error(`Ninguna conexión llegó a: ${condicion}`)
+}

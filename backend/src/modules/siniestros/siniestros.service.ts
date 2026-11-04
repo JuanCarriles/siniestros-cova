@@ -133,6 +133,46 @@ export function crearServicioSiniestros(
 ) {
   const esGestor = (usuario: SesionUsuario) => usuario.tipoUsuario === 'GESTOR'
 
+  /**
+   * "Más demorados primero" (E5-10): con la misma fecha que el cálculo de demora, el último movimiento o, si nunca
+   * hubo, la asignación. Prisma no ordena por esa combinación: se ordenan las claves de todos los casos del filtro
+   * (solo id y fechas) y se traen completos los de la página. Los dados de baja van al final y, de los demás, los
+   * cerrados después de los abiertos: ya no se mueven.
+   */
+  async function masDemoradosPrimero(
+    where: Prisma.SiniestroWhereInput,
+    pagina: number,
+    porPagina: number,
+  ) {
+    const claves = await prisma.siniestro.findMany({
+      where,
+      select: {
+        id: true,
+        eliminado: true,
+        fechaUltimoMovimiento: true,
+        fechaAsignacion: true,
+        estadoSiniestro: { select: { esCierre: true } },
+      },
+    })
+    const referencia = (c: (typeof claves)[number]) =>
+      (c.fechaUltimoMovimiento ?? c.fechaAsignacion).getTime()
+    const ids = claves
+      .sort(
+        (a, b) =>
+          Number(a.eliminado) - Number(b.eliminado) ||
+          Number(a.estadoSiniestro.esCierre) - Number(b.estadoSiniestro.esCierre) ||
+          referencia(a) - referencia(b) ||
+          a.id - b.id,
+      )
+      .slice((pagina - 1) * porPagina, pagina * porPagina)
+      .map((c) => c.id)
+    const filas = await prisma.siniestro.findMany({
+      where: { id: { in: ids } },
+      select: detalleListado,
+    })
+    return ids.map((id) => filas.find((f) => f.id === id)!)
+  }
+
   const exigirAcceso = (usuario: SesionUsuario, id: number) =>
     exigirAccesoSiniestro(prisma, usuario, id)
 
@@ -174,27 +214,16 @@ export function crearServicioSiniestros(
       // Una página que ya no existe (p. ej. después de filtrar) muestra la última
       const paginas = Math.max(1, Math.ceil(total / filtros.porPagina))
       const pagina = Math.min(filtros.pagina, paginas)
-      const orderBy: Prisma.SiniestroOrderByWithRelationInput[] =
+      const filas =
         filtros.orden === 'demora'
-          ? [
-              { eliminado: 'asc' },
-              // Los cerrados no se mueven más: van después de los abiertos
-              { estadoSiniestro: { esCierre: 'asc' } },
-              // Supone que todo siniestro tiene fechaUltimoMovimiento: el alta (E4-02) la tiene que cargar igual a
-              // la de asignación. Sin ella, un caso nuevo sin movimientos quedaría antes que uno quieto hace días
-              // (Prisma no ordena por "último movimiento o, si no hay, asignación").
-              { fechaUltimoMovimiento: { sort: 'asc', nulls: 'first' } },
-              { fechaAsignacion: 'asc' },
-              { id: 'asc' },
-            ]
-          : [{ eliminado: 'asc' }, { fechaAsignacion: 'desc' }, { id: 'desc' }]
-      const filas = await prisma.siniestro.findMany({
-        where,
-        select: detalleListado,
-        orderBy,
-        skip: (pagina - 1) * filtros.porPagina,
-        take: filtros.porPagina,
-      })
+          ? await masDemoradosPrimero(where, pagina, filtros.porPagina)
+          : await prisma.siniestro.findMany({
+              where,
+              select: detalleListado,
+              orderBy: [{ eliminado: 'asc' }, { fechaAsignacion: 'desc' }, { id: 'desc' }],
+              skip: (pagina - 1) * filtros.porPagina,
+              take: filtros.porPagina,
+            })
       return {
         siniestros: filas.map((fila) => aListado(fila, ahora)),
         total,
