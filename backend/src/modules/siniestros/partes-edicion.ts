@@ -16,13 +16,20 @@ export type Transaccion = <T>(trabajo: (tx: Tx) => Promise<T>) => Promise<T>
  * Antes de cualquier cambio: el acceso de la ficha (el gestor, solo sus casos) y que el siniestro se pueda tocar.
  * Uno dado de baja o cerrado se consulta pero no se modifica. Devuelve quién hace el cambio, para el historial.
  *
- * Bloquea la fila del siniestro hasta el final de la transacción: los cambios de partes de un mismo siniestro se
- * hacen de a uno. Así lo que se controla (dominio y documento sin repetir, un titular por vehículo, un vehículo sin
- * personas antes de su baja) sigue valiendo al guardar, aunque dos usuarios confirmen a la vez.
+ * Primero bloquea la fila del siniestro hasta el final de la transacción: los cambios de un mismo siniestro se hacen
+ * de a uno. Así lo que se controla (dominio y documento sin repetir, un titular por vehículo, un vehículo sin
+ * personas antes de su baja) sigue valiendo al guardar, aunque dos usuarios confirmen a la vez. Recién después
+ * controla el acceso, con el responsable y el rol vigentes en la base y no los de la sesión: una reasignación, una
+ * baja o un cambio de rol que terminaron mientras se esperaba el bloqueo ya cuentan.
  */
 export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestro: number) {
-  await exigirAccesoSiniestro(tx, usuario, idSiniestro)
   await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${idSiniestro} FOR UPDATE`
+  const autor = await tx.usuario.findFirst({
+    where: { id: usuario.id, eliminado: false },
+    select: { nombres: true, apellidos: true, tipoUsuario: true },
+  })
+  if (!autor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
+  await exigirAccesoSiniestro(tx, { ...usuario, tipoUsuario: autor.tipoUsuario }, idSiniestro)
   const siniestro = await tx.siniestro.findUniqueOrThrow({
     where: { id: idSiniestro },
     select: { eliminado: true, estadoSiniestro: { select: { esCierre: true } } },
@@ -34,11 +41,6 @@ export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestr
     )
   if (siniestro.estadoSiniestro.esCierre)
     throw new HttpError(409, 'Este siniestro está cerrado: se puede consultar, pero no modificar.')
-  const autor = await tx.usuario.findFirst({
-    where: { id: usuario.id, eliminado: false },
-    select: { nombres: true, apellidos: true },
-  })
-  if (!autor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
   return autor
 }
 

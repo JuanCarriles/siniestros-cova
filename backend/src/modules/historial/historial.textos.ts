@@ -30,8 +30,9 @@ export const eventoHistorial = {
       `Se modificaron datos del caso: ${cambios.join('; ')}.`,
     ),
   /**
-   * "María Rearte dio de alta el siniestro el 20/10/2026" (E5-09). Es el primer evento de cada siniestro: la
-   * migración 20261106120100_historial_alta_existentes arma el mismo texto para los cargados antes.
+   * "María Rearte dio de alta el siniestro el 20/10/2026" (E5-09). Es el primer evento de cada siniestro dado de alta
+   * desde esta historia. Los cargados antes no lo tienen y no se reconstruye: la ficha avisa que su historial puede
+   * estar incompleto.
    */
   altaSiniestro: (autor: Persona, fecha: Date) =>
     evento(

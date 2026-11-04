@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { randomUUID } from 'node:crypto'
 import { novedadSchema } from '@cova/shared/schemas/novedades'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
 import { crearServicioNovedadesFicha } from '../src/modules/novedades/novedades-ficha.service.ts'
@@ -65,7 +66,8 @@ test('PostgreSQL: cargar y leer novedades desde la ficha', async () => {
           const base = { transaccion: (trabajo) => trabajo(tx) }
           const novedades = crearServicioNovedadesGestion(base)
           const lectura = crearServicioNovedadesFicha(tx)
-          const novedad = (descripcion) => novedadSchema.parse({ descripcion })
+          const novedad = (descripcion, claveEnvio = randomUUID()) =>
+            novedadSchema.parse({ descripcion, claveEnvio })
           const avisados = async (idNovedadDesde) =>
             (
               await tx.notificacion.findMany({
@@ -86,8 +88,16 @@ test('PostgreSQL: cargar y leer novedades desde la ficha', async () => {
           ).map((u) => u.id)
 
           // El texto se valida igual en el formulario y en el servidor: sin texto o solo espacios, no
-          assert.equal(novedadSchema.safeParse({ descripcion: '   ' }).success, false)
-          assert.equal(novedadSchema.safeParse({ descripcion: 'x'.repeat(4001) }).success, false)
+          const clave = randomUUID()
+          assert.equal(
+            novedadSchema.safeParse({ descripcion: '   ', claveEnvio: clave }).success,
+            false,
+          )
+          assert.equal(
+            novedadSchema.safeParse({ descripcion: 'x'.repeat(4001), claveEnvio: clave }).success,
+            false,
+          )
+          assert.equal(novedadSchema.safeParse({ descripcion: 'Sin clave' }).success, false)
           assert.equal(novedad('  Llamé al tercero.  ').descripcion, 'Llamé al tercero.')
 
           // La gestora carga una: queda con su autor, es movimiento, va al historial y avisa a la administración
@@ -156,6 +166,48 @@ test('PostgreSQL: cargar y leer novedades desde la ficha', async () => {
             where: { idSiniestro: caso.id, idUsuario: admin.id },
           })
           assert.equal(guardada.autor, 'Carla Prueba', 'guarda el nombre tal como era al cargarla')
+          assert.equal(guardada.tipoUsuarioAutor, 'ADMINISTRADOR', 'y su rol en ese momento')
+
+          // Si después cambia su perfil o su rol, la novedad sigue diciendo quién era al cargarla
+          await tx.usuario.update({
+            where: { id: admin.id },
+            data: { nombres: 'NombreNuevo', tipoUsuario: 'SUPER_ADMINISTRADOR' },
+          })
+          assert.deepEqual(
+            (await lectura.listar(gestora, caso.id)).find((n) => n.id === guardada.id).autor,
+            { nombre: 'Carla Prueba', tipoUsuario: 'ADMINISTRADOR' },
+          )
+          await tx.usuario.update({
+            where: { id: admin.id },
+            data: { nombres: 'Carla', tipoUsuario: 'ADMINISTRADOR' },
+          })
+
+          // El mismo envío dos veces (se perdió la respuesta y se reintentó): una sola novedad, un solo aviso
+          const repetida = novedad('Reintento.')
+          const antes = {
+            novedades: await tx.novedadSiniestro.count({ where: { idSiniestro: caso.id } }),
+            historial: await tx.historialSiniestro.count({ where: { idSiniestro: caso.id } }),
+            avisos: await tx.notificacion.count({ where: { idSiniestro: caso.id } }),
+          }
+          const primera = await novedades.cargar(gestora, caso.id, repetida)
+          const segunda = await novedades.cargar(gestora, caso.id, repetida)
+          assert.equal(segunda.id, primera.id)
+          assert.equal(
+            await tx.novedadSiniestro.count({ where: { idSiniestro: caso.id } }),
+            antes.novedades + 1,
+          )
+          assert.equal(
+            await tx.historialSiniestro.count({ where: { idSiniestro: caso.id } }),
+            antes.historial + 1,
+          )
+          assert.equal(
+            await tx.notificacion.count({ where: { idSiniestro: caso.id } }),
+            antes.avisos + administracionActiva.length,
+          )
+          // Dos novedades con el mismo texto y distinto envío son dos novedades
+          await novedades.cargar(gestora, caso.id, novedad('Reintento.'))
+          // Una clave ya usada no sirve para otro usuario
+          await assert.rejects(novedades.cargar(admin, caso.id, repetida), (e) => e.status === 409)
 
           // Un gestor solo carga en sus casos
           await assert.rejects(
