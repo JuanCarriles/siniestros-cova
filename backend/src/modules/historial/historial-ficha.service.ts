@@ -21,6 +21,8 @@ export function crearServicioHistorialFicha(prisma: Base) {
           tipoEvento: true,
           descripcion: true,
           fechaEvento: true,
+          autorNombre: true,
+          autorTipoUsuario: true,
           usuario: { select: { nombres: true, apellidos: true, tipoUsuario: true } },
         },
       })
@@ -29,7 +31,12 @@ export function crearServicioHistorialFicha(prisma: Base) {
         tipo: e.tipoEvento,
         descripcion: e.descripcion,
         fecha: e.fechaEvento.toISOString(),
-        usuario: { nombre: nombreDe(e.usuario), tipoUsuario: e.usuario.tipoUsuario },
+        // Quien lo hizo, como era en ese momento (lo guarda la base al registrar el evento). Los datos actuales del
+        // usuario quedan solo por si una fila no los tuviera.
+        usuario: {
+          nombre: e.autorNombre ?? nombreDe(e.usuario),
+          tipoUsuario: e.autorTipoUsuario ?? e.usuario.tipoUsuario,
+        },
       }))
     },
   }

@@ -338,3 +338,75 @@ test('migración novedades_autor_historico: cada novedad anterior queda a nombre
     await borrar()
   }
 })
+
+test('migración historial_autor: cada evento conserva el nombre y el rol de quien lo hizo', async () => {
+  const migracion = '20261106120200_historial_autor'
+  const { db, borrar } = await baseHasta(migracion)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const caso = await siniestro('S-1')
+    const { rows: usuarios } = await db.query(`SELECT id FROM "Usuario"`)
+    const autor = usuarios[0].id
+    const evento = () =>
+      uno(
+        `INSERT INTO "HistorialSiniestro" ("tipoEvento", descripcion, "idSiniestro", "idUsuario")
+         VALUES ('NOVEDAD', '-', $1, $2) RETURNING id`,
+        [caso, autor],
+      )
+    const anterior = await evento()
+    await db.query(await sql(migracion))
+    // Los anteriores, con los datos de hoy (antes no se guardaban)
+    await db.query(
+      `UPDATE "Usuario" SET nombres = 'Nuevo', "tipoUsuario" = 'GESTOR' WHERE id = $1`,
+      [autor],
+    )
+    // Los nuevos, con los del momento en que se registran, sin que la operación los mande
+    const nuevo = await evento()
+    await db.query(
+      `UPDATE "Usuario" SET nombres = 'Otro', "tipoUsuario" = 'SUPER_ADMINISTRADOR' WHERE id = $1`,
+      [autor],
+    )
+    const { rows } = await db.query(
+      `SELECT id, "autorNombre", "autorTipoUsuario" FROM "HistorialSiniestro" ORDER BY id`,
+    )
+    assert.deepEqual(rows, [
+      { id: anterior, autorNombre: 'A B', autorTipoUsuario: 'ADMINISTRADOR' },
+      { id: nuevo, autorNombre: 'Nuevo B', autorTipoUsuario: 'GESTOR' },
+    ])
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración historial_sin_alta_reconstruida: borra solo las altas deducidas de la primera asignación', async () => {
+  const migracion = '20261106120300_historial_sin_alta_reconstruida'
+  const { db, borrar } = await baseHasta(migracion)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const { rows: usuarios } = await db.query(`SELECT id FROM "Usuario"`)
+    const autor = usuarios[0].id
+    const evento = (idSiniestro, tipo, fecha) =>
+      uno(
+        `INSERT INTO "HistorialSiniestro" ("tipoEvento", descripcion, "fechaEvento", "idSiniestro", "idUsuario")
+         VALUES ($1, '-', $2, $3, $4) RETURNING id`,
+        [tipo, fecha, idSiniestro, autor],
+      )
+    const viejo = await siniestro('VIEJO')
+    const nuevo = await siniestro('NUEVO')
+    // La versión anterior de la rama dedujo esta alta: un milisegundo antes de la primera asignación
+    await evento(viejo, 'ALTA_SINIESTRO', '2026-10-20T02:59:59.999Z')
+    const asignacionVieja = await evento(viejo, 'ASIGNACION', '2026-10-20T03:00:00Z')
+    // Un alta real comparte la hora con su asignación
+    const altaReal = await evento(nuevo, 'ALTA_SINIESTRO', '2026-11-03T12:00:00Z')
+    const asignacionNueva = await evento(nuevo, 'ASIGNACION', '2026-11-03T12:00:00Z')
+
+    await db.query(await sql(migracion))
+    const { rows } = await db.query(`SELECT id FROM "HistorialSiniestro" ORDER BY id`)
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      [asignacionVieja, altaReal, asignacionNueva],
+    )
+  } finally {
+    await borrar()
+  }
+})
