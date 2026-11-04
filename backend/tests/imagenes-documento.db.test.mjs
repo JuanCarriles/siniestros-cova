@@ -203,7 +203,7 @@ test(
         const r = await fetch(`${base}/${s.id}/documentos/${id}/${tipo}`, { redirect: 'manual' })
         assert.equal(r.status, 302)
         assert.equal(r.headers.get('cache-control'), 'private, no-store')
-        assert.equal(firmas.at(-1).inline, tipo !== 'original')
+        assert.equal(firmas.at(-1).inline, false)
       }
       actor = ajeno
       assert.equal(

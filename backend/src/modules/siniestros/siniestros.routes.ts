@@ -1,3 +1,4 @@
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import type { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
 import { Router, type RequestHandler } from 'express'
 import type { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
@@ -125,7 +126,7 @@ export function crearSiniestrosRouter(deps: {
     res.status(204).end()
   })
   router.post('/alta/documentos', soloAdministracion, recibirArchivo(), async (req, res) => {
-    if (!req.file) throw new HttpError(400, 'Elegí el archivo que querés cargar.')
+    if (!req.file) throw new HttpError(400, rechazoArchivo('Elegí el archivo que querés cargar.'))
     res.status(201).json(
       await creacion.subirDocumento(usuarioDeSesion(req), {
         nombreOriginal: nombreOriginalUtf8(req.file.originalname),
@@ -165,7 +166,7 @@ export function crearSiniestrosRouter(deps: {
     },
     recibirArchivo(),
     async (req, res) => {
-      if (!req.file) throw new HttpError(400, 'Elegí el archivo que querés cargar.')
+      if (!req.file) throw new HttpError(400, rechazoArchivo('Elegí el archivo que querés cargar.'))
       const archivo = await decodificarDocumento(
         { nombreOriginal: nombreOriginalUtf8(req.file.originalname), contenido: req.file.buffer },
         req.header('X-Archivo-Compresion'),

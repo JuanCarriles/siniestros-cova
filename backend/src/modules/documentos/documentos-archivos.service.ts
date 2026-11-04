@@ -43,7 +43,6 @@ export function crearServicioArchivosDocumento(
       return almacenamiento().firmarDescarga(
         clave,
         tipo === 'original' ? documento.nombreOriginal : `${tipo}.webp`,
-        tipo !== 'original',
       )
     },
   }

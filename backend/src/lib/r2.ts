@@ -1,3 +1,4 @@
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { randomUUID } from 'node:crypto'
 import {
   CopyObjectCommand,
@@ -108,12 +109,14 @@ export function crearAlmacenamientoR2(
       ) {
         throw new HttpError(
           400,
-          `El archivo debe tener contenido y pesar como máximo ${config.UPLOAD_MAX_MB} MB`,
+          rechazoArchivo(
+            `El archivo debe tener contenido y pesar como máximo ${config.UPLOAD_MAX_MB} MB.`,
+          ),
         )
       }
       const extension = archivo.nombreOriginal.split('.').pop()?.toLowerCase()
       if (!extension || !config.UPLOAD_ALLOWED_EXT.includes(extension as keyof typeof tiposMime)) {
-        throw new HttpError(400, 'Extensión de archivo no permitida')
+        throw new HttpError(400, rechazoArchivo('Extensión de archivo no permitida.'))
       }
       const tipoExtension = extension as keyof typeof tiposMime
       const mimeType = tiposMime[tipoExtension]
@@ -162,6 +165,7 @@ export function crearAlmacenamientoR2(
             Key: key,
             Body: contenido,
             ContentType: 'image/webp',
+            ContentDisposition: disposicionDescarga(key.split('/').pop()!),
             ContentLength: contenido.byteLength,
             CacheControl: 'private, no-store',
           }),
@@ -198,12 +202,9 @@ export function crearAlmacenamientoR2(
     },
 
     // Sólo llamar después de autorizar al usuario y obtener la clave de la base.
-    async firmarDescarga(clave: string, nombreOriginal: string, inline = false) {
+    async firmarDescarga(clave: string, nombreOriginal: string) {
       const key = claveArchivoSchema.parse(clave)
-      const disposition = disposicionDescarga(nombreOriginal).replace(
-        /^attachment/,
-        inline ? 'inline' : 'attachment',
-      )
+      const disposition = disposicionDescarga(nombreOriginal)
       const emitida = new Date()
       try {
         const url = await getSignedUrl(

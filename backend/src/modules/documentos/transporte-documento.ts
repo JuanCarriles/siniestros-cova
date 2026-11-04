@@ -1,3 +1,4 @@
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { gunzip } from 'node:zlib'
 import { promisify } from 'node:util'
 import { DOCUMENTO_MAX_BYTES, compresionDocumentoSchema } from '@cova/shared/schemas/documentos'
@@ -12,7 +13,7 @@ export async function decodificarDocumento(
 ): Promise<ArchivoEntrada> {
   const compresion = compresionDocumentoSchema.parse(codificacion)
   if (archivo.contenido.byteLength > DOCUMENTO_MAX_BYTES)
-    throw new HttpError(413, 'El archivo supera el máximo de 10 MB.')
+    throw new HttpError(413, rechazoArchivo('El archivo supera el máximo de 10 MB.'))
   if (compresion === 'identity') return archivo
   try {
     const contenido = await descomprimir(archivo.contenido, {
@@ -26,10 +27,12 @@ export async function decodificarDocumento(
       'code' in error &&
       error.code === 'ERR_BUFFER_TOO_LARGE'
     )
-      throw new HttpError(413, 'El archivo original supera el máximo de 10 MB.')
+      throw new HttpError(413, rechazoArchivo('El archivo original supera el máximo de 10 MB.'))
     throw new HttpError(
       400,
-      'No se pudo descomprimir el archivo. Volvé a seleccionarlo e intentá de nuevo.',
+      rechazoArchivo(
+        'No se pudo descomprimir el archivo. Volvé a seleccionarlo e intentá de nuevo.',
+      ),
     )
   }
 }

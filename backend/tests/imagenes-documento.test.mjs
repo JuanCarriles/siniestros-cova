@@ -73,7 +73,7 @@ test('PDF/Office no se procesan; una imagen dañada se rechaza', async () => {
   )
 })
 
-test('R2: originales privados e inalterados, derivados WebP internos, firmas cortas e inline solo para vistas', async () => {
+test('R2: originales privados e inalterados, derivados WebP internos, firmas cortas y attachment también para vistas', async () => {
   const config = leerConfiguracionR2({
     R2_ACCOUNT_ID: 'a'.repeat(32),
     R2_ACCESS_KEY_ID: 'prueba',
@@ -115,10 +115,10 @@ test('R2: originales privados e inalterados, derivados WebP internos, firmas cor
       r2.subirDerivada('plantillas/ajena.webp', Buffer.from('x')),
       (e) => e.status === 400,
     )
-    const firma = await r2.firmarDescarga(resultado.claves[1], 'vista.webp', true)
+    const firma = await r2.firmarDescarga(resultado.claves[1], 'vista.webp')
     assert.equal(firma.venceEnSegundos, 60)
     assert.ok(
-      new URL(firma.url).searchParams.get('response-content-disposition').startsWith('inline;'),
+      new URL(firma.url).searchParams.get('response-content-disposition').startsWith('attachment;'),
     )
     const pdf = Buffer.from('%PDF-1.4\nOriginal firmado')
     const antes = comandos.length

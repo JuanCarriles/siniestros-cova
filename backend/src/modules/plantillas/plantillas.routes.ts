@@ -1,3 +1,4 @@
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { Router, type RequestHandler } from 'express'
 import multer from 'multer'
 import { altaPlantillaSchema, PLANTILLA_MAX_BYTES } from '@cova/shared/schemas/plantillas'
@@ -39,13 +40,18 @@ export function crearPlantillasRouter(deps: {
           new HttpError(
             error.code === 'LIMIT_FILE_SIZE' ? 413 : 400,
             error.code === 'LIMIT_FILE_SIZE'
-              ? 'El archivo supera el máximo de 10 MB.'
-              : 'Enviá un único archivo junto con su encabezado y descripción.',
+              ? rechazoArchivo('El archivo supera el máximo de 10 MB.')
+              : rechazoArchivo('Enviá un único archivo junto con su encabezado y descripción.'),
           ),
         )
       }
       if (error)
-        return next(new HttpError(400, 'No se pudo recibir el archivo. Volvé a seleccionarlo.'))
+        return next(
+          new HttpError(
+            400,
+            rechazoArchivo('No se pudo recibir el archivo. Volvé a seleccionarlo.'),
+          ),
+        )
       next()
     })
   }
@@ -62,7 +68,7 @@ export function crearPlantillasRouter(deps: {
     archivo,
     async (req, res) => {
       const datos = altaPlantillaSchema.parse(req.body)
-      if (!req.file) throw new HttpError(400, 'Elegí el archivo que querés cargar.')
+      if (!req.file) throw new HttpError(400, rechazoArchivo('Elegí el archivo que querés cargar.'))
       res.status(201).json(
         await servicio.subir(usuarioDeSesion(req).id, datos, {
           nombreOriginal: nombreOriginal(req.file.originalname),

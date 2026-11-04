@@ -21,7 +21,7 @@ La miniatura sirve para identificar el archivo; la vista de 1600 px sirve para c
 ## Acceso y datos
 
 El bucket sigue siendo privado. La base almacena claves relativas y medidas/tamaño, nunca URLs completas.
-Los endpoints `GET /api/siniestros/:id/documentos/:idDocumento/miniatura`, `/vista` y `/original` validan sesión, rol actual, acceso al caso y pertenencia del documento antes de comprobar R2 y redirigir a una URL firmada corta. El original se descarga; los derivados se muestran inline. No se usan URLs públicas ni credenciales en el frontend.
+Los endpoints `GET /api/siniestros/:id/documentos/:idDocumento/miniatura`, `/vista` y `/original` validan sesión, rol actual, acceso al caso y pertenencia del documento antes de comprobar R2 y redirigir a una URL firmada corta. Todas las respuestas de archivos llevan Content-Disposition attachment (E6-03). Las miniaturas y vistas se muestran como recursos de imagen dentro de la interfaz; al abrir su URL directamente se descargan. No se usan URLs públicas ni credenciales en el frontend.
 
 La metadata `imagen-v1` del original en R2 la escribe el backend; permite al alta copiar y registrar las variantes sin confiar en datos de imágenes recibidos del navegador.
 Un fallo al guardar variantes o la transacción limpia los objetos sobrantes. Los reintentos idempotentes de E6-01 se conservan. El borrado físico del expediente incluye original, vista y miniatura.

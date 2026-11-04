@@ -180,7 +180,9 @@ test('tipo real: acepta PDF, JPG, PNG, DOCX y XLSX; rechaza extensiones camuflad
     { nombreOriginal: 'incompleto.docx', contenido: Buffer.from('PK\x03\x04incompleto') },
     { nombreOriginal: 'pagina.html', contenido: Buffer.from('<html/>') },
   ])
-    await assert.rejects(validarArchivoPlantilla(archivo), { status: 400 })
+    await assert.rejects(validarArchivoPlantilla(archivo), {
+      status: archivo.contenido.byteLength > PLANTILLA_MAX_BYTES ? 413 : 400,
+    })
 })
 
 test('HTTP: permisos del servidor; el gestor puede consultar y descargar pero no cargar', async (t) => {

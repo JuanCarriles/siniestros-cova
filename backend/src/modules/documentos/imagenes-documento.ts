@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { z } from 'zod'
 import type { AlmacenamientoR2, ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
@@ -86,7 +87,9 @@ export async function prepararImagen(archivo: ArchivoEntrada) {
   } catch {
     throw new HttpError(
       400,
-      'No se pudo procesar la imagen. Usá un JPG o PNG estático válido de hasta 40 millones de píxeles. El archivo original no se modifica.',
+      rechazoArchivo(
+        'No se pudo procesar la imagen. Usá un JPG o PNG estático válido de hasta 40 millones de píxeles. El archivo original no se modifica.',
+      ),
     )
   }
 }
