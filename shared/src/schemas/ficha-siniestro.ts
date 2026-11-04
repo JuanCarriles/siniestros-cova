@@ -150,6 +150,14 @@ export type NovedadFicha = {
 
 /** GET /api/siniestros/:id/documentos (CU-10 1.g), del más nuevo al más viejo */
 export type DocumentoFicha = {
+  /** Sin claves privadas ni URLs persistidas: se accede por endpoints autorizados. */
+  imagen?: {
+    anchoOriginal: number
+    altoOriginal: number
+    ancho: number
+    alto: number
+    tamanoBytes: string
+  } | null
   id: number
   nombreOriginal: string
   tipoExtension: string

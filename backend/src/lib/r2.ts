@@ -99,7 +99,7 @@ export function crearAlmacenamientoR2(
     })
 
   return {
-    async subir(entrada: ArchivoEntrada, carpeta: string) {
+    async subir(entrada: ArchivoEntrada, carpeta: string, metadata?: Record<string, string>) {
       const archivo = archivoSchema.parse(entrada)
       const prefijo = carpetaSchema.parse(carpeta)
       if (
@@ -125,6 +125,7 @@ export function crearAlmacenamientoR2(
             Bucket: config.R2_BUCKET,
             Key: clave,
             Body: contenido,
+            Metadata: metadata,
             ContentType: mimeType,
             ContentLength: contenido.byteLength,
             ContentDisposition: disposicionDescarga(archivo.nombreOriginal),
@@ -143,12 +144,40 @@ export function crearAlmacenamientoR2(
       }
     },
 
+    // Solo derivados creados por sharp; WebP no se habilita como formato de entrada del usuario.
+    async subirDerivada(clave: string, contenido: Uint8Array) {
+      const key = claveArchivoSchema.parse(clave)
+      if (
+        !/^(siniestros|altas)\/[1-9]\d*\/[a-f0-9-]+\.(jpe?g|png)\.(vista|miniatura)\.webp$/i.test(
+          key,
+        ) ||
+        !contenido.byteLength ||
+        contenido.byteLength > 10 * 1024 * 1024
+      )
+        throw new HttpError(400, 'Imagen derivada inválida')
+      try {
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: config.R2_BUCKET,
+            Key: key,
+            Body: contenido,
+            ContentType: 'image/webp',
+            ContentLength: contenido.byteLength,
+            CacheControl: 'private, no-store',
+          }),
+        )
+      } catch (error) {
+        throw errorR2('No se pudo guardar la vista de la imagen en R2', error)
+      }
+    },
+
     // Una firma se genera localmente: no demuestra que el objeto exista en R2.
     // Comprobar solo después de autorizar y resolver la clave desde la base.
     async comprobarExistencia(clave: string) {
       const key = claveArchivoSchema.parse(clave)
       try {
-        await s3.send(new HeadObjectCommand({ Bucket: config.R2_BUCKET, Key: key }))
+        const objeto = await s3.send(new HeadObjectCommand({ Bucket: config.R2_BUCKET, Key: key }))
+        return objeto.Metadata
       } catch (error) {
         const nombre = (error as { name?: unknown } | null)?.name
         if (nombre === 'NotFound' || nombre === 'NoSuchKey') {
@@ -169,9 +198,12 @@ export function crearAlmacenamientoR2(
     },
 
     // Sólo llamar después de autorizar al usuario y obtener la clave de la base.
-    async firmarDescarga(clave: string, nombreOriginal: string) {
+    async firmarDescarga(clave: string, nombreOriginal: string, inline = false) {
       const key = claveArchivoSchema.parse(clave)
-      const disposition = disposicionDescarga(nombreOriginal)
+      const disposition = disposicionDescarga(nombreOriginal).replace(
+        /^attachment/,
+        inline ? 'inline' : 'attachment',
+      )
       const emitida = new Date()
       try {
         const url = await getSignedUrl(

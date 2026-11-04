@@ -1,3 +1,4 @@
+import { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
 import { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
 import { configCorreo } from '../../config/correo.ts'
 import { env } from '../../config/env.ts'
@@ -93,6 +94,7 @@ const transaccionPartes: Transaccion = (trabajo) =>
   getPrisma().$transaction(trabajo, { timeout: 15_000 })
 
 export const siniestrosRouter = crearSiniestrosRouter({
+  documentosArchivos: crearServicioArchivosDocumento(db, r2),
   documentosCarga: crearServicioDocumentosGestion({
     transaccion: transaccionPartes,
     almacenamiento: r2,

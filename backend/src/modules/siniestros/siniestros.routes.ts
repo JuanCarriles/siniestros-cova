@@ -1,3 +1,4 @@
+import type { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
 import { Router, type RequestHandler } from 'express'
 import type { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
 import { decodificarDocumento } from '../documentos/transporte-documento.ts'
@@ -84,6 +85,7 @@ export const PESTANAS_FICHA = [
 // DELETE /api/siniestros/alta/documentos  { clave } lo quita
 // POST   /api/siniestros/alta             crea el siniestro con todo lo cargado y avisa al asignado
 export function crearSiniestrosRouter(deps: {
+  documentosArchivos: ReturnType<typeof crearServicioArchivosDocumento>
   documentosCarga: ReturnType<typeof crearServicioDocumentosGestion>
   reasignacion: ReturnType<typeof crearServicioReasignacion>
   edicion: ReturnType<typeof crearServicioEdicionCaso>
@@ -176,6 +178,20 @@ export function crearSiniestrosRouter(deps: {
       res.status(resultado.reutilizado ? 200 : 201).json({ id: resultado.id })
     },
   )
+
+  for (const tipo of ['miniatura', 'vista', 'original'] as const) {
+    router.get(`/:id/documentos/:idDocumento/${tipo}`, async (req, res) => {
+      res.set('Cache-Control', 'private, no-store')
+      res.set('Referrer-Policy', 'no-referrer')
+      const firma = await deps.documentosArchivos.obtener(
+        usuarioDeSesion(req),
+        idSchema.parse(req.params.id),
+        idSchema.parse(req.params.idDocumento),
+        tipo,
+      )
+      res.redirect(302, firma.url)
+    })
+  }
 
   router.get('/:id/edicion', async (req, res) => {
     res.set('Cache-Control', 'no-store')

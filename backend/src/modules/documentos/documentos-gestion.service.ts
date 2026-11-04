@@ -6,6 +6,7 @@ import type { AlmacenamientoR2, ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { exigirAccesoSiniestro } from '../siniestros/siniestros-acceso.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
+import { datosImagenEnBase, subirDocumentoProcesado } from './imagenes-documento.ts'
 import { validarArchivoPlantilla } from '../plantillas/validar-archivo.ts'
 
 type Tx = Prisma.TransactionClient
@@ -68,7 +69,11 @@ export function crearServicioDocumentosGestion(
         return existente(tx)
       })
       if (previo) return previo
-      const objeto = await deps.almacenamiento().subir(archivo, `siniestros/${id}`)
+      const { objeto, imagen, claves } = await subirDocumentoProcesado(
+        deps.almacenamiento(),
+        archivo,
+        `siniestros/${id}`,
+      )
       let conservar = false
       try {
         return await deps
@@ -84,6 +89,7 @@ export function crearServicioDocumentosGestion(
               data: {
                 idCarga,
                 hashContenido,
+                ...datosImagenEnBase(objeto.clave, imagen),
                 nombreOriginal: archivo.nombreOriginal,
                 urlArchivoSinDominio: objeto.clave,
                 tipoExtension: objeto.tipoExtension,
@@ -123,19 +129,26 @@ export function crearServicioDocumentosGestion(
         )
       } finally {
         if (!conservar) {
-          try {
-            // Si se perdió la confirmación del commit, el documento puede existir. Nunca borrar
-            // un objeto referenciado; si la base no responde, dejarlo pendiente de limpieza.
-            const registrado = await deps.transaccion((tx) =>
-              tx.documentoSiniestro.findFirst({
-                where: { urlArchivoSinDominio: objeto.clave },
-                select: { id: true },
-              }),
-            )
-            if (!registrado) await deps.almacenamiento().eliminar(objeto.clave)
-          } catch {
-            console.error('Objeto pendiente de limpieza en R2:', objeto.clave)
-          }
+          for (const clave of claves)
+            try {
+              // Si se perdió la confirmación del commit, el documento puede existir. Nunca borrar
+              // un objeto referenciado; si la base no responde, dejarlo pendiente de limpieza.
+              const registrado = await deps.transaccion((tx) =>
+                tx.documentoSiniestro.findFirst({
+                  where: {
+                    OR: [
+                      { urlArchivoSinDominio: clave },
+                      { claveImagenOptimizada: clave },
+                      { claveMiniatura: clave },
+                    ],
+                  },
+                  select: { id: true },
+                }),
+              )
+              if (!registrado) await deps.almacenamiento().eliminar(clave)
+            } catch {
+              console.error('Objeto pendiente de limpieza en R2:', clave)
+            }
         }
       }
     },

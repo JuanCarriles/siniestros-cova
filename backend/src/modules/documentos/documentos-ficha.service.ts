@@ -21,15 +21,50 @@ export function crearServicioDocumentosFicha(prisma: Base) {
           tipoExtension: true,
           tamanoBytes: true,
           fechaCarga: true,
+          claveMiniatura: true,
+          claveImagenOptimizada: true,
+          anchoOriginal: true,
+          altoOriginal: true,
+          anchoImagen: true,
+          altoImagen: true,
+          tamanoOptimizadoBytes: true,
           usuario: { select: { nombres: true, apellidos: true, tipoUsuario: true } },
         },
       })
-      return filas.map(({ usuario: autor, ...d }) => ({
-        ...d,
-        tamanoBytes: d.tamanoBytes.toString(),
-        fechaCarga: d.fechaCarga.toISOString(),
-        autor: { nombre: nombreDe(autor), tipoUsuario: autor.tipoUsuario },
-      }))
+      return filas.map(
+        ({
+          usuario: autor,
+          claveMiniatura,
+          claveImagenOptimizada,
+          anchoOriginal,
+          altoOriginal,
+          anchoImagen,
+          altoImagen,
+          tamanoOptimizadoBytes,
+          ...d
+        }) => ({
+          imagen:
+            claveMiniatura &&
+            claveImagenOptimizada &&
+            anchoOriginal &&
+            altoOriginal &&
+            anchoImagen &&
+            altoImagen &&
+            tamanoOptimizadoBytes
+              ? {
+                  anchoOriginal,
+                  altoOriginal,
+                  ancho: anchoImagen,
+                  alto: altoImagen,
+                  tamanoBytes: tamanoOptimizadoBytes.toString(),
+                }
+              : null,
+          ...d,
+          tamanoBytes: d.tamanoBytes.toString(),
+          fechaCarga: d.fechaCarga.toISOString(),
+          autor: { nombre: nombreDe(autor), tipoUsuario: autor.tipoUsuario },
+        }),
+      )
     },
   }
 }
