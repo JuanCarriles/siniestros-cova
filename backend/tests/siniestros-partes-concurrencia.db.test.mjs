@@ -261,8 +261,8 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
     await assert.rejects(tarde, (e) => e.status === 403)
     assert.equal(await prisma.novedadSiniestro.count({ where: { idSiniestro: otro.id } }), 0)
 
-    // La baja del siniestro mientras se agrega un perito: la operación ya pasó el control de acceso y espera el
-    // bloqueo. Cuando la baja se confirma, el perito no se carga en un siniestro dado de baja.
+    // La baja del siniestro mientras se agrega un perito: la operación espera el bloqueo del siniestro. Cuando la
+    // baja se confirma, el perito no se carga en un siniestro dado de baja.
     let confirmarBaja
     const pausa = new Promise((resolver) => (confirmarBaja = resolver))
     const siniestros = crearServicioBajasSiniestros({
@@ -286,7 +286,12 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
     await esperar(prisma, `wait_event_type = 'Lock'`)
     confirmarBaja()
     await baja
-    await assert.rejects(alta, (e) => e.status === 409 && /dado de baja/.test(e.message))
+    // La gestora espera el bloqueo y recién después controla el acceso: con la baja ya confirmada, para ella el
+    // siniestro dejó de estar disponible (403, como al abrir la ficha). Un administrador recibiría 409.
+    await assert.rejects(
+      alta,
+      (e) => [403, 409].includes(e.status) && /dado de baja/.test(e.message),
+    )
     assert.equal(
       await prisma.perito.count({ where: { idSiniestro, tipoPerito: 'MEDICO' } }),
       0,
