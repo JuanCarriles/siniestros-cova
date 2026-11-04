@@ -13,6 +13,7 @@ const NUMERO_UNICO = '20261028120000_numero_siniestro_unico'
 const PARTES_CONCURRENCIA = '20261104120000_partes_concurrencia'
 const ABOGADOS_PERITOS_CONCURRENCIA = '20261104130000_abogados_peritos_concurrencia'
 const NOVEDADES_AUTOR = '20261105120000_novedades_autor'
+const NOVEDADES_AUTOR_HISTORICO = '20261105121000_novedades_autor_historico'
 
 if (process.env.NODE_ENV === 'production') throw new Error('No correr en producción')
 if (!process.env.DATABASE_URL) throw new Error('Falta DATABASE_URL')
@@ -284,6 +285,55 @@ test('migración novedades_autor: las novedades anteriores quedan a nombre del u
     ])
     // De acá en adelante, toda novedad dice quién la cargó
     await assert.rejects(novedad(caso), { code: '23502' })
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración novedades_autor_historico: cada novedad anterior queda a nombre de quien la escribió, o sin usuario', async () => {
+  const { db, borrar } = await baseHasta(NOVEDADES_AUTOR_HISTORICO)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const direccion = await uno(`INSERT INTO "Direccion" DEFAULT VALUES RETURNING id`)
+    const usuario = (nombres, apellidos, email) =>
+      uno(
+        `INSERT INTO "Usuario" (nombres, apellidos, documento, telefono, email, contrasena, "tipoUsuario", "idDireccion")
+         VALUES ($1, $2, '0', '0', $3, '-', 'GESTOR', $4) RETURNING id`,
+        [nombres, apellidos, email, direccion],
+      )
+    const ana = await usuario('AnaLegado', 'Prueba', 'ana@b.test')
+    const bruno = await usuario('BrunoLegado', 'Prueba', 'bruno@b.test')
+    await usuario('Juan', 'Repetido', 'juan1@b.test')
+    await usuario('Juan', 'Repetido', 'juan2@b.test')
+    // El caso se reasignó a Bruno: la migración anterior le atribuyó todas sus novedades
+    const caso = await siniestro('S-1')
+    await db.query(`UPDATE "Siniestro" SET "idUsuario" = $1 WHERE id = $2`, [bruno, caso])
+    const novedad = (autor) =>
+      uno(
+        `INSERT INTO "NovedadSiniestro" (descripcion, autor, "idSiniestro", "idUsuario") VALUES ('N', $1, $2, $3) RETURNING id`,
+        [autor, caso, bruno],
+      )
+    const deAna = await novedad('AnaLegado Prueba')
+    const deBruno = await novedad('BrunoLegado Prueba')
+    const repetido = await novedad('Juan Repetido')
+    const desconocido = await novedad('Nadie Conocido')
+
+    await db.query(await sql(NOVEDADES_AUTOR_HISTORICO))
+    const { rows } = await db.query(
+      `SELECT id, "idUsuario", autor, "tipoUsuarioAutor" FROM "NovedadSiniestro" ORDER BY id`,
+    )
+    assert.deepEqual(rows, [
+      { id: deAna, idUsuario: ana, autor: 'AnaLegado Prueba', tipoUsuarioAutor: null },
+      { id: deBruno, idUsuario: bruno, autor: 'BrunoLegado Prueba', tipoUsuarioAutor: null },
+      { id: repetido, idUsuario: null, autor: 'Juan Repetido', tipoUsuarioAutor: null },
+      { id: desconocido, idUsuario: null, autor: 'Nadie Conocido', tipoUsuarioAutor: null },
+    ])
+    // Cada envío del formulario carga una sola novedad
+    await db.query(`UPDATE "NovedadSiniestro" SET "claveEnvio" = 'a' WHERE id = $1`, [deAna])
+    await assert.rejects(
+      db.query(`UPDATE "NovedadSiniestro" SET "claveEnvio" = 'a' WHERE id = $1`, [deBruno]),
+      { code: '23505' },
+    )
   } finally {
     await borrar()
   }

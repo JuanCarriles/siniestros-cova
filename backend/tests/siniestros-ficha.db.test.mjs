@@ -196,6 +196,7 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
                 descripcion: 'Segunda',
                 idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
+                tipoUsuarioAutor: 'GESTOR',
                 fechaCarga: new Date('2026-02-03T12:00:00Z'),
               },
               {
@@ -203,6 +204,7 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
                 descripcion: 'Primera',
                 idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
+                tipoUsuarioAutor: 'GESTOR',
                 fechaCarga: new Date('2026-02-02T12:00:00Z'),
               },
               {
@@ -210,6 +212,7 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
                 descripcion: 'Baja',
                 idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
+                tipoUsuarioAutor: 'GESTOR',
                 eliminado: true,
                 fechaBaja: ahora,
               },

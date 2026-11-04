@@ -269,19 +269,25 @@ model DocumentoSiniestro {
 }
 
 model NovedadSiniestro {
-  id          Int       @id @default(autoincrement())
-  descripcion String
-  /// Nombre y apellido de quien la cargó, tal como era en ese momento. La ficha muestra el de idUsuario.
-  autor       String
-  fechaCarga  DateTime  @default(now()) @db.Timestamptz(3)
-  /// Quien la cargó (E5-08): de acá salen su nombre y su tipo de usuario en la ficha. Las novedades no se
-  /// editan ni se borran desde el sistema; solo se van con el borrado físico del siniestro.
-  idUsuario   Int
-  idSiniestro Int
-  eliminado   Boolean   @default(false)
-  fechaBaja   DateTime? @db.Timestamptz(3)
+  id               Int          @id @default(autoincrement())
+  descripcion      String
+  /// Nombre y apellido de quien la cargó, tal como era en ese momento: es lo que muestra la ficha, aunque
+  /// después cambie su perfil
+  autor            String
+  /// Su tipo de usuario en ese momento (E5-08). Vacío en las anteriores a E5-08: no se registraba
+  tipoUsuarioAutor TipoUsuario?
+  fechaCarga       DateTime     @default(now()) @db.Timestamptz(3)
+  /// Quien la cargó (E5-08). En las anteriores, solo si el nombre guardado es el de un único usuario (migración
+  /// novedades_autor_historico); si no, queda vacío. Las novedades no se editan ni se borran desde el sistema;
+  /// solo se van con el borrado físico del siniestro.
+  idUsuario        Int?
+  /// Identificador de cada envío del formulario: si se reintenta después de perder la respuesta, no se duplica
+  claveEnvio       String?      @unique
+  idSiniestro      Int
+  eliminado        Boolean      @default(false)
+  fechaBaja        DateTime?    @db.Timestamptz(3)
 
-  usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario   Usuario?  @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([idUsuario])

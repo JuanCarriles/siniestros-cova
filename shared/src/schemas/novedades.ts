@@ -13,6 +13,8 @@ export const novedadSchema = z.strictObject({
     .trim()
     .min(1, mensaje)
     .max(MAXIMO_NOVEDAD, `Usá como máximo ${MAXIMO_NOVEDAD} caracteres`),
+  // La genera el formulario por cada novedad y la repite si reintenta: el servidor no carga dos veces el mismo envío
+  claveEnvio: z.uuid({ error: 'Volvé a cargar la página y probá de nuevo.' }),
 })
 export type NovedadData = z.output<typeof novedadSchema>
 export type NovedadInput = z.input<typeof novedadSchema>

@@ -45,7 +45,8 @@ export function PestanaNovedades() {
     formState: { errors, isSubmitting },
   } = useForm<NovedadInput, unknown, NovedadData>({
     resolver: zodResolver(novedadSchema),
-    defaultValues: { descripcion: '' },
+    // Una clave por novedad: si el envío falla y se reintenta, va la misma y el servidor no la carga dos veces
+    defaultValues: { descripcion: '', claveEnvio: crypto.randomUUID() },
   })
   const quedan = MAXIMO_NOVEDAD - (useWatch({ control, name: 'descripcion' }) ?? '').length
 
@@ -55,7 +56,7 @@ export function PestanaNovedades() {
       const { id } = await cargarNovedad(ficha.id, datos)
       // La lista, la cantidad de la pestaña, la cabecera (días sin movimiento) y el historial, al día
       await revalidator.revalidate()
-      reset({ descripcion: '' })
+      reset({ descripcion: '', claveEnvio: crypto.randomUUID() })
       setRecien(id)
       setMensaje('Se cargó la novedad. Se avisó al usuario asignado y a la administración.')
     } catch (err) {
@@ -140,7 +141,7 @@ export function PestanaNovedades() {
               <p className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <strong className="text-lg">{n.autor.nombre}</strong>
                 <span className="rounded bg-neutral-bg px-2 text-sm font-semibold text-neutral-ink">
-                  {roleLabels[n.autor.tipoUsuario]}
+                  {n.autor.tipoUsuario ? roleLabels[n.autor.tipoUsuario] : 'Rol no registrado'}
                 </span>
                 <time dateTime={n.fechaCarga} className="dato text-muted-foreground">
                   {fechaHoraDe(n.fechaCarga)}
