@@ -1,18 +1,20 @@
 import { z } from 'zod'
-import { esquemaEdicion, fechaHoraSchema, idSchema, textoSchema } from './comunes.ts'
 
-// Datos de alta de NovedadSiniestro; id y baja lógica se gestionan por separado.
-export const novedadSiniestroSchema = z.strictObject({
-  descripcion: textoSchema,
-  // Nombre y apellido del usuario asignado al siniestro al cargarla (texto, no FK). Lo completa el backend.
-  autor: textoSchema,
-  fechaCarga: fechaHoraSchema.optional(),
-  idSiniestro: idSchema,
+/** Largo máximo del texto de una novedad: el formulario muestra cuántos caracteres quedan */
+export const MAXIMO_NOVEDAD = 4000
+
+const mensaje = 'Escribí la novedad antes de cargarla'
+
+// CU-10 1.f.1 (E5-08): el texto de la novedad. Lo mismo valida el formulario y el servidor.
+/** POST /api/siniestros/:id/novedades */
+export const novedadSchema = z.strictObject({
+  descripcion: z
+    .string({ error: mensaje })
+    .trim()
+    .min(1, mensaje)
+    .max(MAXIMO_NOVEDAD, `Usá como máximo ${MAXIMO_NOVEDAD} caracteres`),
+  // La genera el formulario por cada novedad y la repite si reintenta: el servidor no carga dos veces el mismo envío
+  claveEnvio: z.uuid({ error: 'Volvé a cargar la página y probá de nuevo.' }),
 })
-
-export const novedadSiniestroUpdateSchema = esquemaEdicion(novedadSiniestroSchema)
-
-export type NovedadSiniestroInput = z.input<typeof novedadSiniestroSchema>
-export type NovedadSiniestroData = z.output<typeof novedadSiniestroSchema>
-export type NovedadSiniestroUpdateInput = z.input<typeof novedadSiniestroUpdateSchema>
-export type NovedadSiniestroUpdateData = z.output<typeof novedadSiniestroUpdateSchema>
+export type NovedadData = z.output<typeof novedadSchema>
+export type NovedadInput = z.input<typeof novedadSchema>

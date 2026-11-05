@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import test from 'node:test'
+import { novedadSchema } from '@cova/shared/schemas/novedades'
 import { agregarPersonaSchema } from '@cova/shared/schemas/partes-siniestro'
 import { peritoAltaSchema, vehiculoAltaSchema } from '@cova/shared/schemas/siniestros-alta'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
+import { crearServicioNovedadesGestion } from '../src/modules/novedades/novedades-gestion.service.ts'
 import { crearServicioAbogadosGestion } from '../src/modules/siniestros/abogados/abogados-gestion.service.ts'
 import { crearServicioPeritosGestion } from '../src/modules/siniestros/peritos/peritos-gestion.service.ts'
 import { crearServicioPersonasGestion } from '../src/modules/siniestros/personas/personas-gestion.service.ts'
@@ -18,6 +21,7 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
   const vehiculos = crearServicioVehiculosGestion(base)
   const personas = crearServicioPersonasGestion(base)
   const peritos = crearServicioPeritosGestion(base)
+  const novedades = crearServicioNovedadesGestion(base)
   const abogados = crearServicioAbogadosGestion(base)
 
   const estado = await prisma.estadoSiniestro.findFirstOrThrow({ where: { esCierre: false } })
@@ -66,6 +70,7 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
   const yo = { ...gestora, tipoUsuario: gestora.tipoUsuario }
   const idSiniestro = siniestro.id
   let idAbogado = null
+  let idOtroGestor = null
 
   const vehiculo = (dominio) =>
     vehiculoAltaSchema.parse({
@@ -219,8 +224,45 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
       'no queda activo un abogado que ya no representa a nadie',
     )
 
-    // La baja del siniestro mientras se agrega un perito: la operación ya pasó el control de acceso y espera el
-    // bloqueo. Cuando la baja se confirma, el perito no se carga en un siniestro dado de baja.
+    // Una reasignación mientras el gestor anterior carga una novedad (E5-08): la carga espera el bloqueo del
+    // siniestro y recién después controla el acceso, con el responsable ya cambiado. El gestor anterior no guarda.
+    const otroGestor = await prisma.usuario.create({
+      data: {
+        nombres: 'Bruno',
+        apellidos: 'Prueba',
+        documento: '0',
+        telefono: '0',
+        email: `bruno.concurrencia.${marca}@example.invalid`,
+        contrasena: '-',
+        tipoUsuario: 'GESTOR',
+        idDireccion: direccion.id,
+      },
+    })
+    idOtroGestor = otroGestor.id
+    let confirmarReasignacion
+    const pausaReasignacion = new Promise((resolver) => (confirmarReasignacion = resolver))
+    const reasignacion = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${otro.id} FOR UPDATE`
+        await tx.siniestro.update({ where: { id: otro.id }, data: { idUsuario: otroGestor.id } })
+        await pausaReasignacion
+      },
+      { timeout: 15_000 },
+    )
+    await esperar(prisma, `state = 'idle in transaction'`)
+    const tarde = novedades.cargar(
+      yo,
+      otro.id,
+      novedadSchema.parse({ descripcion: 'Tarde', claveEnvio: randomUUID() }),
+    )
+    await esperar(prisma, `wait_event_type = 'Lock'`)
+    confirmarReasignacion()
+    await reasignacion
+    await assert.rejects(tarde, (e) => e.status === 403)
+    assert.equal(await prisma.novedadSiniestro.count({ where: { idSiniestro: otro.id } }), 0)
+
+    // La baja del siniestro mientras se agrega un perito: la operación espera el bloqueo del siniestro. Cuando la
+    // baja se confirma, el perito no se carga en un siniestro dado de baja.
     let confirmarBaja
     const pausa = new Promise((resolver) => (confirmarBaja = resolver))
     const siniestros = crearServicioBajasSiniestros({
@@ -244,7 +286,12 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
     await esperar(prisma, `wait_event_type = 'Lock'`)
     confirmarBaja()
     await baja
-    await assert.rejects(alta, (e) => e.status === 409 && /dado de baja/.test(e.message))
+    // La gestora espera el bloqueo y recién después controla el acceso: con la baja ya confirmada, para ella el
+    // siniestro dejó de estar disponible (403, como al abrir la ficha). Un administrador recibiría 409.
+    await assert.rejects(
+      alta,
+      (e) => [403, 409].includes(e.status) && /dado de baja/.test(e.message),
+    )
     assert.equal(
       await prisma.perito.count({ where: { idSiniestro, tipoPerito: 'MEDICO' } }),
       0,
@@ -253,6 +300,8 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
   } finally {
     for (const id of [idSiniestro, otro.id]) {
       await prisma.historialSiniestro.deleteMany({ where: { idSiniestro: id } })
+      await prisma.notificacion.deleteMany({ where: { idSiniestro: id } })
+      await prisma.novedadSiniestro.deleteMany({ where: { idSiniestro: id } })
       await prisma.perito.deleteMany({ where: { idSiniestro: id } })
       await prisma.personaInvolucrada.deleteMany({ where: { idSiniestro: id } })
       await prisma.vehiculo.deleteMany({ where: { idSiniestro: id } })
@@ -260,6 +309,7 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
     }
     if (idAbogado) await prisma.abogado.delete({ where: { id: idAbogado } })
     await prisma.usuario.delete({ where: { id: administradora.id } })
+    if (idOtroGestor) await prisma.usuario.delete({ where: { id: idOtroGestor } })
     await prisma.usuario.delete({ where: { id: gestora.id } })
     await prisma.direccion.delete({ where: { id: direccion.id } })
     await prisma.aseguradora.delete({ where: { id: aseguradora.id } })

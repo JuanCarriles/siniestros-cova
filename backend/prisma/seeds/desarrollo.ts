@@ -1044,7 +1044,10 @@ export async function seedDesarrollo(
     ).id
 
   // Usuarios
-  const usuarios = new Map<string, { id: number; nombres: string; apellidos: string }>()
+  const usuarios = new Map<
+    string,
+    { id: number; nombres: string; apellidos: string; tipoUsuario: TipoUsuario }
+  >()
   for (const u of USUARIOS_DEV) {
     const creado = await tx.usuario.create({
       data: {
@@ -1267,7 +1270,14 @@ export async function seedDesarrollo(
     for (const [i, descripcion] of s.novedades.entries()) {
       const fechaCarga = haceDias(diasNovedades[i] ?? hasta, 11)
       await tx.novedadSiniestro.create({
-        data: { idSiniestro, descripcion, autor: nombreCompleto(asignado), fechaCarga },
+        data: {
+          idSiniestro,
+          idUsuario: idAsignado,
+          descripcion,
+          autor: nombreCompleto(asignado),
+          tipoUsuarioAutor: asignado.tipoUsuario,
+          fechaCarga,
+        },
       })
       await historial(idAsignado, eventoHistorial.novedad(asignado, fechaCarga), fechaCarga)
       await notificar(

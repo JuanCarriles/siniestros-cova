@@ -20,6 +20,7 @@ import type {
   TitularAltaData,
   VehiculoAltaData,
 } from '@cova/shared/schemas/siniestros-alta'
+import type { NovedadData } from '@cova/shared/schemas/novedades'
 import { api } from '@/lib/api'
 
 // Ficha del siniestro (CU-10, E5-01): la cabecera con los datos del caso, y lo de cada pestaña por separado
@@ -119,3 +120,9 @@ export const profesionales = {
   darDeBajaPerito: (id: number, idPerito: number): Promise<void> =>
     api(`/siniestros/${id}/peritos/${idPerito}/baja`, { method: 'PATCH' }),
 }
+
+// ------------------------------------------------------------------ Novedades (CU-10 1.f.1, E5-08)
+
+/** Carga una novedad. No hay modificar ni dar de baja: las novedades no se editan ni se borran. */
+export const cargarNovedad = (id: number, datos: NovedadData): Promise<ParteCreada> =>
+  api(`/siniestros/${id}/novedades`, { method: 'POST', body: datos })
