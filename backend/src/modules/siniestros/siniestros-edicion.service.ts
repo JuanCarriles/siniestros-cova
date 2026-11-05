@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import {
   editarCasoAdministradorSchema,
@@ -12,6 +11,8 @@ import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
+import { usosDeDireccion } from '../../lib/direcciones.ts'
+import { exigirRevision } from './partes-edicion.ts'
 
 type Base = { transaccion<T>(trabajo: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> }
 const persona = {
@@ -24,6 +25,7 @@ const persona = {
 } as const
 const seleccion = {
   id: true,
+  revision: true,
   numeroSiniestro: true,
   numeroPoliza: true,
   inicioVigencia: true,
@@ -36,17 +38,14 @@ const seleccion = {
   horaOcurrencia: true,
   menorEdadInvolucrado: true,
   causa: true,
-  fechaUltimoMovimiento: true,
   eliminado: true,
   eliminacionEnCurso: true,
   estadoSiniestro: { select: { esCierre: true } },
-  usuario: { select: persona },
   aseguradora: { select: { nombre: true } },
   ajustador: { select: { nombres: true, apellidos: true, idAseguradora: true } },
   direccion: { include: { provincia: { select: { nombre: true, idPais: true } } } },
 } as const satisfies Prisma.SiniestroSelect
 type Caso = Prisma.SiniestroGetPayload<{ select: typeof seleccion }>
-const version = (caso: Caso) => createHash('sha256').update(JSON.stringify(caso)).digest('hex')
 const datosDe = (s: Caso): DatosEdicionCaso => ({
   poliza: {
     numeroSiniestro: s.numeroSiniestro,
@@ -165,7 +164,7 @@ export function crearServicioEdicionCaso(deps: Base, reloj = () => new Date()) {
           orderBy: { nombre: 'asc' },
         })
         return {
-          version: version(s),
+          revision: s.revision,
           datos: datosDe(s),
           puedeEditarAsignacion: administra,
           opciones: {
@@ -211,11 +210,6 @@ export function crearServicioEdicionCaso(deps: Base, reloj = () => new Date()) {
                   asignacion: anteriores.asignacion,
                 }
               : editarCasoAdministradorSchema.parse(entrada)
-          if (completos.version !== version(s))
-            throw new HttpError(
-              409,
-              'Los datos del siniestro cambiaron mientras editabas. Conservamos lo que escribiste: cancelá y volvé a abrir la edición para consultar los datos actuales.',
-            )
           const datos: DatosEdicionCaso = {
             poliza: {
               ...completos.poliza,
@@ -343,7 +337,9 @@ export function crearServicioEdicionCaso(deps: Base, reloj = () => new Date()) {
               anteriores.lugar[clave as keyof typeof anteriores.lugar],
               datos.lugar[clave as keyof typeof datos.lugar],
             )
+          // Un formulario viejo que ya coincide no pisa datos ni crea otro evento.
           if (!cambios.length) return { modificado: false }
+          exigirRevision(s.revision, completos.revision, 'los datos del caso')
           const ahora = reloj()
           let idDireccion = s.idDireccion
           if (JSON.stringify(datos.lugar) !== JSON.stringify(anteriores.lugar)) {
@@ -351,22 +347,13 @@ export function crearServicioEdicionCaso(deps: Base, reloj = () => new Date()) {
               ...datos.lugar,
               pisoDepartamento: s.direccion?.pisoDepartamento ?? null,
             }
-            const compartida = s.idDireccion
-              ? await tx.direccion.findUniqueOrThrow({
-                  where: { id: s.idDireccion },
-                  select: {
-                    _count: { select: { usuarios: true, siniestros: true } },
-                    perito: { select: { id: true } },
-                    personaInvolucrada: { select: { id: true } },
-                  },
-                })
-              : null
+            const compartida = s.idDireccion ? await usosDeDireccion(tx, s.idDireccion) : null
             const copiar =
               !compartida ||
-              compartida._count.usuarios > 0 ||
-              compartida._count.siniestros > 1 ||
-              compartida.perito !== null ||
-              compartida.personaInvolucrada !== null
+              compartida.usuarios > 0 ||
+              compartida.siniestros > 1 ||
+              compartida.perito ||
+              compartida.persona
             const direccion = copiar
               ? await tx.direccion.create({ data: lugar })
               : await tx.direccion.update({ where: { id: s.idDireccion! }, data: lugar })
@@ -384,8 +371,7 @@ export function crearServicioEdicionCaso(deps: Base, reloj = () => new Date()) {
                 ? new Date(`1970-01-01T${datos.hecho.horaOcurrencia}Z`)
                 : null,
               idDireccion,
-              fechaUltimoMovimiento: ahora,
-              demorado: false,
+              revision: { increment: 1 },
             },
           })
           if (cambios.length)

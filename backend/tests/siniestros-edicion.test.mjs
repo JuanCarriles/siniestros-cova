@@ -12,16 +12,19 @@ import {
 
 test('contratos: el gestor no puede incluir póliza, asignación ni autor/fechas de auditoría', () => {
   const gestor = {
-    version: 'a'.repeat(64),
+    revision: 0,
     hecho: { fechaOcurrencia: null, horaOcurrencia: null, menorEdadInvolucrado: false, causa: '' },
     lugar: { idProvincia: null, calle: '', localidad: '', codigoPostal: '' },
   }
   assert.equal(editarCasoGestorSchema.parse(gestor).hecho.causa, null)
+  for (const revision of [-1, 0.5, '0', undefined])
+    assert.equal(editarCasoGestorSchema.safeParse({ ...gestor, revision }).success, false)
   for (const extra of [
     { poliza: {} },
     { asignacion: {} },
     { idUsuario: 1 },
     { fechaEvento: '2026-01-01' },
+    { version: 'a'.repeat(64) },
   ])
     assert.equal(editarCasoGestorSchema.safeParse({ ...gestor, ...extra }).success, false)
   assert.equal(
@@ -77,7 +80,7 @@ test('HTTP: sesión e id válidos; el servicio recibe al actor de la cookie y el
         },
         modificar: async (...args) => {
           llamadas.push(args)
-          return { modificado: true, correosEnviados: true }
+          return { modificado: true }
         },
       },
     }),

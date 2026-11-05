@@ -1,14 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Controller, useForm, useWatch, type FieldPath } from 'react-hook-form'
 import { FileText, Flag, LockKeyhole, MapPin, Save, UsersRound } from 'lucide-react'
-import {
-  editarCasoAdministradorSchema,
-  editarCasoGestorSchema,
-  type EdicionCaso,
-  type EditarCasoAdministrador,
-  type EditarCasoGestor,
-  type ResultadoEdicionCaso,
-} from '@cova/shared/schemas/edicion-caso'
+import { type EdicionCaso, type ResultadoEdicionCaso } from '@cova/shared/schemas/edicion-caso'
 import type { FichaSiniestro } from '@cova/shared/schemas/ficha-siniestro'
 import { hoyArgentina } from '@cova/shared/schemas/siniestros-alta'
 import { Aviso } from '@/components/aviso'
@@ -18,27 +11,13 @@ import { SelectField, type OpcionSelect } from '@/components/select-field'
 import { Button } from '@/components/ui/button'
 import { api, ApiError } from '@/lib/api'
 import { BloqueFicha, PestanaFicha } from './pestana-ficha'
+import {
+  resolverEdicionCaso,
+  type ValoresEdicionCaso as Valores,
+  type PedidoEdicionCaso as Pedido,
+} from '../edicion-caso-formulario'
+import { useRevision } from '../hooks/use-revision'
 
-type Valores = {
-  version: string
-  pais: string
-  poliza: {
-    numeroSiniestro: string
-    numeroPoliza: string
-    inicioVigencia: string
-    idAseguradora: string
-    sucursal: string
-  }
-  asignacion: { idAjustador: string }
-  hecho: {
-    fechaOcurrencia: string
-    horaOcurrencia: string
-    menorEdadInvolucrado: boolean
-    causa: string
-  }
-  lugar: { idProvincia: string; localidad: string; calle: string; codigoPostal: string }
-}
-type Pedido = EditarCasoGestor | EditarCasoAdministrador
 const campos = [
   'poliza.numeroSiniestro',
   'poliza.numeroPoliza',
@@ -113,7 +92,7 @@ export function EditarDatosCaso({
     )
   return (
     <FormularioCaso
-      key={respuesta.version}
+      key={ficha.id}
       respuesta={respuesta}
       ficha={ficha}
       onCancelar={onCancelar}
@@ -135,9 +114,11 @@ function FormularioCaso({
 }) {
   const { datos, opciones, puedeEditarAsignacion: administra } = respuesta
   const [enviando, setEnviando] = useState(false)
-  const form = useForm<Valores>({
+  const revisionGuardado = useRevision(respuesta.revision)
+  const form = useForm<Valores, unknown, Pedido>({
+    resolver: resolverEdicionCaso(administra),
     defaultValues: {
-      version: respuesta.version,
+      revision: respuesta.revision,
       pais: String(opciones.provincias.find((p) => p.id === datos.lugar.idProvincia)?.idPais ?? ''),
       poliza: {
         numeroSiniestro: datos.poliza.numeroSiniestro,
@@ -165,7 +146,7 @@ function FormularioCaso({
   })
   const { register, control, handleSubmit, setError, clearErrors, setValue, formState } = form
   const pais = useWatch({ control, name: 'pais' })
-  const aseguradora = useWatch({ control, name: 'poliza.idAseguradora' })
+  const aseguradora = String(useWatch({ control, name: 'poliza.idAseguradora' }) ?? '')
   const errorCampo = (nombre: FieldPath<Valores>) =>
     form.getFieldState(nombre, formState).error?.message
   const lista = (
@@ -208,11 +189,13 @@ function FormularioCaso({
     if (enviando) return
     setEnviando(true)
     try {
-      const resultado = await api<ResultadoEdicionCaso>(`/siniestros/${ficha.id}/datos`, {
-        method: 'PATCH',
-        body: pedido,
+      await revisionGuardado.guardar(async (revision) => {
+        const resultado = await api<ResultadoEdicionCaso>(`/siniestros/${ficha.id}/datos`, {
+          method: 'PATCH',
+          body: { ...pedido, revision },
+        })
+        onHecho(resultado)
       })
-      onHecho(resultado)
     } catch (err) {
       const mensaje =
         err instanceof ApiError
@@ -232,42 +215,13 @@ function FormularioCaso({
       setEnviando(false)
     }
   }
-  const enviar = handleSubmit(async (valores) => {
+  const enviar = handleSubmit(async (pedido) => {
     clearErrors()
-    if (valores.pais && !valores.lugar.idProvincia) {
-      setError(
-        'lugar.idProvincia',
-        { message: 'Elegí una provincia para guardar el país.' },
-        { shouldFocus: true },
-      )
-      return
-    }
-    const base = { version: valores.version, hecho: valores.hecho, lugar: valores.lugar }
-    const validacion = administra
-      ? editarCasoAdministradorSchema.safeParse({
-          ...base,
-          poliza: valores.poliza,
-          asignacion: valores.asignacion,
-        })
-      : editarCasoGestorSchema.safeParse(base)
-    if (!validacion.success) {
-      for (const problema of validacion.error.issues) {
-        const campo = problema.path.join('.')
-        if (campos.includes(campo as (typeof campos)[number]))
-          setError(
-            campo as FieldPath<Valores>,
-            { message: problema.message },
-            { shouldFocus: true },
-          )
-      }
-      setError('root', { message: 'Revisá los campos señalados antes de guardar.' })
-      return
-    }
-    await guardar(validacion.data)
+    await guardar(pedido)
   })
   const botones = (
     <>
-      <Button variant="outline" disabled={enviando} onClick={onCancelar}>
+      <Button type="button" variant="outline" disabled={enviando} onClick={onCancelar}>
         Cancelar
       </Button>
       <Button type="submit" loading={enviando}>
