@@ -215,9 +215,9 @@ test(
         const particular = await crearServicioHistorialFicha(prisma).listar(actor, antes.id)
         assert.deepEqual(
           particular.map((e) => e.id),
-          [anterior.id, eventosDelCaso[0].id],
+          [eventosDelCaso[0].id, anterior.id],
         )
-        assert.equal(particular.at(-1).tipo, 'BAJA_SINIESTRO')
+        assert.equal(particular[0].tipo, 'BAJA_SINIESTRO')
       }
       await assert.rejects(listado.obtener(gestor, antes.id), { status: 403 })
       await operaciones.darDeBaja(admin, antes.id)

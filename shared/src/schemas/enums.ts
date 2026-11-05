@@ -28,6 +28,7 @@ export const tipoEventoHistorialSchema = z.enum([
   'PERSONA',
   'ABOGADO',
   'PERITO',
+  'ALTA_SINIESTRO',
 ])
 export type TipoEventoHistorial = z.infer<typeof tipoEventoHistorialSchema>
 

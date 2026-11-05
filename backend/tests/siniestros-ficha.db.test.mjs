@@ -351,14 +351,29 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
           assert.deepEqual(documentos[0].autor, { nombre: 'Ana Prueba', tipoUsuario: 'GESTOR' })
           assert.ok(!('urlArchivoSinDominio' in documentos[0]))
 
+          // Historial: del más nuevo al más viejo (E5-09)
           const historial = await crearServicioHistorialFicha(tx).listar(sesionA, idSiniestro)
           assert.deepEqual(
             historial.map((e) => [e.tipo, e.descripcion]),
             [
-              ['ASIGNACION', 'Antes'],
               ['DOCUMENTO', 'Después'],
+              ['ASIGNACION', 'Antes'],
             ],
           )
+          // Quien lo hizo, como era en ese momento: cambiarle el nombre o el rol no cambia los eventos anteriores
+          assert.deepEqual(historial[0].usuario, { nombre: 'Ana Prueba', tipoUsuario: 'GESTOR' })
+          await tx.usuario.update({
+            where: { id: gestorA.id },
+            data: { nombres: 'NombreNuevo', tipoUsuario: 'ADMINISTRADOR' },
+          })
+          assert.deepEqual(
+            (await crearServicioHistorialFicha(tx).listar(sesionA, idSiniestro))[0].usuario,
+            { nombre: 'Ana Prueba', tipoUsuario: 'GESTOR' },
+          )
+          await tx.usuario.update({
+            where: { id: gestorA.id },
+            data: { nombres: 'Ana', tipoUsuario: 'GESTOR' },
+          })
 
           // Cada pestaña controla el acceso: un gestor ajeno recibe 403; el administrador entra
           const pestanas = [

@@ -40,6 +40,7 @@ enum TipoEventoHistorial {
   PERSONA
   ABOGADO
   PERITO
+  ALTA_SINIESTRO
 }
 
 enum TipoPerito {
@@ -198,14 +199,18 @@ model Notificacion {
 }
 
 model HistorialSiniestro {
-  id          Int                 @id @default(autoincrement())
-  tipoEvento  TipoEventoHistorial
-  descripcion String
-  fechaEvento DateTime            @default(now()) @db.Timestamptz(3)
-  idSiniestro Int
-  idUsuario   Int
-  eliminado   Boolean             @default(false)
-  fechaBaja   DateTime?           @db.Timestamptz(3)
+  id               Int                 @id @default(autoincrement())
+  tipoEvento       TipoEventoHistorial
+  descripcion      String
+  fechaEvento      DateTime            @default(now()) @db.Timestamptz(3)
+  idSiniestro      Int
+  idUsuario        Int
+  /// Nombre y rol de quien lo hizo, tal como eran en ese momento (E5-09). Los completa la base al registrar el evento
+  /// (trigger de la migración historial_autor); la ficha muestra estos y no los actuales del usuario.
+  autorNombre      String?
+  autorTipoUsuario TipoUsuario?
+  eliminado        Boolean             @default(false)
+  fechaBaja        DateTime?           @db.Timestamptz(3)
 
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)

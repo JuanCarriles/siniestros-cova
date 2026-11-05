@@ -160,7 +160,7 @@ export type DocumentoFicha = {
   autor: { nombre: string; tipoUsuario: TipoUsuario }
 }
 
-/** GET /api/siniestros/:id/historial (CU-10 1.i), del más viejo al más nuevo */
+/** GET /api/siniestros/:id/historial (CU-10 1.i), del más nuevo al más viejo: el alta queda al final */
 export type EventoHistorialFicha = {
   id: number
   tipo: TipoEventoHistorial
