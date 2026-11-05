@@ -11,6 +11,8 @@ export const tipoNotificacionSchema = z.enum([
   'MENSAJE_NUEVO',
   'ASIGNACION_SINIESTRO',
   'REASIGNACION_SINIESTRO',
+  'CASO_DEMORADO',
+  'CASO_EN_ALERTA',
 ])
 export type TipoNotificacion = z.infer<typeof tipoNotificacionSchema>
 

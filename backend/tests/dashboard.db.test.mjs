@@ -54,7 +54,6 @@ test('PostgreSQL: dashboard propio, límite exacto de 72 h, pendientes y paginac
                 numeroPoliza: marca,
                 fechaAsignacion: hace(200),
                 fechaUltimoMovimiento: hace(1),
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idUsuario: propio.id,
                 idEstadoSiniestro: abierto.id,
@@ -63,7 +62,7 @@ test('PostgreSQL: dashboard propio, límite exacto de 72 h, pendientes y paginac
                 ...extra,
               },
             })
-          const reciente = await caso({ demorado: true }) // El flag persistido no define el cálculo.
+          const reciente = await caso()
           const limite = await caso({ fechaUltimoMovimiento: hace(72) })
           const otro1 = await caso({ fechaUltimoMovimiento: new Date(hace(72).getTime() + 1) })
           const otro2 = await caso({ fechaUltimoMovimiento: null, fechaAsignacion: hace(72) })

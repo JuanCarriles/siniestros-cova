@@ -1131,7 +1131,6 @@ export async function seedDesarrollo(
         fechaUltimoMovimiento: haceDias(s.ultimoMovimientoHaceDias, 16),
         fechaCierre: s.cerradoHaceDias !== undefined ? haceDias(s.cerradoHaceDias, 12) : null,
         // RF-19: sin cambios en más de 72 h (los cerrados no cuentan)
-        demorado: !cerrado && s.ultimoMovimientoHaceDias >= 3,
         idEstadoSiniestro: obtener(estados, s.estado, 'el estado'),
         idAseguradora: obtener(aseguradoras, s.aseguradora, 'la aseguradora'),
         idAjustador: obtener(ajustadores, s.ajustador, 'el ajustador'),

@@ -63,7 +63,6 @@ test('PostgreSQL: listado de siniestros (CU-09) dentro de una transacción rever
                 numeroPoliza: `POL-${numero}`,
                 fechaAsignacion: hace(20),
                 fechaUltimoMovimiento: hace(1),
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idEstadoSiniestro: abierto.id,
                 idAseguradora: aseguradora.id,

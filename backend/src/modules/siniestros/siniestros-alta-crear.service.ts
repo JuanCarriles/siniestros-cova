@@ -237,7 +237,6 @@ export function crearServicioCrearSiniestro(deps: {
               idUsuario: asignado.id,
               fechaAsignacion: ahora,
               fechaUltimoMovimiento: ahora,
-              demorado: false,
             },
             select: { id: true, numeroSiniestro: true },
           })

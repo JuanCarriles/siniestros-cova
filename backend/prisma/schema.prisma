@@ -22,6 +22,10 @@ enum TipoNotificacion {
   MENSAJE_NUEVO
   ASIGNACION_SINIESTRO
   REASIGNACION_SINIESTRO
+  /// La tarea programada de demoras (E5-10): 72 horas sin movimiento
+  CASO_DEMORADO
+  /// …y 7 días sin movimiento (el semáforo en rojo)
+  CASO_EN_ALERTA
 }
 
 // La descripción de cada evento la arma src/modules/historial/historial.textos.ts
@@ -470,7 +474,6 @@ model Siniestro {
   numeroSiniestro       String
   numeroPoliza          String
   fechaAsignacion       DateTime  @db.Timestamptz(3)
-  demorado              Boolean
   menorEdadInvolucrado  Boolean
   idEstadoSiniestro     Int
   idAseguradora         Int
@@ -481,6 +484,8 @@ model Siniestro {
   sucursal              String?
   causa                 String?
   fechaCierre           DateTime? @db.Timestamptz(3)
+  /// Cuándo se movió el caso por última vez (RF-19, E5-10): cambio de estado, novedad, documento o cierre de pericia.
+  /// La demora (72 horas) y el semáforo se calculan al consultar, desde acá; no se guardan.
   fechaUltimoMovimiento DateTime? @db.Timestamptz(3)
   idAjustador           Int?
   idDireccion           Int?

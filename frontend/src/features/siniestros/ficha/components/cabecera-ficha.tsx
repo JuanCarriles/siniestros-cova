@@ -131,7 +131,11 @@ export function CabeceraFicha({
           <Dato icono={Clock} etiqueta="Sin movimiento" className="@4xl:col-span-3">
             {/* El semáforo es más alto que una línea de texto: sin agrandar la fila */}
             <span className="-my-1.5 inline-flex">
-              <DiasSinMovimiento dias={ficha.diasSinMovimiento} cerrado={ficha.estado.esCierre} />
+              <DiasSinMovimiento
+                dias={ficha.diasSinMovimiento}
+                cerrado={ficha.estado.esCierre}
+                dadoDeBaja={!!ficha.fechaBaja}
+              />
             </span>
             <span aria-hidden="true">{ficha.diasSinMovimiento === 1 ? 'día' : 'días'}</span>
           </Dato>

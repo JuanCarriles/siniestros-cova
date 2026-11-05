@@ -58,7 +58,6 @@ test('PostgreSQL: los cambios simultáneos en las partes de un siniestro no deja
         numeroPoliza: 'P',
         fechaAsignacion: new Date(),
         fechaUltimoMovimiento: new Date(),
-        demorado: false,
         menorEdadInvolucrado: false,
         idEstadoSiniestro: estado.id,
         idAseguradora: aseguradora.id,

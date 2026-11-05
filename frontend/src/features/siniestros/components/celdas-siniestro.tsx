@@ -254,14 +254,17 @@ const tonos = {
 export function DiasSinMovimiento({
   dias,
   cerrado,
+  dadoDeBaja = false,
   conTexto = false,
 }: {
   dias: number
   cerrado: boolean
+  /** Uno dado de baja tampoco se marca demorado */
+  dadoDeBaja?: boolean
   /** En las tarjetas: "4 días sin movimiento" a la vista */
   conTexto?: boolean
 }) {
-  const tono = tonoDemora(dias, cerrado)
+  const tono = tonoDemora(dias, cerrado, dadoDeBaja)
   const Icono = tono === 'alerta' ? TriangleAlert : tono === 'demorado' ? Clock : null
   const detalle =
     tono === 'alerta'
