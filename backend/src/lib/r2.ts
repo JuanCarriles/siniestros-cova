@@ -201,6 +201,34 @@ export function crearAlmacenamientoR2(
       }
     },
 
+    async leerParaVista(clave: string) {
+      const key = claveArchivoSchema.parse(clave)
+      try {
+        const objeto = await s3.send(new GetObjectCommand({ Bucket: config.R2_BUCKET, Key: key }), {
+          abortSignal: AbortSignal.timeout(30000),
+        })
+        const cuerpo = objeto.Body
+        if (!cuerpo) throw new Error('Sin contenido')
+        const maximo = 10 * 1024 * 1024
+        const trozos: Uint8Array[] = []
+        let longitud = 0
+        try {
+          if (objeto.ContentLength && objeto.ContentLength > maximo)
+            throw new Error('Archivo demasiado grande')
+          for await (const trozo of cuerpo as AsyncIterable<Uint8Array>) {
+            longitud += trozo.byteLength
+            if (longitud > maximo) throw new Error('Archivo demasiado grande')
+            trozos.push(trozo)
+          }
+        } finally {
+          if ('destroy' in cuerpo && typeof cuerpo.destroy === 'function') cuerpo.destroy()
+        }
+        return Buffer.concat(trozos, longitud)
+      } catch (error) {
+        throw errorR2('No se pudo abrir el documento. Volvé a intentarlo.', error)
+      }
+    },
+
     // Sólo llamar después de autorizar al usuario y obtener la clave de la base.
     async firmarDescarga(clave: string, nombreOriginal: string) {
       const key = claveArchivoSchema.parse(clave)

@@ -1,10 +1,13 @@
+import { useEffect, useRef, useState } from 'react'
+import type { DocumentoFicha } from '@cova/shared/schemas/ficha-siniestro'
+import { BajaDocumentoDialog } from '../components/baja-documento-dialog'
 import { useRevalidator } from 'react-router'
 import { Aviso } from '@/components/aviso'
 import { CargaDocumentos } from '../components/carga-documentos'
 import { ImagenDocumento } from '../components/imagen-documento'
 import { rutaArchivoDocumento } from '../documentos/rutas'
 import { Button } from '@/components/ui/button'
-import { FileStack, Download } from 'lucide-react'
+import { FileStack, Download, ArchiveX } from 'lucide-react'
 import { roleLabels } from '@/components/layout/panel-navigation'
 import { formatoTamanoArchivo } from '@/features/plantillas/formato-archivo'
 import { PestanaFicha, PestanaVacia } from '../components/pestana-ficha'
@@ -17,8 +20,38 @@ export function PestanaDocumentos() {
   const documentos = usePestana<'documentos'>()
   const ficha = useFicha()
   const revalidator = useRevalidator()
+  const [aDarDeBaja, setADarDeBaja] = useState<DocumentoFicha | null>(null)
+  const [exito, setExito] = useState('')
+  const aviso = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!exito) return
+    const timer = window.setTimeout(() => setExito(''), 6000)
+    return () => window.clearTimeout(timer)
+  }, [exito])
   return (
     <PestanaFicha titulo="Documentos" cantidad={documentos.length}>
+      {exito && (
+        <Aviso tipo="exito" ref={aviso} enfocar className="mb-4">
+          {exito}
+        </Aviso>
+      )}
+      {aDarDeBaja && (
+        <BajaDocumentoDialog
+          documento={aDarDeBaja}
+          idSiniestro={ficha.id}
+          onCerrar={() => setADarDeBaja(null)}
+          onDesactualizado={() => {
+            void revalidator.revalidate()
+          }}
+          onHecho={() => {
+            setADarDeBaja(null)
+            setExito(
+              'Documento dado de baja. El motivo, la fecha y el autor quedaron en el historial.',
+            )
+            void revalidator.revalidate()
+          }}
+        />
+      )}
       {!ficha.fechaBaja && !ficha.estado.esCierre ? (
         <CargaDocumentos
           key={ficha.id}
@@ -68,6 +101,19 @@ export function PestanaDocumentos() {
                   Descargar original
                 </a>
               </Button>
+              {d.baja?.permitida ? (
+                <Button
+                  variant="ghost"
+                  className="w-full text-destructive"
+                  onClick={() => setADarDeBaja(d)}
+                  aria-label={`Dar de baja ${d.nombreOriginal}`}
+                >
+                  <ArchiveX aria-hidden="true" />
+                  Dar de baja
+                </Button>
+              ) : (
+                d.baja?.motivo && <p className="text-sm text-muted-foreground">{d.baja.motivo}</p>
+              )}
               <span className="grid w-full gap-1 border-t pt-3 text-left">
                 <span>
                   Cargado por <strong>{d.autor.nombre}</strong>{' '}

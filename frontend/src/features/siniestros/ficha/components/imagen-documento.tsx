@@ -1,6 +1,7 @@
 import { rutaArchivoDocumento } from '../documentos/rutas'
 import { VistaImagenOriginal } from './vista-imagen-original'
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
+const VistaPdfDocumento = lazy(() => import('./vista-pdf-documento'))
 import { Download, ImageOff, Maximize2 } from 'lucide-react'
 import type { DocumentoFicha } from '@cova/shared/schemas/ficha-siniestro'
 import { Button } from '@/components/ui/button'
@@ -23,14 +24,15 @@ export function ImagenDocumento({
 }) {
   const [error, setError] = useState(false)
   const imagen = documento.imagen
-  if (!['jpg', 'jpeg', 'png'].includes(documento.tipoExtension.toLowerCase()))
+  const esPdf = documento.tipoExtension.toLowerCase() === 'pdf'
+  if (!esPdf && !['jpg', 'jpeg', 'png'].includes(documento.tipoExtension.toLowerCase()))
     return <IconoArchivo extension={documento.tipoExtension} />
   return (
     <Dialog>
       <DialogTrigger asChild>
         <button
           type="button"
-          aria-label={`Ampliar ${documento.nombreOriginal}`}
+          aria-label={`Ver ${documento.nombreOriginal}`}
           className="group relative grid h-44 w-full place-items-center overflow-hidden rounded-lg border-2 border-line bg-surface-subtle transition-colors hover:border-primary focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {error || !imagen ? (
@@ -40,7 +42,7 @@ export function ImagenDocumento({
               ) : (
                 <IconoArchivo extension={documento.tipoExtension} />
               )}
-              <span>Ampliar imagen</span>
+              {!esPdf && <span>Ampliar imagen</span>}
             </span>
           ) : (
             <img
@@ -57,18 +59,28 @@ export function ImagenDocumento({
           )}
           <span className="absolute right-2 bottom-2 inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 font-semibold text-primary">
             <Maximize2 aria-hidden="true" className="size-4" />
-            Ampliar
+            {esPdf ? 'Ver PDF' : 'Ampliar'}
           </span>
         </button>
       </DialogTrigger>
-      <DialogContent size="wide" className="sm:max-w-6xl">
+      <DialogContent size="wide" className="min-w-0 grid-cols-1 sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle className="break-words">{documento.nombreOriginal}</DialogTitle>
           <DialogDescription>
-            Imagen original, sin recomprimir. Ajustá el tamaño o usá el zoom para leer los detalles.
+            {esPdf
+              ? 'Leé el PDF aquí, sin guardarlo en tu equipo. Podés cambiar de página y ampliar.'
+              : 'Imagen original, sin recomprimir. Ajustá el tamaño o usá el zoom para leer los detalles.'}
           </DialogDescription>
         </DialogHeader>
-        <VistaImagenOriginal key={documento.id} documento={documento} idSiniestro={idSiniestro} />
+        {esPdf ? (
+          <Suspense fallback={<p role="status">Preparando visor…</p>}>
+            <VistaPdfDocumento
+              ruta={`/api/siniestros/${idSiniestro}/documentos/${documento.id}/contenido`}
+            />
+          </Suspense>
+        ) : (
+          <VistaImagenOriginal key={documento.id} documento={documento} idSiniestro={idSiniestro} />
+        )}
         <Button asChild>
           <a
             href={rutaArchivoDocumento(idSiniestro, documento.id, 'original')}

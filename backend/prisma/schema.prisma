@@ -125,16 +125,17 @@ model Usuario {
   eliminado      Boolean     @default(false)
   fechaBaja      DateTime?   @db.Timestamptz(3)
 
-  direccion           Direccion               @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  documentosPlantilla DocumentoPlantilla[]
-  notificaciones      Notificacion[]
-  eventosHistorial    HistorialSiniestro[]
-  mensajes            MensajeChat[]
-  lecturasMensajes    LecturaMensajeChat[]
-  documentosSiniestro DocumentoSiniestro[]
-  siniestros          Siniestro[]
-  sesiones            Sesion[]
-  recuperacion        RecuperacionContrasena?
+  direccion             Direccion               @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  documentosPlantilla   DocumentoPlantilla[]
+  notificaciones        Notificacion[]
+  eventosHistorial      HistorialSiniestro[]
+  mensajes              MensajeChat[]
+  lecturasMensajes      LecturaMensajeChat[]
+  documentosSiniestro   DocumentoSiniestro[]
+  documentosDadosDeBaja DocumentoSiniestro[]    @relation("BajaDocumentoSiniestro")
+  siniestros            Siniestro[]
+  sesiones              Sesion[]
+  recuperacion          RecuperacionContrasena?
 
   @@index([idDireccion])
 }
@@ -271,9 +272,13 @@ model DocumentoSiniestro {
   eliminado             Boolean   @default(false)
   fechaBaja             DateTime? @db.Timestamptz(3)
 
-  usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  motivoBaja    String?   @db.VarChar(1000)
+  idUsuarioBaja Int?
+  usuarioBaja   Usuario?  @relation("BajaDocumentoSiniestro", fields: [idUsuarioBaja], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario       Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestro     Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  @@index([idUsuarioBaja])
   @@index([idUsuario])
   @@index([idSiniestro, eliminado, fechaCarga])
 }
