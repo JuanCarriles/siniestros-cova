@@ -1,4 +1,11 @@
 import { z } from 'zod'
+export {
+  ARCHIVO_MAX_BYTES as PLANTILLA_MAX_BYTES,
+  ARCHIVO_FORMATOS as PLANTILLA_FORMATOS,
+  ARCHIVO_ACCEPT as PLANTILLA_ACCEPT,
+  ARCHIVO_EXTENSIONES as PLANTILLA_EXTENSIONES,
+  errorSeleccionArchivo as errorArchivoPlantilla,
+} from './archivos.ts'
 import {
   claveArchivoSchema,
   esquemaEdicion,
@@ -28,12 +35,8 @@ export type DocumentoPlantillaUpdateInput = z.input<typeof documentoPlantillaUpd
 export type DocumentoPlantillaUpdateData = z.output<typeof documentoPlantillaUpdateSchema>
 
 // Contrato público: el autor, la fecha y la clave de R2 nunca vienen del formulario.
-export const PLANTILLA_MAX_BYTES = 10 * 1024 * 1024
-export const PLANTILLA_FORMATOS = 'PDF, JPG, PNG, DOCX y XLSX'
 export const MENSAJE_ERROR_ELIMINAR_PLANTILLA =
   'No se pudo completar la eliminación. Volvé a tocar «Eliminar definitivamente» para terminarla.'
-export const PLANTILLA_ACCEPT = '.pdf,.jpg,.jpeg,.png,.docx,.xlsx'
-export const PLANTILLA_EXTENSIONES = ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'xlsx'] as const
 
 export const altaPlantillaSchema = z.strictObject({
   encabezado: z.string().trim().min(1, 'Ingresá un encabezado').max(120, 'Máximo 120 caracteres'),
@@ -58,14 +61,3 @@ export const plantillaListadoSchema = z.strictObject({
 export type AltaPlantillaInput = z.input<typeof altaPlantillaSchema>
 export type AltaPlantillaData = z.output<typeof altaPlantillaSchema>
 export type PlantillaListado = z.output<typeof plantillaListadoSchema>
-
-// Validación inmediata de selección. El servidor comprueba además el contenido binario real.
-export function errorArchivoPlantilla(archivo: { name: string; size: number }): string | null {
-  if (archivo.size === 0) return 'El archivo está vacío. Elegí otro documento.'
-  if (archivo.size > PLANTILLA_MAX_BYTES) return 'El archivo supera el máximo de 10 MB.'
-  const extension = archivo.name.split('.').pop()?.toLowerCase()
-  if (!PLANTILLA_EXTENSIONES.some((permitida) => permitida === extension)) {
-    return `Elegí un archivo ${PLANTILLA_FORMATOS}.`
-  }
-  return null
-}

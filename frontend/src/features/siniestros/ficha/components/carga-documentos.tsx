@@ -102,7 +102,8 @@ export function CargaDocumentos({
         <p className="font-semibold">Arrastrá los archivos acá o usá Elegir archivos</p>
         <p className="text-muted-foreground">{DOCUMENTO_FORMATOS}. Hasta 10 MB por archivo.</p>
         <p className="text-sm text-muted-foreground">
-          Compresión sin pérdida durante el envío. Se conserva el archivo original.
+          Las imágenes grandes se guardan reducidas para ahorrar espacio; cuando se comprimen, no se
+          conserva el original. Los PDF no se modifican.
         </p>
       </div>
       {filas.length > 0 && (

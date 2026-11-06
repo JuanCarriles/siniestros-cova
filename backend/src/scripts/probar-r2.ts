@@ -54,7 +54,7 @@ try {
   if (soloR2) {
     paso = 'subida y descarga en R2'
     const subido = await registrado.subir(archivo, 'pruebas')
-    descarga = await r2.firmarDescarga(subido.clave, subido.nombreOriginal)
+    descarga = await r2.firmarDescarga(subido.clave, subido.nombreOriginal, subido.mimeType)
     await comprobarDescarga(descarga)
   } else {
     paso = 'conexión y tablas de PostgreSQL'

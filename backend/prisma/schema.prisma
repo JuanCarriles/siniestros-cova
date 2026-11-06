@@ -130,17 +130,18 @@ model Usuario {
   eliminado      Boolean     @default(false)
   fechaBaja      DateTime?   @db.Timestamptz(3)
 
-  direccion           Direccion               @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  documentosPlantilla DocumentoPlantilla[]
-  notificaciones      Notificacion[]
-  eventosHistorial    HistorialSiniestro[]
-  mensajes            MensajeChat[]
-  lecturasMensajes    LecturaMensajeChat[]
-  documentosSiniestro DocumentoSiniestro[]
-  novedadesSiniestro  NovedadSiniestro[]
-  siniestros          Siniestro[]
-  sesiones            Sesion[]
-  recuperacion        RecuperacionContrasena?
+  direccion             Direccion               @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  documentosPlantilla   DocumentoPlantilla[]
+  notificaciones        Notificacion[]
+  eventosHistorial      HistorialSiniestro[]
+  mensajes              MensajeChat[]
+  lecturasMensajes      LecturaMensajeChat[]
+  documentosSiniestro   DocumentoSiniestro[]
+  documentosDadosDeBaja DocumentoSiniestro[]    @relation("BajaDocumentoSiniestro")
+  novedadesSiniestro    NovedadSiniestro[]
+  siniestros            Siniestro[]
+  sesiones              Sesion[]
+  recuperacion          RecuperacionContrasena?
 
   @@index([idDireccion])
 }
@@ -257,25 +258,38 @@ model LecturaMensajeChat {
 }
 
 model DocumentoSiniestro {
-  id                   Int       @id @default(autoincrement())
+  id                    Int       @id @default(autoincrement())
   /// Identifica una carga para no duplicar documentos cuando se reintenta una respuesta perdida.
-  idCarga              String?   @unique @db.Uuid
-  hashContenido        String?   @db.VarChar(64)
-  nombreOriginal       String
+  idCarga               String?   @unique @db.Uuid
+  hashContenido         String?   @db.VarChar(64)
+  /// Archivo principal y miniatura privados. La clave de vista solo se conserva para imágenes v1.
+  claveImagenOptimizada String?
+  claveMiniatura        String?
+  anchoOriginal         Int?
+  altoOriginal          Int?
+  anchoImagen           Int?
+  altoImagen            Int?
+  tamanoOptimizadoBytes BigInt?
+  nombreOriginal        String
   /// Clave relativa de R2 (siniestros/id/uuid.ext), nunca una URL firmada.
-  urlArchivoSinDominio String
-  tipoExtension        String
-  mimeType             String
-  tamanoBytes          BigInt
-  fechaCarga           DateTime  @default(now()) @db.Timestamptz(3)
-  idUsuario            Int
-  idSiniestro          Int
-  eliminado            Boolean   @default(false)
-  fechaBaja            DateTime? @db.Timestamptz(3)
+  urlArchivoSinDominio  String
+  tipoExtension         String
+  mimeType              String
+  /// Tamaño real del archivo guardado, después de la compresión si corresponde.
+  tamanoBytes           BigInt
+  fechaCarga            DateTime  @default(now()) @db.Timestamptz(3)
+  idUsuario             Int
+  idSiniestro           Int
+  eliminado             Boolean   @default(false)
+  fechaBaja             DateTime? @db.Timestamptz(3)
 
-  usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  motivoBaja    String?   @db.VarChar(1000)
+  idUsuarioBaja Int?
+  usuarioBaja   Usuario?  @relation("BajaDocumentoSiniestro", fields: [idUsuarioBaja], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario       Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestro     Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  @@index([idUsuarioBaja])
   @@index([idUsuario])
   @@index([idSiniestro, eliminado, fechaCarga])
 }

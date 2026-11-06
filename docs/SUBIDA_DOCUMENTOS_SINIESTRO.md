@@ -89,3 +89,5 @@ no se dupliquen. Revisar también el historial y los días sin movimiento despu�
 - El resumen de cargas anuncia el resultado; los errores individuales no se anuncian todos como alertas.
 - El gzip es una optimización de tráfico sin pérdida, no compresión permanente de fotos. Esta corrección no
   cambia dimensiones, calidad, miniaturas, visores ni políticas de archivos de las otras historias.
+
+Con E6-02, la compresión gzip de transporte sigue sin pérdida, pero las nuevas fotos grandes se guardan optimizadas según la política acordada en COMPRESION_IMAGENES.md; eso reemplaza la conservación del original descrita para E6-01 aislada.

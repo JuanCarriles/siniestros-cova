@@ -50,13 +50,7 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
             })
           const gestorA = await usuario('Ana', 'GESTOR')
           const gestorB = await usuario('Beto', 'GESTOR')
-          const admin = {
-            id: 0,
-            nombres: 'A',
-            apellidos: 'A',
-            email: 'a@x.test',
-            tipoUsuario: 'ADMINISTRADOR',
-          }
+          const admin = await usuario('Admin', 'ADMINISTRADOR')
           const sesionA = { ...gestorA, tipoUsuario: 'GESTOR' }
 
           const direccion = async (datos) =>

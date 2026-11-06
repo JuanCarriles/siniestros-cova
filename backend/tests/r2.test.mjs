@@ -74,7 +74,7 @@ test('subida: rechaza vacíos, exceso de tamaño, extensiones y nombres inválid
     { ...archivo, contenido: 'bytes inválidos' },
     { ...archivo, contenido: Buffer.alloc(0) },
     { ...archivo, contenido: Buffer.alloc(10 * 1024 * 1024 + 1) },
-    { ...archivo, nombreOriginal: 'ejecutable.exe' },
+    { ...archivo, nombreOriginal: 'ejecutable.pdf', contenido: Buffer.from('MZ programa') },
     { ...archivo, nombreOriginal: '../informe.pdf' },
     { ...archivo, nombreOriginal: 'informe\r\n.pdf' },
   ]) {
@@ -86,14 +86,21 @@ test('subida: rechaza vacíos, exceso de tamaño, extensiones y nombres inválid
 
 test('firma real del SDK: GET, 60 segundos y descarga como adjunto; no necesita hacer pública la URL base', async () => {
   const { almacenamiento, comandos } = almacenamientoPrueba()
-  const descarga = await almacenamiento.firmarDescarga('plantillas/archivo.pdf', 'informe.pdf')
+  const descarga = await almacenamiento.firmarDescarga(
+    'plantillas/archivo.pdf',
+    'informe.pdf',
+    'application/pdf',
+  )
   const url = new URL(descarga.url)
   assert.equal(url.searchParams.get('X-Amz-Expires'), '60')
   assert.ok(url.searchParams.has('X-Amz-Signature'))
   assert.match(url.searchParams.get('response-content-disposition'), /^attachment;/)
   assert.equal(url.searchParams.get('response-cache-control'), 'private, no-store')
+  assert.equal(url.searchParams.get('response-content-type'), 'application/pdf')
   assert.equal(comandos.length, 0, 'firmar no demuestra conectividad con R2')
-  await assert.rejects(almacenamiento.firmarDescarga('https://example.com/a.pdf', 'a.pdf'))
+  await assert.rejects(
+    almacenamiento.firmarDescarga('https://example.com/a.pdf', 'a.pdf', 'application/pdf'),
+  )
   almacenamiento.cerrar()
 })
 
