@@ -12,6 +12,8 @@ const VEHICULO_SINIESTRO = '20261027130000_vehiculo_siniestro'
 const NUMERO_UNICO = '20261028120000_numero_siniestro_unico'
 const PARTES_CONCURRENCIA = '20261104120000_partes_concurrencia'
 const ABOGADOS_PERITOS_CONCURRENCIA = '20261104130000_abogados_peritos_concurrencia'
+const NOVEDADES_AUTOR = '20261105120000_novedades_autor'
+const NOVEDADES_AUTOR_HISTORICO = '20261105121000_novedades_autor_historico'
 
 if (process.env.NODE_ENV === 'production') throw new Error('No correr en producción')
 if (!process.env.DATABASE_URL) throw new Error('Falta DATABASE_URL')
@@ -23,7 +25,7 @@ const migraciones = (await readdir(CARPETA, { withFileTypes: true }))
 const sql = (nombre) => readFile(new URL(`${nombre}/migration.sql`, CARPETA), 'utf8')
 
 // Una base nueva con todas las migraciones anteriores a `hasta`
-async function baseHasta(hasta) {
+async function baseHasta(hasta, omitir = []) {
   const nombre = `cova_prueba_migraciones_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
   const admin = new pg.Client({ connectionString: process.env.DATABASE_URL })
   await admin.connect()
@@ -34,7 +36,8 @@ async function baseHasta(hasta) {
   url.searchParams.delete('schema')
   const db = new pg.Client({ connectionString: url.toString() })
   await db.connect()
-  for (const m of migraciones.filter((m) => m < hasta)) await db.query(await sql(m))
+  for (const m of migraciones.filter((m) => m < hasta && !omitir.includes(m)))
+    await db.query(await sql(m))
   return {
     db,
     async borrar() {
@@ -249,6 +252,166 @@ test('migración abogados_peritos_concurrencia: con dos peritos activos del mism
   }
 })
 
+test('migración novedades_autor: las novedades anteriores quedan a nombre del usuario asignado a su siniestro', async () => {
+  const { db, borrar } = await baseHasta(NOVEDADES_AUTOR)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const caso = await siniestro('S-1')
+    const otro = await siniestro('S-2')
+    const direccion = await uno(`INSERT INTO "Direccion" DEFAULT VALUES RETURNING id`)
+    const gestora = await uno(
+      `INSERT INTO "Usuario" (nombres, apellidos, documento, telefono, email, contrasena, "tipoUsuario", "idDireccion")
+       VALUES ('Ana', 'Ruiz', '0', '0', 'ana@b.test', '-', 'GESTOR', $1) RETURNING id`,
+      [direccion],
+    )
+    await db.query(`UPDATE "Siniestro" SET "idUsuario" = $1 WHERE id = $2`, [gestora, otro])
+    const novedad = (idSiniestro) =>
+      uno(
+        `INSERT INTO "NovedadSiniestro" (descripcion, autor, "idSiniestro") VALUES ('N', 'Ana Ruiz', $1) RETURNING id`,
+        [idSiniestro],
+      )
+    const deCaso = await novedad(caso)
+    const deOtro = await novedad(otro)
+
+    await db.query(await sql(NOVEDADES_AUTOR))
+    const { rows } = await db.query(
+      `SELECT id, "idUsuario", autor FROM "NovedadSiniestro" ORDER BY id`,
+    )
+    const { rows: admins } = await db.query(`SELECT "idUsuario" FROM "Siniestro" WHERE id = $1`, [
+      caso,
+    ])
+    assert.deepEqual(rows, [
+      { id: deCaso, idUsuario: admins[0].idUsuario, autor: 'Ana Ruiz' },
+      { id: deOtro, idUsuario: gestora, autor: 'Ana Ruiz' },
+    ])
+    // De acá en adelante, toda novedad dice quién la cargó
+    await assert.rejects(novedad(caso), { code: '23502' })
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración novedades_autor_historico: cada novedad anterior queda a nombre de quien la escribió, o sin usuario', async () => {
+  const { db, borrar } = await baseHasta(NOVEDADES_AUTOR_HISTORICO)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const direccion = await uno(`INSERT INTO "Direccion" DEFAULT VALUES RETURNING id`)
+    const usuario = (nombres, apellidos, email) =>
+      uno(
+        `INSERT INTO "Usuario" (nombres, apellidos, documento, telefono, email, contrasena, "tipoUsuario", "idDireccion")
+         VALUES ($1, $2, '0', '0', $3, '-', 'GESTOR', $4) RETURNING id`,
+        [nombres, apellidos, email, direccion],
+      )
+    const ana = await usuario('AnaLegado', 'Prueba', 'ana@b.test')
+    const bruno = await usuario('BrunoLegado', 'Prueba', 'bruno@b.test')
+    await usuario('Juan', 'Repetido', 'juan1@b.test')
+    await usuario('Juan', 'Repetido', 'juan2@b.test')
+    // El caso se reasignó a Bruno: la migración anterior le atribuyó todas sus novedades
+    const caso = await siniestro('S-1')
+    await db.query(`UPDATE "Siniestro" SET "idUsuario" = $1 WHERE id = $2`, [bruno, caso])
+    const novedad = (autor) =>
+      uno(
+        `INSERT INTO "NovedadSiniestro" (descripcion, autor, "idSiniestro", "idUsuario") VALUES ('N', $1, $2, $3) RETURNING id`,
+        [autor, caso, bruno],
+      )
+    const deAna = await novedad('AnaLegado Prueba')
+    const deBruno = await novedad('BrunoLegado Prueba')
+    const repetido = await novedad('Juan Repetido')
+    const desconocido = await novedad('Nadie Conocido')
+
+    await db.query(await sql(NOVEDADES_AUTOR_HISTORICO))
+    const { rows } = await db.query(
+      `SELECT id, "idUsuario", autor, "tipoUsuarioAutor" FROM "NovedadSiniestro" ORDER BY id`,
+    )
+    assert.deepEqual(rows, [
+      { id: deAna, idUsuario: ana, autor: 'AnaLegado Prueba', tipoUsuarioAutor: null },
+      { id: deBruno, idUsuario: bruno, autor: 'BrunoLegado Prueba', tipoUsuarioAutor: null },
+      { id: repetido, idUsuario: null, autor: 'Juan Repetido', tipoUsuarioAutor: null },
+      { id: desconocido, idUsuario: null, autor: 'Nadie Conocido', tipoUsuarioAutor: null },
+    ])
+    // Cada envío del formulario carga una sola novedad
+    await db.query(`UPDATE "NovedadSiniestro" SET "claveEnvio" = 'a' WHERE id = $1`, [deAna])
+    await assert.rejects(
+      db.query(`UPDATE "NovedadSiniestro" SET "claveEnvio" = 'a' WHERE id = $1`, [deBruno]),
+      { code: '23505' },
+    )
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración historial_autor: cada evento conserva el nombre y el rol de quien lo hizo', async () => {
+  const migracion = '20261106120200_historial_autor'
+  const { db, borrar } = await baseHasta(migracion)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const caso = await siniestro('S-1')
+    const { rows: usuarios } = await db.query(`SELECT id FROM "Usuario"`)
+    const autor = usuarios[0].id
+    const evento = () =>
+      uno(
+        `INSERT INTO "HistorialSiniestro" ("tipoEvento", descripcion, "idSiniestro", "idUsuario")
+         VALUES ('NOVEDAD', '-', $1, $2) RETURNING id`,
+        [caso, autor],
+      )
+    const anterior = await evento()
+    await db.query(await sql(migracion))
+    // Los anteriores, con los datos de hoy (antes no se guardaban)
+    await db.query(
+      `UPDATE "Usuario" SET nombres = 'Nuevo', "tipoUsuario" = 'GESTOR' WHERE id = $1`,
+      [autor],
+    )
+    // Los nuevos, con los del momento en que se registran, sin que la operación los mande
+    const nuevo = await evento()
+    await db.query(
+      `UPDATE "Usuario" SET nombres = 'Otro', "tipoUsuario" = 'SUPER_ADMINISTRADOR' WHERE id = $1`,
+      [autor],
+    )
+    const { rows } = await db.query(
+      `SELECT id, "autorNombre", "autorTipoUsuario" FROM "HistorialSiniestro" ORDER BY id`,
+    )
+    assert.deepEqual(rows, [
+      { id: anterior, autorNombre: 'A B', autorTipoUsuario: 'ADMINISTRADOR' },
+      { id: nuevo, autorNombre: 'Nuevo B', autorTipoUsuario: 'GESTOR' },
+    ])
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración historial_sin_alta_reconstruida: borra solo las altas deducidas de la primera asignación', async () => {
+  const migracion = '20261106120300_historial_sin_alta_reconstruida'
+  const { db, borrar } = await baseHasta(migracion)
+  try {
+    const { uno, siniestro } = await datosBase(db)
+    const { rows: usuarios } = await db.query(`SELECT id FROM "Usuario"`)
+    const autor = usuarios[0].id
+    const evento = (idSiniestro, tipo, fecha) =>
+      uno(
+        `INSERT INTO "HistorialSiniestro" ("tipoEvento", descripcion, "fechaEvento", "idSiniestro", "idUsuario")
+         VALUES ($1, '-', $2, $3, $4) RETURNING id`,
+        [tipo, fecha, idSiniestro, autor],
+      )
+    const viejo = await siniestro('VIEJO')
+    const nuevo = await siniestro('NUEVO')
+    // La versión anterior de la rama dedujo esta alta: un milisegundo antes de la primera asignación
+    await evento(viejo, 'ALTA_SINIESTRO', '2026-10-20T02:59:59.999Z')
+    const asignacionVieja = await evento(viejo, 'ASIGNACION', '2026-10-20T03:00:00Z')
+    // Un alta real comparte la hora con su asignación
+    const altaReal = await evento(nuevo, 'ALTA_SINIESTRO', '2026-11-03T12:00:00Z')
+    const asignacionNueva = await evento(nuevo, 'ASIGNACION', '2026-11-03T12:00:00Z')
+
+    await db.query(await sql(migracion))
+    const { rows } = await db.query(`SELECT id FROM "HistorialSiniestro" ORDER BY id`)
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      [asignacionVieja, altaReal, asignacionNueva],
+    )
+  } finally {
+    await borrar()
+  }
+})
+
 test('migración revision_datos_caso: conserva casos, historial y movimiento e inicia revisiones en cero', async () => {
   const migracion = '20261105120000_revision_datos_caso'
   const { db, borrar } = await baseHasta(migracion)
@@ -368,6 +531,96 @@ test('migración maestros_unicos: si hay datos incompatibles o números que coli
     await assert.rejects(db.query(await sql(nombre)), /repetiría números/)
     await db.query('ROLLBACK')
     assert.equal((await db.query('SELECT count(*)::int n FROM "Siniestro"')).rows[0].n, 2)
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración semaforo_demora: borra la bandera guardada sin tocar los casos y suma los avisos de demora', async () => {
+  const migracion = '20261107120000_semaforo_demora'
+  const { db, borrar } = await baseHasta(migracion)
+  try {
+    const { siniestro } = await datosBase(db)
+    const id = await siniestro('S-1')
+    await db.query(
+      `UPDATE "Siniestro" SET demorado = true, "fechaUltimoMovimiento" = '2026-10-01T12:00:00Z' WHERE id = $1`,
+      [id],
+    )
+    const { demorado: _, ...anterior } = (
+      await db.query('SELECT * FROM "Siniestro" WHERE id = $1', [id])
+    ).rows[0]
+    await db.query(await sql(migracion))
+    const despues = (await db.query('SELECT * FROM "Siniestro" WHERE id = $1', [id])).rows[0]
+    assert.deepEqual(despues, anterior, 'el caso queda igual, sin la columna')
+    const { rows } = await db.query(
+      `SELECT unnest(enum_range(NULL::"TipoNotificacion"))::text AS tipo`,
+    )
+    assert.ok(['CASO_DEMORADO', 'CASO_EN_ALERTA'].every((t) => rows.some((r) => r.tipo === t)))
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración de carga: se agrega después de desarrollo sin renombrar ni perder documentos existentes', async () => {
+  const carga = '20261106120000_carga_documentos_idempotente'
+  const { db, borrar } = await baseHasta('99999999999999', [carga])
+  try {
+    const direccion = (await db.query('INSERT INTO "Direccion" DEFAULT VALUES RETURNING id'))
+      .rows[0].id
+    const usuario = (
+      await db.query(
+        `INSERT INTO "Usuario" (nombres, apellidos, documento, telefono, email, contrasena, "tipoUsuario", "idDireccion") VALUES ('Autor', 'Prueba', '0', '0', 'carga@example.invalid', '-', 'GESTOR', $1) RETURNING id`,
+        [direccion],
+      )
+    ).rows[0].id
+    const estado = (
+      await db.query(
+        `INSERT INTO "EstadoSiniestro" (nombre, descripcion) VALUES ('Abierto', '-') RETURNING id`,
+      )
+    ).rows[0].id
+    const aseguradora = (
+      await db.query(
+        `INSERT INTO "Aseguradora" (nombre) VALUES ('Prueba de actualización') RETURNING id`,
+      )
+    ).rows[0].id
+    const siniestro = (
+      await db.query(
+        `INSERT INTO "Siniestro" ("numeroSiniestro", "numeroPoliza", "fechaAsignacion", "menorEdadInvolucrado", "idEstadoSiniestro", "idAseguradora", "idUsuario") VALUES ('MIG-CARGA', 'P', now(), false, $1, $2, $3) RETURNING id`,
+        [estado, aseguradora, usuario],
+      )
+    ).rows[0].id
+    const documento = (
+      await db.query(
+        `INSERT INTO "DocumentoSiniestro" ("nombreOriginal", "urlArchivoSinDominio", "tipoExtension", "mimeType", "tamanoBytes", "idUsuario", "idSiniestro") VALUES ('Original.pdf', 'siniestros/prueba/original.pdf', 'pdf', 'application/pdf', 123, $1, $2) RETURNING *`,
+        [usuario, siniestro],
+      )
+    ).rows[0]
+    await db.query(await sql(carga))
+    const actualizado = (
+      await db.query('SELECT * FROM "DocumentoSiniestro" WHERE id=$1', [documento.id])
+    ).rows[0]
+    assert.deepEqual(actualizado, { ...documento, idCarga: null, hashContenido: null })
+    const uuid = '37a87f2e-d34e-4716-a331-7dc5a50edbaf'
+    await db.query('UPDATE "DocumentoSiniestro" SET "idCarga"=$1, "hashContenido"=$2 WHERE id=$3', [
+      uuid,
+      'a'.repeat(64),
+      documento.id,
+    ])
+    await assert.rejects(
+      db.query(
+        `INSERT INTO "DocumentoSiniestro" ("nombreOriginal", "urlArchivoSinDominio", "tipoExtension", "mimeType", "tamanoBytes", "idUsuario", "idSiniestro", "idCarga") VALUES ('Duplicado.pdf', 'siniestros/prueba/duplicado.pdf', 'pdf', 'application/pdf', 123, $1, $2, $3)`,
+        [usuario, siniestro, uuid],
+      ),
+      { code: '23505' },
+    )
+    assert.equal(
+      (
+        await db.query(
+          `SELECT count(*)::int AS cantidad FROM information_schema.columns WHERE table_name='Siniestro' AND column_name='demorado'`,
+        )
+      ).rows[0].cantidad,
+      0,
+    )
   } finally {
     await borrar()
   }

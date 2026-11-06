@@ -46,7 +46,6 @@ test('PostgreSQL: agregar, modificar y dar de baja vehículos y personas desde l
                 numeroPoliza: 'P',
                 fechaAsignacion: new Date('2026-09-01T12:00:00Z'),
                 fechaUltimoMovimiento: ultimoMovimiento,
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idEstadoSiniestro: abierto.id,
                 idAseguradora: aseguradora.id,

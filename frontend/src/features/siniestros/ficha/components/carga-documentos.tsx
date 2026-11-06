@@ -135,11 +135,7 @@ export function CargaDocumentos({
                   value={f.progreso}
                   className="h-3 w-full appearance-none overflow-hidden rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary"
                 />
-                {f.error && (
-                  <p role="alert" className="font-semibold text-danger-ink">
-                    {f.error}
-                  </p>
-                )}
+                {f.error && <p className="font-semibold text-danger-ink">{f.error}</p>}
                 {['error', 'completo', 'pendiente'].includes(f.estado) && (
                   <div className="flex flex-wrap justify-end gap-2">
                     {f.estado === 'error' && f.reintentable && (

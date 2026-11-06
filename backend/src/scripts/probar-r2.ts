@@ -83,7 +83,6 @@ try {
               numeroSiniestro: 'PRUEBA-R2',
               numeroPoliza: 'PRUEBA-R2',
               fechaAsignacion: new Date(),
-              demorado: false,
               menorEdadInvolucrado: false,
               usuario: { connect: { id: usuario.id } },
               estadoSiniestro: {

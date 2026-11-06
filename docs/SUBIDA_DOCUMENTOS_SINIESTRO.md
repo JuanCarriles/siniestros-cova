@@ -9,7 +9,8 @@ los documentos ya confirmados quedan en el servidor y se vuelven a consultar al 
 
 ## Compresión y límites
 
-El navegador usa CompressionStream('gzip') sin pérdida antes de enviar. Si el resultado agranda un archivo
+El navegador usa CompressionStream('gzip') sin pérdida antes de enviar. Si no está disponible o falla el compresor,
+envía el original con identity: no bloquea la carga ni cambia sus bytes. Si el resultado agranda un archivo
 que ya estaba comprimido, envía el original. No se recomprimen imágenes con pérdida ni se alteran firmas o
 documentos. El backend descomprime con maxOutputLength y guarda los bytes originales en R2: esta compresión
 reduce el tráfico cuando es posible, no el tamaño permanente del documento. No requiere dependencias nuevas.
@@ -28,19 +29,26 @@ Se verifica el acceso antes de recibir el archivo y se vuelve a comprobar, con e
 después de subir a R2 para resolver cierres o reasignaciones simultáneos.
 
 Autor, fecha del servidor, nombre original, tipo, tamaño original y clave privada de R2 se registran junto
-con el evento DOCUMENTO del historial y la actualización de fechaUltimoMovimiento/demorado, en una transacción.
+con el evento DOCUMENTO del historial y la actualización de fechaUltimoMovimiento (la demora se calcula al consultar, no se almacena), en una transacción.
+La carga también crea avisos DOCUMENTO_NUEVO para el responsable asignado y la administración activa,
+excluyendo al autor. El documento, el historial, el movimiento y los avisos se confirman juntos o se revierten
+juntos. Un reintento no repite los avisos y una falla en R2 no genera notificaciones.
+
 La clave tiene formato siniestros/id/uuid.ext: nunca se guarda una URL firmada.
 Si no se puede registrar o se pierde el permiso, se elimina el objeto recién subido como compensación.
 
 El UUID de carga es único. Un reintento por respuesta perdida devuelve el documento existente sin duplicar
-archivo, historial ni movimiento. El identificador se verifica contra usuario, siniestro, nombre y SHA-256
+archivo, historial, movimiento ni notificaciones. El identificador se verifica contra usuario, siniestro, nombre y SHA-256
 de los bytes originales; reutilizarlo para otra carga se rechaza. Las cargas simultáneas del mismo UUID
 se serializan y se limpia el objeto sobrante de R2.
 
 ## Migración y ejecución
 
 20261106120000_carga_documentos_idempotente agrega idCarga UUID opcional y hashContenido opcional a
-DocumentoSiniestro, conservando los documentos anteriores. No modifica Docker ni credenciales.
+DocumentoSiniestro, conservando los documentos anteriores. Se mantiene su nombre y SQL originales porque ya
+se aplicó localmente; no se borran filas de _prisma_migrations ni se recrea la base. El timestamp igual al de
+otra carpeta no implica un nombre de migración duplicado. Se prueba desde cero y también agregándola después
+de las migraciones de desarrollo, conservando documentos existentes. No modifica Docker ni credenciales.
 
 ```sh
 npm run prisma:migrate:deploy -w backend
@@ -71,3 +79,13 @@ permisos, concurrencia, reintentos, compensación y la ruta de carga del alta ex
 Prueba manual: adjuntar dos archivos, revisar que cada uno tenga su progreso y que se agreguen al listado
 con autor y fecha. Ante una falla de conexión/R2, reintentar la fila fallida y comprobar que los ya guardados
 no se dupliquen. Revisar también el historial y los días sin movimiento después de la carga.
+
+## Correcciones de integración con desarrollo
+
+- La carga usa prepararEdicion después de R2 y registrarMovimiento para actualizar únicamente la fecha.
+- Se mantiene el bloqueo del autor durante el guardado, siempre después de bloquear el siniestro.
+- Una cola cerrada y reactivada retoma filas interrumpidas con el mismo UUID; espera la cancelación anterior
+  e ignora sus callbacks tardíos. Una cola ya activa no reinicia una carga en curso.
+- El resumen de cargas anuncia el resultado; los errores individuales no se anuncian todos como alertas.
+- El gzip es una optimización de tráfico sin pérdida, no compresión permanente de fotos. Esta corrección no
+  cambia dimensiones, calidad, miniaturas, visores ni políticas de archivos de las otras historias.

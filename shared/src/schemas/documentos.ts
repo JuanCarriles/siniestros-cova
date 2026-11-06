@@ -1,5 +1,15 @@
 import { z } from 'zod'
 import {
+  claveArchivoSchema,
+  esquemaEdicion,
+  extensionArchivoSchema,
+  fechaHoraSchema,
+  idSchema,
+  mimeTypeSchema,
+  tamanoBytesSchema,
+  textoSchema,
+} from './comunes.ts'
+import {
   PLANTILLA_MAX_BYTES,
   PLANTILLA_ACCEPT,
   PLANTILLA_FORMATOS,
@@ -14,17 +24,6 @@ export const idCargaDocumentoSchema = z.uuid()
 export const compresionDocumentoSchema = z.enum(['identity', 'gzip']).default('identity')
 export const documentoSubidoSchema = z.strictObject({ id: z.int().positive() })
 export type DocumentoSubido = z.output<typeof documentoSubidoSchema>
-
-import {
-  claveArchivoSchema,
-  esquemaEdicion,
-  extensionArchivoSchema,
-  fechaHoraSchema,
-  idSchema,
-  mimeTypeSchema,
-  tamanoBytesSchema,
-  textoSchema,
-} from './comunes.ts'
 
 // Datos de alta de DocumentoSiniestro; id y baja lógica se gestionan por separado.
 export const documentoSiniestroSchema = z.strictObject({
