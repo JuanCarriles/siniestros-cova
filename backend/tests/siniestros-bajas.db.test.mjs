@@ -52,7 +52,6 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
                 numeroSiniestro: `PRUEBA-${marca}-${++secuencia}`,
                 numeroPoliza: 'POL-PRUEBA',
                 fechaAsignacion: ahora,
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idUsuario: gestor.id,
                 idAseguradora: aseguradora.id,
@@ -320,7 +319,12 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
             },
           })
           await tx.novedadSiniestro.create({
-            data: { descripcion: 'Prueba', autor: 'Prueba', idSiniestro: objetivo.id },
+            data: {
+              descripcion: 'Prueba',
+              autor: 'Prueba',
+              idUsuario: admin.id,
+              idSiniestro: objetivo.id,
+            },
           })
           await tx.historialSiniestro.create({
             data: {

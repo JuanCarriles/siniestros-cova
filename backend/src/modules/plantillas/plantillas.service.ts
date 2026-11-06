@@ -5,7 +5,7 @@ import {
   type PlantillaListado,
 } from '@cova/shared/schemas/plantillas'
 import type { Prisma } from '../../generated/prisma/client.ts'
-import type { AlmacenamientoR2, ArchivoEntrada } from '../../lib/r2.ts'
+import { mimeDeArchivo, type AlmacenamientoR2, type ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { validarArchivoPlantilla } from './validar-archivo.ts'
 
@@ -121,12 +121,16 @@ export function crearServicioPlantillas(deps: {
       await autorizar(idUsuario)
       const fila = await prisma.documentoPlantilla.findFirst({
         where: { id, eliminado: false },
-        select: { urlArchivo: true, nombreOriginal: true },
+        select: { urlArchivo: true, nombreOriginal: true, tipoExtension: true },
       })
       if (!fila) throw new HttpError(404, 'La plantilla ya no está disponible.')
       const r2 = almacenamiento()
       await r2.comprobarExistencia(fila.urlArchivo)
-      return r2.firmarDescarga(fila.urlArchivo, fila.nombreOriginal)
+      return r2.firmarDescarga(
+        fila.urlArchivo,
+        fila.nombreOriginal,
+        mimeDeArchivo(fila.tipoExtension),
+      )
     },
   }
 }

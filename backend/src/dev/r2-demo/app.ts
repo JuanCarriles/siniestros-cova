@@ -5,7 +5,7 @@ import type { ErrorRequestHandler } from 'express'
 import helmet from 'helmet'
 import { z } from 'zod'
 import type { ConfiguracionR2 } from '../../config/r2.ts'
-import type { AlmacenamientoR2 } from '../../lib/r2.ts'
+import { mimeDeArchivo, type AlmacenamientoR2 } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import type { RegistroDemo } from './registro.ts'
 
@@ -97,7 +97,11 @@ export function crearAppDemo(deps: {
   )
   app.post('/api/files/:id/link', async (req, res) => {
     const archivo = registro.buscar(z.uuid().parse(req.params.id))
-    const enlace = await almacenamiento.firmarDescarga(archivo.clave, archivo.nombreOriginal)
+    const enlace = await almacenamiento.firmarDescarga(
+      archivo.clave,
+      archivo.nombreOriginal,
+      mimeDeArchivo(archivo.clave.split('.').pop() ?? ''),
+    )
     enlaces.set(archivo.id, enlace)
     res.json(enlace)
   })

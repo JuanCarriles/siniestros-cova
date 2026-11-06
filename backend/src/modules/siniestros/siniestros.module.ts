@@ -1,5 +1,3 @@
-import { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
-import { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
 import { configCorreo } from '../../config/correo.ts'
 import { env } from '../../config/env.ts'
 import { crearCorreoAsignacion } from '../../lib/correo-asignacion.ts'
@@ -8,9 +6,12 @@ import { crearServicioReasignacion } from './siniestros-reasignacion.service.ts'
 import { crearAlmacenamientoR2, type AlmacenamientoR2 } from '../../lib/r2.ts'
 import { getPrisma } from '../../lib/prisma.ts'
 import { requerirSesion } from '../auth/auth.module.ts'
+import { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
 import { crearServicioDocumentosFicha } from '../documentos/documentos-ficha.service.ts'
+import { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
 import { crearServicioHistorialFicha } from '../historial/historial-ficha.service.ts'
 import { crearServicioNovedadesFicha } from '../novedades/novedades-ficha.service.ts'
+import { crearServicioNovedadesGestion } from '../novedades/novedades-gestion.service.ts'
 import { crearServicioAbogadosFicha } from './abogados/abogados-ficha.service.ts'
 import { crearServicioAbogadosGestion } from './abogados/abogados-gestion.service.ts'
 import { crearServicioPeritosFicha } from './peritos/peritos-ficha.service.ts'
@@ -89,7 +90,8 @@ const operaciones = crearServicioBajasSiniestros({
   },
 })
 
-// Vehículos, personas, abogados y peritos desde la ficha (E5-06 y E5-07): cada cambio y su evento del historial, juntos
+// Vehículos, personas, abogados, peritos (E5-06 y E5-07) y novedades (E5-08) desde la ficha: cada cambio y su evento
+// del historial, juntos
 const transaccionPartes: Transaccion = (trabajo) =>
   getPrisma().$transaction(trabajo, { timeout: 15_000 })
 
@@ -131,5 +133,6 @@ export const siniestrosRouter = crearSiniestrosRouter({
     enviarAviso: crearCorreoReasignacion(configCorreo),
     urlSistema: env.APP_URL,
   }),
+  novedades: crearServicioNovedadesGestion({ transaccion: transaccionPartes }),
   requerirSesion,
 })

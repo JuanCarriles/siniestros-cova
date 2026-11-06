@@ -35,7 +35,7 @@ export function crearServicioDocumentosFicha(prisma: Base) {
         ({
           usuario: autor,
           claveMiniatura,
-          claveImagenOptimizada,
+          claveImagenOptimizada: _claveImagenOptimizada,
           anchoOriginal,
           altoOriginal,
           anchoImagen,
@@ -45,7 +45,6 @@ export function crearServicioDocumentosFicha(prisma: Base) {
         }) => ({
           imagen:
             claveMiniatura &&
-            claveImagenOptimizada &&
             anchoOriginal &&
             altoOriginal &&
             anchoImagen &&

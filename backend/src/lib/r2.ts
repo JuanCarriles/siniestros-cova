@@ -1,4 +1,3 @@
-import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { randomUUID } from 'node:crypto'
 import {
   CopyObjectCommand,
@@ -10,11 +9,13 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
 import { z } from 'zod'
 import { leerConfiguracionR2 } from '../config/r2.ts'
 import type { ConfiguracionR2 } from '../config/r2.ts'
 import { HttpError } from '../utils/httpError.ts'
+import { validarArchivo } from './validar-archivo.ts'
 
 const nombreArchivoSchema = z
   .string()
@@ -39,6 +40,7 @@ const tiposMime = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   png: 'image/png',
+  webp: 'image/webp',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 } as const
@@ -68,6 +70,21 @@ function errorR2(mensaje: string, error: unknown): HttpError {
       : undefined
   // No propagar mensajes, causas, requests ni responses completos del SDK.
   return new HttpError(503, mensaje, { codigo, estadoHTTP })
+}
+
+export function mimeDeArchivo(extension: string): string {
+  const clave = extension.toLowerCase()
+  if (!Object.hasOwn(tiposMime, clave))
+    throw new HttpError(409, 'El tipo guardado del archivo no está disponible. Solicitá revisarlo.')
+  return tiposMime[clave as keyof typeof tiposMime]
+}
+
+export function nombreDescargaArchivo(nombreOriginal: string, extension: string): string {
+  const nombre = nombreArchivoSchema.parse(nombreOriginal)
+  const actual = nombre.split('.').pop()?.toLowerCase()
+  if (actual === extension || (extension === 'jpg' && actual === 'jpeg')) return nombre
+  const base = nombre.replace(/\.[^.]+$/, '').slice(0, 254 - extension.length)
+  return `${base}.${extension}`
 }
 
 function disposicionDescarga(nombreOriginal: string): string {
@@ -103,23 +120,19 @@ export function crearAlmacenamientoR2(
     async subir(entrada: ArchivoEntrada, carpeta: string, metadata?: Record<string, string>) {
       const archivo = archivoSchema.parse(entrada)
       const prefijo = carpetaSchema.parse(carpeta)
+      const { tipoExtension, mimeType } = await validarArchivo(archivo)
+      if (archivo.contenido.byteLength > config.UPLOAD_MAX_MB * 1024 * 1024)
+        throw new HttpError(
+          413,
+          rechazoArchivo(`El archivo supera el máximo de ${config.UPLOAD_MAX_MB} MB.`),
+        )
       if (
-        archivo.contenido.byteLength === 0 ||
-        archivo.contenido.byteLength > config.UPLOAD_MAX_MB * 1024 * 1024
-      ) {
+        !config.UPLOAD_ALLOWED_EXT.some((ext) => (ext === 'jpeg' ? 'jpg' : ext) === tipoExtension)
+      )
         throw new HttpError(
           400,
-          rechazoArchivo(
-            `El archivo debe tener contenido y pesar como máximo ${config.UPLOAD_MAX_MB} MB.`,
-          ),
+          rechazoArchivo('El contenido real no está habilitado en este servidor.'),
         )
-      }
-      const extension = archivo.nombreOriginal.split('.').pop()?.toLowerCase()
-      if (!extension || !config.UPLOAD_ALLOWED_EXT.includes(extension as keyof typeof tiposMime)) {
-        throw new HttpError(400, rechazoArchivo('Extensión de archivo no permitida.'))
-      }
-      const tipoExtension = extension as keyof typeof tiposMime
-      const mimeType = tiposMime[tipoExtension]
       const contenido = archivo.contenido
       const clave = claveArchivoSchema.parse(`${prefijo}/${randomUUID()}.${tipoExtension}`)
       try {
@@ -131,7 +144,9 @@ export function crearAlmacenamientoR2(
             Metadata: metadata,
             ContentType: mimeType,
             ContentLength: contenido.byteLength,
-            ContentDisposition: disposicionDescarga(archivo.nombreOriginal),
+            ContentDisposition: disposicionDescarga(
+              nombreDescargaArchivo(archivo.nombreOriginal, tipoExtension),
+            ),
             CacheControl: 'private, no-store',
           }),
         )
@@ -148,10 +163,10 @@ export function crearAlmacenamientoR2(
     },
 
     // Solo derivados creados por sharp; WebP no se habilita como formato de entrada del usuario.
-    async subirDerivada(clave: string, contenido: Uint8Array) {
+    async subirDerivada(clave: string, contenido: Uint8Array, metadata?: Record<string, string>) {
       const key = claveArchivoSchema.parse(clave)
       if (
-        !/^(siniestros|altas)\/[1-9]\d*\/[a-f0-9-]+\.(jpe?g|png)\.(vista|miniatura)\.webp$/i.test(
+        !/^(siniestros|altas)\/[1-9]\d*\/[a-f0-9-]+\.(?:(jpe?g|png)\.(vista|miniatura)\.webp|webp(?:\.miniatura\.webp)?)$/i.test(
           key,
         ) ||
         !contenido.byteLength ||
@@ -166,6 +181,7 @@ export function crearAlmacenamientoR2(
             Body: contenido,
             ContentType: 'image/webp',
             ContentDisposition: disposicionDescarga(key.split('/').pop()!),
+            Metadata: metadata,
             ContentLength: contenido.byteLength,
             CacheControl: 'private, no-store',
           }),
@@ -202,9 +218,15 @@ export function crearAlmacenamientoR2(
     },
 
     // Sólo llamar después de autorizar al usuario y obtener la clave de la base.
-    async firmarDescarga(clave: string, nombreOriginal: string) {
+    async firmarDescarga(clave: string, nombreOriginal: string, mimeType: string) {
       const key = claveArchivoSchema.parse(clave)
-      const disposition = disposicionDescarga(nombreOriginal)
+      const formato = Object.entries(tiposMime).find(([, mime]) => mime === mimeType)?.[0]
+      if (!formato)
+        throw new HttpError(
+          409,
+          'El tipo guardado del archivo no está disponible. Solicitá revisarlo.',
+        )
+      const disposition = disposicionDescarga(nombreDescargaArchivo(nombreOriginal, formato))
       const emitida = new Date()
       try {
         const url = await getSignedUrl(
@@ -213,6 +235,7 @@ export function crearAlmacenamientoR2(
             Bucket: config.R2_BUCKET,
             Key: key,
             ResponseContentDisposition: disposition,
+            ResponseContentType: mimeType,
             ResponseCacheControl: 'private, no-store',
           }),
           { expiresIn: config.R2_SIGNED_URL_TTL_SECONDS, signingDate: emitida },

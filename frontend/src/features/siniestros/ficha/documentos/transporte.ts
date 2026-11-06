@@ -14,18 +14,21 @@ export async function comprimirDocumento(
   if (error) throw new ApiError(400, error)
   signal.throwIfAborted()
   if (typeof CompressionStream === 'undefined')
-    throw new ApiError(
-      400,
-      'Tu navegador no permite comprimir archivos. Actualizalo o usá otro navegador.',
-    )
-  const comprimido = await new Response(
-    archivo.stream().pipeThrough(new CompressionStream('gzip')),
-  ).blob()
-  signal.throwIfAborted()
-  // No agrandar un PDF/Office/imagen que ya está comprimido. El original siempre cumple el máximo.
-  return comprimido.size < archivo.size && comprimido.size <= DOCUMENTO_MAX_BYTES
-    ? { contenido: comprimido, compresion: 'gzip' }
-    : { contenido: archivo, compresion: 'identity' }
+    return { contenido: archivo, compresion: 'identity' }
+  try {
+    const comprimido = await new Response(
+      archivo.stream().pipeThrough(new CompressionStream('gzip')),
+    ).blob()
+    signal.throwIfAborted()
+    // La compresión es de transporte: nunca altera ni agranda el original.
+    return comprimido.size < archivo.size && comprimido.size <= DOCUMENTO_MAX_BYTES
+      ? { contenido: comprimido, compresion: 'gzip' }
+      : { contenido: archivo, compresion: 'identity' }
+  } catch {
+    signal.throwIfAborted()
+    // Una limitación del compresor no debe impedir adjuntar un archivo válido.
+    return { contenido: archivo, compresion: 'identity' }
+  }
 }
 
 export function enviarDocumento(

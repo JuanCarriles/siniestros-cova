@@ -62,6 +62,11 @@ test(
         ajeno = await usuario('Ajeno', 'GESTOR'),
         admin = await usuario('Admin', 'ADMINISTRADOR'),
         superadmin = await usuario('Super', 'SUPER_ADMINISTRADOR')
+      const inactivo = await usuario('Inactivo', 'ADMINISTRADOR')
+      await prisma.usuario.update({
+        where: { id: inactivo.id },
+        data: { eliminado: true, fechaBaja: new Date() },
+      })
       const estado = await prisma.estadoSiniestro.create({
         data: { nombre: 'Activo', descripcion: 'Abierto' },
       })
@@ -83,7 +88,6 @@ test(
             fechaAsignacion: antes,
             fechaUltimoMovimiento: antes,
             menorEdadInvolucrado: false,
-            demorado: true,
             ...extra,
           },
         })
@@ -210,7 +214,6 @@ test(
       assert.deepEqual(objetos.get(doc.urlArchivoSinDominio), pdf)
       const actualizado = await prisma.siniestro.findUniqueOrThrow({ where: { id: s.id } })
       assert.equal(actualizado.fechaUltimoMovimiento.toISOString(), ahora.toISOString())
-      assert.equal(actualizado.demorado, false)
       assert.equal(actualizado.revision, 0)
       assert.equal(
         await prisma.historialSiniestro.count({
@@ -218,12 +221,32 @@ test(
         }),
         1,
       )
+      const avisos = await prisma.notificacion.findMany({
+        where: { idSiniestro: s.id },
+        orderBy: { idUsuario: 'asc' },
+      })
+      assert.deepEqual(
+        avisos.map((n) => n.idUsuario),
+        [admin.id, superadmin.id].sort((a, b) => a - b),
+      )
+      assert.ok(
+        avisos.every(
+          (n) =>
+            n.tipoNotificacion === 'DOCUMENTO_NUEVO' &&
+            !n.leida &&
+            !n.revisada &&
+            n.fechaCreacion.toISOString() === ahora.toISOString() &&
+            n.mensaje.includes(doc.nombreOriginal) &&
+            n.mensaje.includes(s.numeroSiniestro),
+        ),
+      )
       const repetida = await subir('gestor', s.id, idCarga, { gzip: true })
       assert.equal(repetida.status, 200)
       assert.deepEqual(await repetida.json(), respuesta)
       assert.equal(await prisma.documentoSiniestro.count(), 1)
       assert.equal(objetos.size, 1)
       assert.equal(await prisma.historialSiniestro.count(), 1)
+      assert.equal(await prisma.notificacion.count(), 2)
       assert.equal((await subir('gestor', s.id, idCarga, { nombre: 'otro.pdf' })).status, 409)
       assert.equal((await subir('admin', s.id, idCarga)).status, 409)
 
@@ -243,7 +266,19 @@ test(
       assert.equal(await prisma.documentoSiniestro.count(), 3)
       assert.equal(objetos.size, 3)
       assert.equal(await prisma.historialSiniestro.count(), 3)
-      for (const rol of ['admin', 'superadmin']) assert.equal((await subir(rol, s.id)).status, 201)
+      assert.equal(await prisma.notificacion.count(), 6)
+      for (const rol of ['admin', 'superadmin']) {
+        const nombre = `Carga de ${rol}.pdf`
+        assert.equal((await subir(rol, s.id, randomUUID(), { nombre })).status, 201)
+        const avisos = await prisma.notificacion.findMany({
+          where: { mensaje: { contains: nombre } },
+          orderBy: { idUsuario: 'asc' },
+        })
+        assert.deepEqual(
+          avisos.map((n) => n.idUsuario),
+          [gestor.id, rol === 'admin' ? superadmin.id : admin.id].sort((a, b) => a - b),
+        )
+      }
 
       const cerrado = await caso({ idEstadoSiniestro: cierre.id }),
         baja = await caso({ eliminado: true, fechaBaja: ahora })
@@ -263,6 +298,22 @@ test(
         0,
       )
       assert.equal(objetos.size, objetosAntes)
+      despuesDeSubir = async () => {}
+      const rolCambiado = await caso()
+      despuesDeSubir = async () => {
+        await prisma.usuario.update({ where: { id: admin.id }, data: { tipoUsuario: 'GESTOR' } })
+      }
+      assert.equal((await subir('admin', rolCambiado.id)).status, 403)
+      assert.equal(
+        await prisma.documentoSiniestro.count({ where: { idSiniestro: rolCambiado.id } }),
+        0,
+      )
+      assert.equal(await prisma.notificacion.count({ where: { idSiniestro: rolCambiado.id } }), 0)
+      assert.equal(objetos.size, objetosAntes)
+      await prisma.usuario.update({
+        where: { id: admin.id },
+        data: { tipoUsuario: 'ADMINISTRADOR' },
+      })
       despuesDeSubir = async () => {}
       const rollback = await caso()
       servicio = crearServicioDocumentosGestion(
@@ -321,9 +372,11 @@ test(
         where: { idCarga: respuestaPerdida },
       })
       assert.ok(objetos.has(guardadoSinConfirmacion.urlArchivoSinDominio))
+      const notificacionesAntesDeReintentar = await prisma.notificacion.count()
       const recuperado = await subir('gestor', s.id, respuestaPerdida)
       assert.equal(recuperado.status, 200)
       assert.equal((await recuperado.json()).id, guardadoSinConfirmacion.id)
+      assert.equal(await prisma.notificacion.count(), notificacionesAntesDeReintentar)
 
       const idNombreOriginal = randomUUID()
       const conEspacios = await subir('gestor', s.id, idNombreOriginal, {
@@ -342,6 +395,48 @@ test(
         (await subir('gestor', s.id, idNombreOriginal, { nombre: '  Acta original.pdf' })).status,
         200,
       )
+
+      // Documento, historial, movimiento y avisos se revierten si no se pueden generar las notificaciones.
+      const sinAviso = await caso(),
+        objetosAntesDelFallo = objetos.size
+      servicio = crearServicioDocumentosGestion(
+        {
+          ...deps,
+          transaccion: (trabajo) =>
+            deps.transaccion((tx) =>
+              trabajo(
+                new Proxy(tx, {
+                  get: (obj, key) =>
+                    key === 'notificacion'
+                      ? {
+                          createMany: async () => {
+                            throw new Error('Falla de avisos')
+                          },
+                        }
+                      : Reflect.get(obj, key),
+                }),
+              ),
+            ),
+        },
+        () => ahora,
+      )
+      assert.equal((await subir('gestor', sinAviso.id)).status, 503)
+      assert.equal(
+        await prisma.documentoSiniestro.count({ where: { idSiniestro: sinAviso.id } }),
+        0,
+      )
+      assert.equal(
+        await prisma.historialSiniestro.count({ where: { idSiniestro: sinAviso.id } }),
+        0,
+      )
+      assert.equal(await prisma.notificacion.count({ where: { idSiniestro: sinAviso.id } }), 0)
+      assert.equal(
+        (
+          await prisma.siniestro.findUniqueOrThrow({ where: { id: sinAviso.id } })
+        ).fechaUltimoMovimiento.toISOString(),
+        antes.toISOString(),
+      )
+      assert.equal(objetos.size, objetosAntesDelFallo)
 
       // La ruta nueva no intercepta las cargas del alta preexistente.
       assert.equal((await subir('admin', 'alta')).status, 201)

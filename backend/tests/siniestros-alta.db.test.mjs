@@ -53,7 +53,6 @@ test('PostgreSQL: alta paso 1 (E4-04): opciones activas y número duplicado por 
               numeroSiniestro,
               numeroPoliza: 'P',
               fechaAsignacion: new Date(),
-              demorado: false,
               menorEdadInvolucrado: false,
               idEstadoSiniestro: abierto.id,
               idAseguradora: aseguradora.id,

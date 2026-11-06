@@ -79,7 +79,16 @@ export class ColaDocumentos {
     )
   }
   activar() {
+    if (this.activa) return
     this.activa = true
+    this.publicar(
+      this.filas.map((fila) =>
+        ['comprimiendo', 'subiendo', 'guardando'].includes(fila.estado)
+          ? { ...fila, estado: 'pendiente', progreso: 0, error: undefined }
+          : fila,
+      ),
+    )
+    // Si el intento anterior todavía se está cancelando, su finally retoma la cola.
     void this.procesar()
   }
   cerrar() {
@@ -99,20 +108,26 @@ export class ColaDocumentos {
           this.cambiar(fila.id, { estado: 'comprimiendo' })
           const preparado =
             fila.preparado ?? (await this.deps.preparar(fila.archivo, controlador.signal))
-          if (!this.activa) break
+          if (!this.activa || controlador.signal.aborted) break
           this.cambiar(fila.id, { estado: 'subiendo', preparado })
           await this.deps.enviar(
             fila,
             preparado,
-            (valor) => this.cambiar(fila.id, { progreso: valor }),
-            () => this.cambiar(fila.id, { estado: 'guardando' }),
+            (valor) => {
+              if (this.activa && !controlador.signal.aborted)
+                this.cambiar(fila.id, { progreso: valor })
+            },
+            () => {
+              if (this.activa && !controlador.signal.aborted)
+                this.cambiar(fila.id, { estado: 'guardando' })
+            },
             controlador.signal,
           )
-          if (!this.activa) break
+          if (!this.activa || controlador.signal.aborted) break
           this.cambiar(fila.id, { estado: 'completo', progreso: 100, preparado: undefined })
           this.deps.guardado()
         } catch (error) {
-          if (!this.activa) break
+          if (!this.activa || controlador.signal.aborted) break
           this.cambiar(fila.id, {
             estado: 'error',
             error: error instanceof Error ? error.message : 'No se pudo cargar el archivo.',
@@ -127,6 +142,8 @@ export class ColaDocumentos {
     } finally {
       this.controlador = undefined
       this.ocupada = false
+      if (this.activa && this.filas.some((fila) => fila.estado === 'pendiente'))
+        void this.procesar()
     }
   }
 }

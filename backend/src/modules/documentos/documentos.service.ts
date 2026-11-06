@@ -85,7 +85,11 @@ export function crearServicioDocumentos(deps: {
         idDocumento,
         destino: { tipo: 'siniestro', idSiniestro: documento.idSiniestro },
       })
-      return almacenamiento.firmarDescarga(documento.urlArchivoSinDominio, documento.nombreOriginal)
+      return almacenamiento.firmarDescarga(
+        documento.urlArchivoSinDominio,
+        documento.nombreOriginal,
+        documento.mimeType,
+      )
     },
   }
 }

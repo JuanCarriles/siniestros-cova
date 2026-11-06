@@ -76,7 +76,6 @@ test('PostgreSQL: detalle, permisos, paginación y baja solo después de resolve
                 numeroSiniestro: `${marca}-${numero}`,
                 numeroPoliza: marca,
                 fechaAsignacion: new Date(),
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idUsuario: usuario.id,
                 idAjustador: ajustador.id,

@@ -140,12 +140,13 @@ export type PeritoFicha = {
   cerrado: boolean
 }
 
-/** GET /api/siniestros/:id/novedades (CU-10 1.f), de la más vieja a la más nueva */
+/** GET /api/siniestros/:id/novedades (CU-10 1.f), de la más nueva a la más vieja (E5-08: queda junto al campo de carga) */
 export type NovedadFicha = {
   id: number
   descripcion: string
-  autor: string
   fechaCarga: string
+  /** El nombre y el rol de quien la cargó, tal como eran en ese momento. Sin rol en las anteriores a E5-08. */
+  autor: { nombre: string; tipoUsuario: TipoUsuario | null }
 }
 
 /** GET /api/siniestros/:id/documentos (CU-10 1.g), del más nuevo al más viejo */
@@ -167,7 +168,7 @@ export type DocumentoFicha = {
   autor: { nombre: string; tipoUsuario: TipoUsuario }
 }
 
-/** GET /api/siniestros/:id/historial (CU-10 1.i), del más viejo al más nuevo */
+/** GET /api/siniestros/:id/historial (CU-10 1.i), del más nuevo al más viejo: el alta queda al final */
 export type EventoHistorialFicha = {
   id: number
   tipo: TipoEventoHistorial
