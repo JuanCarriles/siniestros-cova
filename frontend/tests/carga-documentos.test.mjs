@@ -96,3 +96,155 @@ test('cola: envía de a uno, continúa si uno falla y reintenta solo ese con el 
   assert.equal(avisos, 3)
   cola.cerrar()
 })
+
+test('sin compresor o si falla: envía el original intacto; no omite validación ni cancelación', async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'CompressionStream')
+  const original = new File(['%PDF-1.7 original'], 'Nombre original.pdf')
+  try {
+    for (const value of [
+      undefined,
+      class {
+        constructor() {
+          throw new Error('Compresor no disponible')
+        }
+      },
+    ]) {
+      Object.defineProperty(globalThis, 'CompressionStream', { configurable: true, value })
+      const resultado = await comprimirDocumento(original, new AbortController().signal)
+      assert.equal(resultado.compresion, 'identity')
+      assert.equal(resultado.contenido, original)
+      assert.equal(resultado.contenido.name, 'Nombre original.pdf')
+      const cancelado = new AbortController()
+      cancelado.abort()
+      await assert.rejects(comprimirDocumento(original, cancelado.signal), { name: 'AbortError' })
+      await assert.rejects(
+        comprimirDocumento(
+          new File([new Uint8Array(DOCUMENTO_MAX_BYTES + 1)], 'grande.pdf'),
+          new AbortController().signal,
+        ),
+        /10 MB/,
+      )
+    }
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'CompressionStream', descriptor)
+    else delete globalThis.CompressionStream
+  }
+})
+
+function esperarCola(cola, condicion) {
+  return new Promise((resolve, reject) => {
+    const limite = setTimeout(() => {
+      salir()
+      reject(new Error('La cola no llegó al estado esperado'))
+    }, 3000)
+    const comprobar = () => {
+      if (condicion(cola.instantanea())) {
+        clearTimeout(limite)
+        salir()
+        resolve()
+      }
+    }
+    const salir = cola.suscribir(comprobar)
+    comprobar()
+  })
+}
+
+for (const etapa of ['comprimiendo', 'subiendo', 'guardando']) {
+  test(`cola: cerrar y reactivar durante ${etapa} retoma el UUID sin envíos superpuestos ni callbacks antiguos`, async (t) => {
+    let liberar
+    const pausa = new Promise((resolve) => {
+      liberar = resolve
+    })
+    let preparaciones = 0,
+      enCurso = 0,
+      maximo = 0,
+      guardados = 0
+    const envios = []
+    let progresoAntiguo, guardandoAntiguo
+    const cola = new ColaDocumentos({
+      preparar: async (archivo) => {
+        preparaciones++
+        if (etapa === 'comprimiendo' && preparaciones === 1) await pausa
+        return { contenido: archivo, compresion: 'identity' }
+      },
+      enviar: async (fila, _preparado, progreso, guardando) => {
+        envios.push([fila.archivo.name, fila.id])
+        enCurso++
+        maximo = Math.max(maximo, enCurso)
+        try {
+          if (etapa !== 'comprimiendo' && envios.length === 1) {
+            progresoAntiguo = progreso
+            guardandoAntiguo = guardando
+            progreso(50)
+            if (etapa === 'guardando') guardando()
+            await pausa
+          }
+          return envios.length
+        } finally {
+          enCurso--
+        }
+      },
+      guardado: () => {
+        guardados++
+      },
+    })
+    t.after(() => {
+      liberar()
+      cola.cerrar()
+    })
+    cola.agregar(['uno.pdf', 'dos.pdf'].map((n) => new File(['%PDF-1.7'], n)))
+    await esperarCola(cola, (filas) => filas[0]?.estado === etapa)
+    const id = cola.instantanea()[0].id
+    // Reactivar una cola que ya estaba activa no reinicia el envío actual.
+    cola.activar()
+    assert.equal(cola.instantanea()[0].estado, etapa)
+    cola.cerrar()
+    cola.activar()
+    assert.equal(cola.instantanea()[0].id, id)
+    assert.equal(cola.instantanea()[0].estado, 'pendiente')
+    progresoAntiguo?.(98)
+    guardandoAntiguo?.()
+    assert.equal(cola.instantanea()[0].estado, 'pendiente')
+    assert.equal(cola.instantanea()[0].progreso, 0)
+    liberar()
+    await esperarCola(cola, (filas) => filas.every((f) => f.estado === 'completo'))
+    assert.equal(maximo, 1)
+    assert.equal(guardados, 2)
+    assert.ok(envios.filter(([n]) => n === 'uno.pdf').every(([, uuid]) => uuid === id))
+    assert.equal(envios.filter(([n]) => n === 'dos.pdf').length, 1)
+    assert.equal(envios.filter(([n]) => n === 'uno.pdf').length, etapa === 'comprimiendo' ? 1 : 2)
+    assert.ok(cola.instantanea().every((f) => f.progreso === 100))
+  })
+}
+
+test('cola: si termina de cancelarse antes de reactivar también retoma la fila interrumpida', async () => {
+  let rechazar,
+    intentos = 0,
+    guardados = 0
+  const cola = new ColaDocumentos({
+    preparar: async (archivo) => ({ contenido: archivo, compresion: 'identity' }),
+    enviar: async () => {
+      intentos++
+      if (intentos === 1)
+        await new Promise((_resolve, reject) => {
+          rechazar = reject
+        })
+      return 1
+    },
+    guardado: () => {
+      guardados++
+    },
+  })
+  cola.agregar([new File(['%PDF-1.7'], 'interrumpido.pdf')])
+  await esperarCola(cola, (filas) => filas[0]?.estado === 'subiendo')
+  const id = cola.instantanea()[0].id
+  cola.cerrar()
+  rechazar(new DOMException('Cancelado', 'AbortError'))
+  await new Promise((resolve) => setImmediate(resolve))
+  cola.activar()
+  await esperarCola(cola, (filas) => filas[0]?.estado === 'completo')
+  assert.equal(cola.instantanea()[0].id, id)
+  assert.equal(intentos, 2)
+  assert.equal(guardados, 1)
+  cola.cerrar()
+})

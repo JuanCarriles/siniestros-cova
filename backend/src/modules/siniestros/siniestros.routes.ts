@@ -1,7 +1,5 @@
 import type { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
 import { Router, type RequestHandler } from 'express'
-import type { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
-import { decodificarDocumento } from '../documentos/transporte-documento.ts'
 import { idCargaDocumentoSchema, compresionDocumentoSchema } from '@cova/shared/schemas/documentos'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import { idSchema } from '@cova/shared/schemas/comunes'
@@ -11,6 +9,7 @@ import {
   filtrosSiniestrosSchema,
 } from '@cova/shared/schemas/siniestros'
 import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
+import { novedadSchema } from '@cova/shared/schemas/novedades'
 import {
   abogadoFichaSchema,
   agregarPersonaSchema,
@@ -28,6 +27,8 @@ import {
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import { nombreOriginalUtf8, recibirArchivo } from '../../middlewares/recibir-archivo.ts'
 import { HttpError } from '../../utils/httpError.ts'
+import type { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
+import { decodificarDocumento } from '../documentos/transporte-documento.ts'
 import type { crearServicioCrearSiniestro } from './siniestros-alta-crear.service.ts'
 import type { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
@@ -41,6 +42,7 @@ import type { crearServicioEstadoSiniestro } from './siniestros-estado.service.t
 import type { crearServicioEdicionCaso } from './siniestros-edicion.service.ts'
 import type { crearServicioReasignacion } from './siniestros-reasignacion.service.ts'
 import { reasignarSiniestroSchema } from '@cova/shared/schemas/reasignacion-siniestro'
+import type { crearServicioNovedadesGestion } from '../novedades/novedades-gestion.service.ts'
 
 /** Lectura de cada pestaña de la ficha (CU-10). Cada historia suma sus acciones en su propio servicio. */
 type PestanaFicha = {
@@ -78,6 +80,8 @@ export const PESTANAS_FICHA = [
 // POST  /api/siniestros/:id/peritos                        carga un perito (uno de cada tipo como máximo)
 // PUT   /api/siniestros/:id/peritos/:idPerito              lo modifica ({ revision, datos }); el cierre es movimiento
 // PATCH /api/siniestros/:id/peritos/:idPerito/baja         baja lógica
+// Novedades desde la ficha (CU-10 1.f.1, E5-08), con el mismo control de acceso. No se editan ni se borran:
+// POST  /api/siniestros/:id/novedades                      carga una novedad (movimiento del caso; avisa)
 // Alta (solo administrador y superadministrador):
 // GET  /api/siniestros/alta/opciones
 // POST /api/siniestros/alta/datos-caso   valida el paso 1 (204 o el error con su campo)
@@ -99,6 +103,7 @@ export function crearSiniestrosRouter(deps: {
   personas: ReturnType<typeof crearServicioPersonasGestion>
   abogados: ReturnType<typeof crearServicioAbogadosGestion>
   peritos: ReturnType<typeof crearServicioPeritosGestion>
+  novedades: ReturnType<typeof crearServicioNovedadesGestion>
   requerirSesion: RequestHandler
 }) {
   const {
@@ -112,7 +117,7 @@ export function crearSiniestrosRouter(deps: {
     ficha,
     requerirSesion,
   } = deps
-  const { vehiculos, personas, abogados, peritos } = deps
+  const { vehiculos, personas, abogados, peritos, novedades } = deps
   const router = Router()
   router.use(requerirSesion, requerirRol('GESTOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'))
 
@@ -376,6 +381,18 @@ export function crearSiniestrosRouter(deps: {
       idSchema.parse(req.params.idPerito),
     )
     res.status(204).end()
+  })
+
+  router.post('/:id/novedades', async (req, res) => {
+    res
+      .status(201)
+      .json(
+        await novedades.cargar(
+          usuarioDeSesion(req),
+          idSchema.parse(req.params.id),
+          novedadSchema.parse(req.body),
+        ),
+      )
   })
 
   return router

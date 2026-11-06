@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import { idCargaDocumentoSchema } from '@cova/shared/schemas/documentos'
-import type { Prisma } from '../../generated/prisma/client.ts'
+import { TipoNotificacion, type Prisma } from '../../generated/prisma/client.ts'
+import { nombreCompleto } from '../../utils/formato.ts'
+import { prepararEdicion, registrarMovimiento } from '../siniestros/partes-edicion.ts'
 import type { AlmacenamientoR2, ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { exigirAccesoSiniestro } from '../siniestros/siniestros-acceso.ts'
@@ -79,9 +81,7 @@ export function crearServicioDocumentosGestion(
         return await deps
           .transaccion(async (tx) => {
             // Se revalida después de R2: pudo cambiar el responsable, cerrarse o darse de baja el caso.
-            await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${id} FOR UPDATE`
-            await tx.$queryRaw`SELECT "id" FROM "Usuario" WHERE "id" = ${usuario.id} FOR SHARE`
-            const actor = await comprobar(tx, usuario, id)
+            const actor = await prepararEdicion(tx, usuario, id, { bloquearAutor: true })
             const registrado = await existente(tx)
             if (registrado) return registrado
             const fecha = reloj()
@@ -95,7 +95,7 @@ export function crearServicioDocumentosGestion(
                 tipoExtension: objeto.tipoExtension,
                 mimeType: objeto.mimeType,
                 tamanoBytes: objeto.tamanoBytes,
-                idUsuario: actor.id,
+                idUsuario: usuario.id,
                 idSiniestro: id,
                 fechaCarga: fecha,
               },
@@ -104,15 +104,39 @@ export function crearServicioDocumentosGestion(
             await tx.historialSiniestro.create({
               data: {
                 idSiniestro: id,
-                idUsuario: actor.id,
+                idUsuario: usuario.id,
                 fechaEvento: fecha,
                 ...eventoHistorial.documentoSubido(actor, archivo.nombreOriginal, fecha),
               },
             })
-            await tx.siniestro.update({
+            await registrarMovimiento(tx, id, fecha)
+            const caso = await tx.siniestro.findUniqueOrThrow({
               where: { id },
-              data: { fechaUltimoMovimiento: fecha, demorado: false },
+              select: { idUsuario: true, numeroSiniestro: true },
             })
+            const destinatarios = await tx.usuario.findMany({
+              where: {
+                eliminado: false,
+                id: { not: usuario.id },
+                OR: [
+                  { id: caso.idUsuario },
+                  { tipoUsuario: { in: ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'] } },
+                ],
+              },
+              select: { id: true },
+            })
+            if (destinatarios.length)
+              await tx.notificacion.createMany({
+                data: destinatarios.map((destinatario) => ({
+                  idUsuario: destinatario.id,
+                  idSiniestro: id,
+                  tipoNotificacion: TipoNotificacion.DOCUMENTO_NUEVO,
+                  mensaje: `${nombreCompleto(actor)} cargó el documento «${archivo.nombreOriginal}» en el siniestro ${caso.numeroSiniestro}.`,
+                  fechaCreacion: fecha,
+                  leida: false,
+                  revisada: false,
+                })),
+              })
             return { id: documento.id, reutilizado: false }
           })
           .then((resultado) => {

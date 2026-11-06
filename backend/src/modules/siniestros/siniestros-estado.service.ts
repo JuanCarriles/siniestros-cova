@@ -111,7 +111,6 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
           data: {
             idEstadoSiniestro: nuevo.id,
             fechaUltimoMovimiento: ahora,
-            demorado: false,
             fechaCierre: nuevo.esCierre ? ahora : null,
           },
         })

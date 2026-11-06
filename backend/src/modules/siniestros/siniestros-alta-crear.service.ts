@@ -9,7 +9,7 @@ import { motivoFalloCorreo } from '../../lib/correo-resend.ts'
 import type { AlmacenamientoR2, ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
-import { eventoHistorial } from '../historial/historial.textos.ts'
+import { eventoHistorial, type EventoHistorial } from '../historial/historial.textos.ts'
 import {
   clavesDocumento,
   claveDerivada,
@@ -29,6 +29,8 @@ import {
   type PersonaPorTipo,
   type TipoPersona,
 } from './partes-datos.ts'
+import { nombresRepresentados } from './abogados/abogados-gestion.service.ts'
+import { nombreParaHistorial, rolParaHistorial } from './partes-edicion.ts'
 
 type Actor = { id: number }
 
@@ -69,8 +71,8 @@ export function crearServicioCrearSiniestro(deps: {
       try {
         const imagen = leerDatosImagen(await almacenamiento().comprobarExistencia(d.clave))
         if (imagen) {
-          await almacenamiento().comprobarExistencia(claveDerivada(d.clave, 'vista'))
-          await almacenamiento().comprobarExistencia(claveDerivada(d.clave, 'miniatura'))
+          for (const clave of clavesDocumento(d.clave, imagen).slice(1))
+            await almacenamiento().comprobarExistencia(clave)
           imagenes.set(d.clave, imagen)
         }
       } catch (error) {
@@ -254,7 +256,6 @@ export function crearServicioCrearSiniestro(deps: {
               idUsuario: asignado.id,
               fechaAsignacion: ahora,
               fechaUltimoMovimiento: ahora,
-              demorado: false,
             },
             select: { id: true, numeroSiniestro: true },
           })
@@ -264,6 +265,13 @@ export function crearServicioCrearSiniestro(deps: {
             throw esNumeroRepetido(e) ? error(409, MENSAJE_DUPLICADO, 'numeroSiniestro') : e
           })
         const idSiniestro = siniestro.id
+        // Historial (E5-09): el alta y cada parte cargada, con los mismos textos que la ficha. Todos llevan la misma
+        // hora (la del alta); el orden en que se registran es el de la línea de tiempo.
+        const registrar = (evento: EventoHistorial) =>
+          tx.historialSiniestro.create({
+            data: { idSiniestro, idUsuario: actor.id, fechaEvento: ahora, ...evento },
+          })
+        await registrar(eventoHistorial.altaSiniestro(autor, ahora))
 
         // Abogados primero: cada persona guarda el suyo (a lo sumo uno)
         const abogadoDe = new Map<string, number>()
@@ -271,6 +279,10 @@ export function crearServicioCrearSiniestro(deps: {
           const { id } = await tx.abogado.create({ data: datosAbogado(a), select: { id: true } })
           for (const clave of a.representados) abogadoDe.set(clave, id)
         }
+        /** El nombre de cada persona del alta, por su clave: para decir a quién representa cada abogado */
+        const nombreDe = new Map(
+          personas.map((p) => [p.clave, p.datos.nombreCompletoRazonSocial ?? null] as const),
+        )
 
         const persona = async <T extends TipoPersona>(
           tipo: T,
@@ -288,20 +300,60 @@ export function crearServicioCrearSiniestro(deps: {
             select: { id: true },
           })
 
+        const agregada = (
+          p: { datos: { nombreCompletoRazonSocial?: string | null } },
+          como: string,
+        ) =>
+          registrar(
+            eventoHistorial.personaAgregada(
+              autor,
+              nombreParaHistorial(p.datos.nombreCompletoRazonSocial ?? null),
+              como,
+              ahora,
+            ),
+          )
+
         for (const { datos: v, titular, ocupantes } of alta.vehiculos) {
           const { id: idVehiculo } = await tx.vehiculo.create({
             data: { idSiniestro, ...datosVehiculo(v) },
             select: { id: true },
           })
-          if (titular) await persona('titular', titular, idVehiculo)
-          for (const o of ocupantes) await persona('ocupante', o, idVehiculo)
+          await registrar(eventoHistorial.vehiculoAgregado(autor, v.dominio, ahora))
+          if (titular) {
+            await persona('titular', titular, idVehiculo)
+            await agregada(titular, rolParaHistorial('titular', v.dominio, null))
+          }
+          for (const o of ocupantes) {
+            await persona('ocupante', o, idVehiculo)
+            await agregada(o, rolParaHistorial('ocupante', v.dominio, null))
+          }
         }
-        for (const p of alta.personasExternas) await persona('externa', p, null)
+        for (const p of alta.personasExternas) {
+          await persona('externa', p, null)
+          await agregada(p, rolParaHistorial('externa', null, p.datos.rolSinVehiculo))
+        }
+        for (const a of alta.abogados)
+          await registrar(
+            eventoHistorial.abogadoAgregado(
+              autor,
+              a.nombreCompleto,
+              nombresRepresentados(
+                a.representados.map((clave) => ({
+                  nombreCompletoRazonSocial: nombreDe.get(clave) ?? null,
+                })),
+              ),
+              ahora,
+            ),
+          )
 
-        for (const p of alta.peritos)
+        for (const p of alta.peritos) {
           await tx.perito.create({
             data: { idSiniestro, tipoPerito: p.tipoPerito, ...datosPerito(p) },
           })
+          await registrar(
+            eventoHistorial.peritoAgregado(autor, p.tipoPerito, p.nombre, p.cerrado, ahora),
+          )
+        }
 
         // Cada documento se copia a la carpeta del siniestro y se registra con esa clave: si R2 falla, no se crea
         // nada. Los originales de altas/ se borran después de confirmar.
@@ -316,6 +368,7 @@ export function crearServicioCrearSiniestro(deps: {
           const imagen = imagenes.get(d.clave) ?? null
           if (imagen)
             for (const tipo of ['vista', 'miniatura'] as const) {
+              if (tipo === 'vista' && imagen.version === 2) continue
               const destino = claveDerivada(clave, tipo)
               copias.push(destino)
               try {
@@ -334,28 +387,24 @@ export function crearServicioCrearSiniestro(deps: {
               nombreOriginal: d.nombreOriginal,
               urlArchivoSinDominio: clave,
               ...datosImagenEnBase(clave, imagen),
-              tipoExtension: d.tipoExtension,
-              mimeType: d.mimeType,
-              tamanoBytes: BigInt(d.tamanoBytes),
+              // La imagen v2 registra el formato/tamaño guardados, no valores alterables del formulario.
+              tipoExtension: imagen?.version === 2 ? imagen.tipoExtension : d.tipoExtension,
+              mimeType:
+                imagen?.version === 2
+                  ? imagen.tipoExtension === 'webp'
+                    ? 'image/webp'
+                    : imagen.tipoExtension === 'png'
+                      ? 'image/png'
+                      : 'image/jpeg'
+                  : d.mimeType,
+              tamanoBytes: BigInt(imagen?.version === 2 ? imagen.tamanoBytes : d.tamanoBytes),
             },
           })
-          await tx.historialSiniestro.create({
-            data: {
-              idSiniestro,
-              idUsuario: actor.id,
-              ...eventoHistorial.documentoSubido(autor, d.nombreOriginal, ahora),
-            },
-          })
+          await registrar(eventoHistorial.documentoSubido(autor, d.nombreOriginal, ahora))
         }
 
         // Paso 36: asignación en el historial y aviso interno al asignado
-        await tx.historialSiniestro.create({
-          data: {
-            idSiniestro,
-            idUsuario: actor.id,
-            ...eventoHistorial.asignacion(asignado, ahora),
-          },
-        })
+        await registrar(eventoHistorial.asignacion(asignado, ahora))
         await tx.notificacion.create({
           data: {
             idSiniestro,

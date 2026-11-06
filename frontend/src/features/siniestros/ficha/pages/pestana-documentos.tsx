@@ -12,7 +12,7 @@ import { fechaHoraDe } from '../formato'
 import { usePestana, useFicha } from '../hooks/use-ficha'
 
 // Pestaña "Documentos" (CU-10 1.g): nombre, tipo, quién lo cargó y cuándo, del más nuevo al más viejo. Verlos y
-// Imágenes con miniatura y vista; la descarga siempre conserva el archivo original.
+// Imágenes con miniatura: la descarga entrega el archivo guardado, optimizado cuando corresponde.
 export function PestanaDocumentos() {
   const documentos = usePestana<'documentos'>()
   const ficha = useFicha()
@@ -49,12 +49,12 @@ export function PestanaDocumentos() {
               <span className="grid w-full min-w-0 gap-1">
                 <span className="text-lg font-semibold break-words">{d.nombreOriginal}</span>
                 <span className="text-muted-foreground">
-                  {d.tipoExtension.toUpperCase()} · Original:{' '}
+                  {d.tipoExtension.toUpperCase()} · Archivo:{' '}
                   {formatoTamanoArchivo(Number(d.tamanoBytes))}
                 </span>
                 {d.imagen && (
                   <span className="text-muted-foreground">
-                    Vista: {d.imagen.ancho} × {d.imagen.alto} px ·{' '}
+                    Resolución: {d.imagen.ancho} × {d.imagen.alto} px ·{' '}
                     {formatoTamanoArchivo(Number(d.imagen.tamanoBytes))}
                   </span>
                 )}
@@ -66,7 +66,7 @@ export function PestanaDocumentos() {
                   rel="noopener noreferrer"
                 >
                   <Download aria-hidden="true" />
-                  Descargar original
+                  Descargar archivo
                 </a>
               </Button>
               <span className="grid w-full gap-1 border-t pt-3 text-left">

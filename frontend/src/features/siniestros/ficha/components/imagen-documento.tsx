@@ -21,7 +21,7 @@ function Vista({ documento, idSiniestro }: { documento: DocumentoFicha; idSinies
       className="grid min-h-40 justify-items-center gap-3 rounded-lg border bg-muted p-6 text-center"
     >
       <ImageOff aria-hidden="true" className="size-8" />
-      <p>No se pudo cargar la vista. Podés descargar el archivo original.</p>
+      <p>No se pudo cargar la vista. Podés descargar el archivo del expediente.</p>
     </div>
   ) : (
     <img
@@ -80,13 +80,13 @@ export function ImagenDocumento({
         <DialogHeader>
           <DialogTitle className="break-words">{documento.nombreOriginal}</DialogTitle>
           <DialogDescription>
-            Vista de {imagen.ancho} × {imagen.alto} px. El original conserva todos los detalles.
+            Archivo del expediente de {imagen.ancho} × {imagen.alto} px.
           </DialogDescription>
         </DialogHeader>
         <Vista documento={documento} idSiniestro={idSiniestro} />
         <p className="text-muted-foreground">
-          Para leer texto pequeño o ampliar detalles, descargá el original de {imagen.anchoOriginal}{' '}
-          × {imagen.altoOriginal} px.
+          Las imágenes grandes se guardan comprimidas cuando ahorra espacio. La descarga entrega la
+          versión guardada en el expediente.
         </p>
         <Button asChild>
           <a
@@ -95,7 +95,7 @@ export function ImagenDocumento({
             rel="noopener noreferrer"
           >
             <Download aria-hidden="true" />
-            Descargar original
+            Descargar archivo
           </a>
         </Button>
       </DialogContent>

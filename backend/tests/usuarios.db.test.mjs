@@ -176,7 +176,6 @@ test('PostgreSQL: CU-04, jerarquía, contraseñas, casos, baja y sesiones; todos
                 numeroSiniestro: `${marca}-${++numero}`,
                 numeroPoliza: marca,
                 fechaAsignacion: new Date(),
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idUsuario: creado.id,
                 idAseguradora: aseguradora.id,

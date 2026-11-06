@@ -111,7 +111,6 @@ test(
             idEstadoSiniestro: estado.id,
             fechaAsignacion: antes,
             menorEdadInvolucrado: false,
-            demorado: true,
             fechaUltimoMovimiento: antes,
             ...extra,
           },
@@ -186,7 +185,6 @@ test(
       assert.equal(actualizado.causa, cambioGestor.hecho.causa)
       assert.equal(actualizado.horaOcurrencia.toISOString().slice(11, 19), '18:40:25')
       assert.equal(actualizado.fechaUltimoMovimiento.toISOString(), antes.toISOString())
-      assert.equal(actualizado.demorado, true)
       assert.equal(actualizado.revision, 1)
       assert.notEqual(actualizado.idDireccion, lugarCompartido.id)
       assert.equal(actualizado.direccion.pisoDepartamento, '2 A')
@@ -248,7 +246,6 @@ test(
       assert.equal(editado.idUsuario, gestor.id)
       assert.equal(editado.revision, 2)
       assert.equal(editado.fechaUltimoMovimiento.toISOString(), antes.toISOString())
-      assert.equal(editado.demorado, true)
       assert.equal(await prisma.notificacion.count({ where: { idSiniestro: s.id } }), 0)
       const eventos = await prisma.historialSiniestro.findMany({
         where: { idSiniestro: s.id },
@@ -348,7 +345,7 @@ test(
       const movimiento = new Date('2026-11-02T17:00:00Z')
       await prisma.siniestro.update({
         where: { id: independiente.id },
-        data: { fechaUltimoMovimiento: movimiento, demorado: false },
+        data: { fechaUltimoMovimiento: movimiento },
       })
       await prisma.usuario.update({
         where: { id: gestor.id },
@@ -370,7 +367,6 @@ test(
       assert.equal(sinConflicto.causa, abierto.hecho.causa)
       assert.equal(sinConflicto.revision, 1)
       assert.equal(sinConflicto.fechaUltimoMovimiento.toISOString(), movimiento.toISOString())
-      assert.equal(sinConflicto.demorado, false)
 
       // Conservar referencias retiradas que ya tenía el caso al abrir el formulario.
       const retirados = await caso({ idAjustador: ajustador.id, idDireccion: lugarCompartido.id })

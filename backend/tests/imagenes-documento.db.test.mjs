@@ -20,7 +20,7 @@ import { errorHandler, notFound } from '../src/middlewares/errorHandler.ts'
 import { HttpError } from '../src/utils/httpError.ts'
 
 test(
-  'imágenes: carga HTTP, R2, permisos, idempotencia, alta y borrado de las tres versiones',
+  'imágenes: carga HTTP, R2, permisos, idempotencia, alta y borrado, archivos nuevos y anteriores',
   { timeout: 90000 },
   async () => {
     const original = process.env.DATABASE_URL
@@ -79,7 +79,6 @@ test(
             numeroPoliza: 'P',
             fechaAsignacion: new Date('2026-10-01T15:00:00Z'),
             menorEdadInvolucrado: false,
-            demorado: true,
             idEstadoSiniestro: abierto.id,
             idAseguradora: aseguradora.id,
             idUsuario: gestor.id,
@@ -88,7 +87,8 @@ test(
       const s = await caso(),
         otro = await caso()
       const objetos = new Map(),
-        firmas = []
+        firmas = [],
+        heads = []
       let fallarMiniatura = false,
         perderConfirmacion = false
       const r2 = {
@@ -104,14 +104,15 @@ test(
             tamanoBytes: BigInt(archivo.contenido.byteLength),
           }
         },
-        subirDerivada: async (clave, contenido) => {
-          objetos.set(clave, { contenido: Buffer.from(contenido) })
+        subirDerivada: async (clave, contenido, metadata) => {
+          objetos.set(clave, { contenido: Buffer.from(contenido), metadata })
           if (fallarMiniatura && clave.includes('miniatura')) throw new HttpError(503, 'R2 caído')
         },
         eliminar: async (clave) => {
           objetos.delete(clave)
         },
         comprobarExistencia: async (clave) => {
+          heads.push(clave)
           if (!objetos.has(clave)) throw new HttpError(404, 'No existe')
           return objetos.get(clave).metadata
         },
@@ -185,9 +186,14 @@ test(
         [doc.anchoImagen, doc.altoImagen, doc.anchoOriginal, doc.altoOriginal],
         [1600, 1000, 2400, 1500],
       )
-      assert.equal(doc.tamanoBytes, BigInt(imagen.byteLength))
-      assert.deepEqual(objetos.get(doc.urlArchivoSinDominio).contenido, imagen)
-      assert.equal(objetos.size, 3)
+      const guardada = objetos.get(doc.urlArchivoSinDominio).contenido
+      assert.equal(doc.tamanoBytes, BigInt(guardada.byteLength))
+      assert.ok(guardada.length < imagen.length)
+      assert.equal(doc.nombreOriginal, 'foto.jpg')
+      assert.equal(doc.tipoExtension, 'webp')
+      assert.equal(doc.mimeType, 'image/webp')
+      assert.equal(doc.claveImagenOptimizada, null)
+      assert.equal(objetos.size, 2)
       const mini = await sharp(objetos.get(doc.claveMiniatura).contenido).metadata()
       assert.deepEqual([mini.width, mini.height], [300, 188])
       assert.equal(await prisma.historialSiniestro.count({ where: { idSiniestro: s.id } }), 1)
@@ -195,15 +201,25 @@ test(
         (await prisma.siniestro.findUniqueOrThrow({ where: { id: s.id } })).fechaUltimoMovimiento,
       )
       assert.equal((await enviar(imagen, 'foto.jpg', idCarga)).status, 200)
-      assert.equal(objetos.size, 3)
+      assert.equal(objetos.size, 2)
       const listado = await (await fetch(`${base}/${s.id}/documentos`)).json()
       assert.equal(listado[0].imagen.ancho, 1600)
       assert.ok(!JSON.stringify(listado).includes(doc.claveMiniatura), 'no expone claves de R2')
       for (const tipo of ['miniatura', 'vista', 'original']) {
+        const headsAntes = heads.length
         const r = await fetch(`${base}/${s.id}/documentos/${id}/${tipo}`, { redirect: 'manual' })
         assert.equal(r.status, 302)
         assert.equal(r.headers.get('cache-control'), 'private, no-store')
         assert.equal(firmas.at(-1).inline, tipo !== 'original')
+        assert.equal(heads.length - headsAntes, tipo === 'miniatura' ? 0 : 1)
+        assert.equal(
+          firmas.at(-1).clave,
+          tipo === 'miniatura' ? doc.claveMiniatura : doc.urlArchivoSinDominio,
+        )
+        assert.equal(
+          firmas.at(-1).nombre,
+          tipo === 'miniatura' ? 'foto-miniatura.webp' : 'foto.webp',
+        )
       }
       actor = ajeno
       assert.equal(
@@ -232,15 +248,15 @@ test(
       perderConfirmacion = true
       const idPerdido = randomUUID()
       assert.equal((await enviar(imagen, 'confirmada.jpg', idPerdido)).status, 503)
-      assert.equal(objetos.size, antes + 3, 'conserva las 3 versiones si el commit se confirmó')
+      assert.equal(objetos.size, antes + 2, 'conserva ambos archivos si el commit se confirmó')
       assert.equal((await enviar(imagen, 'confirmada.jpg', idPerdido)).status, 200)
-      assert.equal(objetos.size, antes + 3)
+      assert.equal(objetos.size, antes + 2)
       actor = admin
       const temporal = await alta.subirDocumento(admin, {
         nombreOriginal: 'alta.jpg',
         contenido: imagen,
       })
-      assert.equal([...objetos.keys()].filter((k) => k.startsWith(`altas/${admin.id}/`)).length, 3)
+      assert.equal([...objetos.keys()].filter((k) => k.startsWith(`altas/${admin.id}/`)).length, 2)
       const datos = crearSiniestroSchema.parse({
         datosCaso: {
           numeroSiniestro: 'ALTA-IMG',
@@ -262,13 +278,57 @@ test(
         documentos: [temporal],
         idUsuarioAsignado: gestor.id,
       })
+      datos.documentos[0].tipoExtension = 'jpg'
+      datos.documentos[0].mimeType = 'application/pdf'
+      datos.documentos[0].tamanoBytes = 1
       const creado = await alta.crear(admin, datos)
       const da = await prisma.documentoSiniestro.findFirstOrThrow({
         where: { idSiniestro: creado.id },
       })
       assert.equal(da.anchoImagen, 1600)
       assert.ok(objetos.has(da.claveMiniatura))
-      assert.ok(objetos.has(da.claveImagenOptimizada))
+      assert.equal(da.claveImagenOptimizada, null)
+      assert.equal(da.tipoExtension, 'webp')
+      assert.equal(da.mimeType, 'image/webp')
+      assert.equal(da.tamanoBytes, BigInt(objetos.get(da.urlArchivoSinDominio).contenido.length))
+      assert.equal([...objetos.keys()].filter((k) => k.startsWith(`altas/${admin.id}/`)).length, 0)
+      // También copia altas v1 que ya existían antes de la corrección, sin perder su original ni las vistas.
+      const claveAnterior = `altas/${admin.id}/${randomUUID()}.jpg`
+      const datosAnteriores = {
+        version: 1,
+        anchoOriginal: 2400,
+        altoOriginal: 1500,
+        ancho: 1600,
+        alto: 1000,
+        tamanoBytes: 400,
+      }
+      objetos.set(claveAnterior, {
+        contenido: imagen,
+        metadata: { 'imagen-v1': JSON.stringify(datosAnteriores) },
+      })
+      objetos.set(claveAnterior + '.vista.webp', { contenido: Buffer.from('vista anterior') })
+      objetos.set(claveAnterior + '.miniatura.webp', {
+        contenido: Buffer.from('miniatura anterior'),
+      })
+      const anterior = await alta.crear(admin, {
+        ...datos,
+        datosCaso: { ...datos.datosCaso, numeroSiniestro: 'ALTA-ANTERIOR' },
+        documentos: [
+          {
+            clave: claveAnterior,
+            nombreOriginal: 'anterior.jpg',
+            tipoExtension: 'jpg',
+            mimeType: 'image/jpeg',
+            tamanoBytes: imagen.length,
+          },
+        ],
+      })
+      const legado = await prisma.documentoSiniestro.findFirstOrThrow({
+        where: { idSiniestro: anterior.id },
+      })
+      assert.deepEqual(objetos.get(legado.urlArchivoSinDominio).contenido, imagen)
+      assert.ok(objetos.has(legado.claveImagenOptimizada))
+      assert.ok(objetos.has(legado.claveMiniatura))
       assert.equal([...objetos.keys()].filter((k) => k.startsWith(`altas/${admin.id}/`)).length, 0)
       const descartable = await alta.subirDocumento(admin, {
         nombreOriginal: 'descartar.jpg',

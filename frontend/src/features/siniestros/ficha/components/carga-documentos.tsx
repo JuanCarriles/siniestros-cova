@@ -102,7 +102,8 @@ export function CargaDocumentos({
         <p className="font-semibold">Arrastrá los archivos acá o usá Elegir archivos</p>
         <p className="text-muted-foreground">{DOCUMENTO_FORMATOS}. Hasta 10 MB por archivo.</p>
         <p className="text-sm text-muted-foreground">
-          Compresión sin pérdida durante el envío. Se conserva el archivo original.
+          Las imágenes grandes se guardan reducidas para ahorrar espacio; cuando se comprimen, no se
+          conserva el original. Los PDF no se modifican.
         </p>
       </div>
       {filas.length > 0 && (
@@ -135,11 +136,7 @@ export function CargaDocumentos({
                   value={f.progreso}
                   className="h-3 w-full appearance-none overflow-hidden rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary"
                 />
-                {f.error && (
-                  <p role="alert" className="font-semibold text-danger-ink">
-                    {f.error}
-                  </p>
-                )}
+                {f.error && <p className="font-semibold text-danger-ink">{f.error}</p>}
                 {['error', 'completo', 'pendiente'].includes(f.estado) && (
                   <div className="flex flex-wrap justify-end gap-2">
                     {f.estado === 'error' && f.reintentable && (

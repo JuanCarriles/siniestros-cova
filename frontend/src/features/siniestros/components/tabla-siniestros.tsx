@@ -94,7 +94,13 @@ export function TablaSiniestros({
     estado: (s) => <CeldaEstado siniestro={s} />,
     pericias: (s) => <CeldaPericias siniestro={s} onVer={onVer} />,
     abogado: (s) => <CeldaAbogado siniestro={s} onVer={onVer} />,
-    dias: (s) => <DiasSinMovimiento dias={s.diasSinMovimiento} cerrado={s.estado.esCierre} />,
+    dias: (s) => (
+      <DiasSinMovimiento
+        dias={s.diasSinMovimiento}
+        cerrado={s.estado.esCierre}
+        dadoDeBaja={s.eliminado}
+      />
+    ),
   }
 
   // Encabezados que ordenan: un enlace que cambia ?orden= (también se elige desde "Ordenar" en la barra)

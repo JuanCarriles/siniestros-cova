@@ -90,7 +90,6 @@ test('PostgreSQL: reglas de CU-03 dentro de una transacción reversible', async 
                 numeroSiniestro: `P-${++numero}`,
                 numeroPoliza: 'P-1',
                 fechaAsignacion: new Date(),
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idEstadoSiniestro,
                 idAseguradora: litoral.id,

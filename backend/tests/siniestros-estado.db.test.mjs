@@ -91,7 +91,6 @@ test(
             fechaAsignacion: antes,
             fechaUltimoMovimiento: antes,
             menorEdadInvolucrado: false,
-            demorado: true,
             ...extra,
           },
         })
@@ -146,7 +145,6 @@ test(
       const actualizado = await prisma.siniestro.findUniqueOrThrow({ where: { id: siniestro.id } })
       assert.equal(actualizado.idEstadoSiniestro, nuevo.id)
       assert.equal(actualizado.fechaUltimoMovimiento.toISOString(), ahora.toISOString())
-      assert.equal(actualizado.demorado, false)
       assert.equal(actualizado.fechaCierre, null)
       const historial = await prisma.historialSiniestro.findMany({
         where: { idSiniestro: siniestro.id },
@@ -286,7 +284,6 @@ test(
       assert.equal(pedido.idEstadoSiniestro, solicitud.id)
       assert.equal(pedido.fechaCierre, null)
       assert.equal(pedido.fechaUltimoMovimiento.toISOString(), ahora.toISOString())
-      assert.equal(pedido.demorado, false)
       const eventoGestor = await prisma.historialSiniestro.findFirstOrThrow({
         where: { idSiniestro: casoGestor.id },
       })

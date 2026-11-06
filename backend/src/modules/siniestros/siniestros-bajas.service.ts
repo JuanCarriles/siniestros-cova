@@ -196,7 +196,8 @@ export function crearServicioBajasSiniestros(deps: {
         const ahora = reloj()
         await tx.siniestro.update({
           where: { id },
-          data: { eliminado: true, fechaBaja: ahora, fechaUltimoMovimiento: ahora },
+          // La baja no es movimiento del caso (E5-10): un caso dado de baja no se marca demorado igual
+          data: { eliminado: true, fechaBaja: ahora },
         })
         await tx.historialSiniestro.create({
           data: {
@@ -247,6 +248,7 @@ export function crearServicioBajasSiniestros(deps: {
         const ahora = reloj()
         await tx.siniestro.update({
           where: { id },
+          // Reactivar reinicia el reloj (E5-10): el tiempo dado de baja no cuenta como demora
           data: { eliminado: false, fechaBaja: null, fechaUltimoMovimiento: ahora },
         })
         await tx.historialSiniestro.create({

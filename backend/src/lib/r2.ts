@@ -69,6 +69,14 @@ function errorR2(mensaje: string, error: unknown): HttpError {
   return new HttpError(503, mensaje, { codigo, estadoHTTP })
 }
 
+export function nombreDescargaArchivo(nombreOriginal: string, extension: string): string {
+  const nombre = nombreArchivoSchema.parse(nombreOriginal)
+  const actual = nombre.split('.').pop()?.toLowerCase()
+  if (actual === extension || (extension === 'jpg' && actual === 'jpeg')) return nombre
+  const base = nombre.replace(/\.[^.]+$/, '').slice(0, 254 - extension.length)
+  return `${base}.${extension}`
+}
+
 function disposicionDescarga(nombreOriginal: string): string {
   const nombre = nombreArchivoSchema.parse(nombreOriginal)
   const codificado = encodeURIComponent(nombre).replace(
@@ -145,10 +153,10 @@ export function crearAlmacenamientoR2(
     },
 
     // Solo derivados creados por sharp; WebP no se habilita como formato de entrada del usuario.
-    async subirDerivada(clave: string, contenido: Uint8Array) {
+    async subirDerivada(clave: string, contenido: Uint8Array, metadata?: Record<string, string>) {
       const key = claveArchivoSchema.parse(clave)
       if (
-        !/^(siniestros|altas)\/[1-9]\d*\/[a-f0-9-]+\.(jpe?g|png)\.(vista|miniatura)\.webp$/i.test(
+        !/^(siniestros|altas)\/[1-9]\d*\/[a-f0-9-]+\.(?:(jpe?g|png)\.(vista|miniatura)\.webp|webp(?:\.miniatura\.webp)?)$/i.test(
           key,
         ) ||
         !contenido.byteLength ||
@@ -162,6 +170,7 @@ export function crearAlmacenamientoR2(
             Key: key,
             Body: contenido,
             ContentType: 'image/webp',
+            Metadata: metadata,
             ContentLength: contenido.byteLength,
             CacheControl: 'private, no-store',
           }),
