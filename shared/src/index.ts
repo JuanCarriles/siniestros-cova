@@ -32,5 +32,4 @@ export * from './schemas/cambio-estado-siniestro.ts'
 export * from './schemas/edicion-caso.ts'
 export * from './schemas/bandeja-notificaciones.ts'
 export * from './schemas/reasignacion-siniestro.ts'
-
 export * from './schemas/archivos.ts'

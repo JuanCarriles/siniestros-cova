@@ -25,7 +25,7 @@ export function ImagenDocumento({
   const [error, setError] = useState(false)
   const imagen = documento.imagen
   const esPdf = documento.tipoExtension.toLowerCase() === 'pdf'
-  if (!esPdf && !['jpg', 'jpeg', 'png'].includes(documento.tipoExtension.toLowerCase()))
+  if (!esPdf && !['jpg', 'jpeg', 'png', 'webp'].includes(documento.tipoExtension.toLowerCase()))
     return <IconoArchivo extension={documento.tipoExtension} />
   return (
     <Dialog>
@@ -69,7 +69,7 @@ export function ImagenDocumento({
           <DialogDescription>
             {esPdf
               ? 'Leé el PDF aquí, sin guardarlo en tu equipo. Podés cambiar de página y ampliar.'
-              : 'Imagen original, sin recomprimir. Ajustá el tamaño o usá el zoom para leer los detalles.'}
+              : 'Imagen guardada en el expediente. Ajustá el tamaño o usá el zoom para leer los detalles.'}
           </DialogDescription>
         </DialogHeader>
         {esPdf ? (
@@ -88,7 +88,7 @@ export function ImagenDocumento({
             rel="noopener noreferrer"
           >
             <Download aria-hidden="true" />
-            Descargar original
+            Descargar archivo
           </a>
         </Button>
       </DialogContent>

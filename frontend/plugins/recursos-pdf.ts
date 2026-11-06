@@ -9,7 +9,8 @@ export function recursosPdf(): Plugin {
   const recursos = new Map<string, Buffer>()
   for (const carpeta of ['cmaps', 'standard_fonts', 'wasm'])
     for (const archivo of readdirSync(join(raiz, carpeta), { withFileTypes: true }))
-      if (archivo.isFile())
+      // El visor no ejecuta JavaScript de los PDF; conservar los codecs, como openjpeg.
+      if (archivo.isFile() && !archivo.name.startsWith('quickjs-eval'))
         recursos.set(
           `pdf-recursos/${carpeta}/${basename(archivo.name)}`,
           readFileSync(join(raiz, carpeta, archivo.name)),

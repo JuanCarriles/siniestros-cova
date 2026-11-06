@@ -125,7 +125,6 @@ test('PostgreSQL: carga con fecha automática y autor real; consulta y descarga;
               numeroSiniestro: 'P-ELIMINAR',
               numeroPoliza: 'P-ELIMINAR',
               fechaAsignacion: new Date(),
-              demorado: false,
               menorEdadInvolucrado: false,
               idUsuario: gestor.id,
               idAseguradora: aseguradora.id,

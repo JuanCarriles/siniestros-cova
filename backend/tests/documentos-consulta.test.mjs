@@ -72,9 +72,11 @@ test('lectura para PDF: SDK conserva bytes, acota 10 MB y cierra el stream', asy
     },
     s3,
   )
-  assert.deepEqual(await r2.leerParaVista('siniestros/1/prueba.pdf'), contenido)
+  const stream = await r2.leerParaVista('siniestros/1/prueba.pdf')
+  assert.deepEqual(Buffer.concat(await stream.toArray()), contenido)
   assert.equal(cuerpo.destroyed, true)
   grande = true
-  await assert.rejects(r2.leerParaVista('siniestros/1/prueba.pdf'), (e) => e.status === 503)
+  const excedido = await r2.leerParaVista('siniestros/1/prueba.pdf')
+  await assert.rejects(excedido.toArray(), (e) => e.status === 503)
   assert.equal(cuerpo.destroyed, true)
 })

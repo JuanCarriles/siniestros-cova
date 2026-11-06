@@ -1,6 +1,6 @@
-import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { Router, type RequestHandler } from 'express'
 import multer from 'multer'
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { altaPlantillaSchema, PLANTILLA_MAX_BYTES } from '@cova/shared/schemas/plantillas'
 import { idSchema } from '@cova/shared/schemas/comunes'
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'

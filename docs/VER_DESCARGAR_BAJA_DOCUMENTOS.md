@@ -5,11 +5,11 @@ Rama: `feat/ver-descargar-documento-siniestro`.
 ## Comportamiento
 
 - Ficha del siniestro > Documentos: grilla adaptable con miniaturas de imágenes, iconos para otros formatos, nombre original, tamaño, autor, tipo de usuario y fecha.
-- Imágenes originales: modal con ajuste, tamaño real y zoom; se conserva la corrección de nitidez de `feat/corregir-nitidez-imagenes`.
+- Imágenes: modal con ajuste, tamaño real y zoom sobre el archivo principal guardado. Se mantiene la política elegida en E6-02: versión optimizada más miniatura; no se promete un original adicional cuando se descartó al comprimir. Las imágenes anteriores conservan sus archivos existentes.
 - PDF: modal con páginas, zoom y texto extraíble. PDF.js y sus fuentes, mapas y codecs se sirven desde el mismo sistema. No se envía el expediente a Google, Microsoft ni otro visor externo. Los PDF protegidos con contraseña o dañados muestran un aviso y permiten descargar el original.
 - DOCX/XLSX: solo descarga, según el alcance acordado.
-- Descarga: acceso autorizado antes de emitir una URL privada de R2, por defecto 60 segundos y configurable hasta 300 segundos. Siempre `Content-Disposition: attachment`.
-- Baja: confirmación y motivo obligatorio de hasta 1000 caracteres. Conserva la fila y el original y sus derivados en R2; los excluye de la grilla y bloquea nuevos accesos por API.
+- Descarga: acceso autorizado antes de emitir una URL privada de R2, por defecto 60 segundos y configurable hasta 300 segundos. Siempre `Content-Disposition: attachment` y MIME validado forzado en la firma; los derivados usan image/webp.
+- Baja: confirmación y motivo obligatorio de hasta 1000 caracteres. Conserva la fila y el archivo principal y sus derivados en R2; los excluye de la grilla y bloquea nuevos accesos por API.
 - Registra `eliminado`, `fechaBaja`, `idUsuarioBaja`, `motivoBaja` y un evento DOCUMENTO en el historial con nombre original, motivo, autor y fecha. La baja y el evento se guardan juntos o se revierten juntos. No reinicia la fecha de último movimiento.
 - Un gestor solo puede dar de baja un documento propio, de un siniestro que siga asignado a él, hasta exactamente 48 horas desde la carga. Después debe solicitarlo a un administrador. Administrador y superadministrador no tienen el límite de autor/plazo. Los expedientes cerrados, dados de baja o en eliminación definitiva son de solo lectura para esta operación.
 - El servidor consulta el rol y estado actuales y valida después de bloquear el caso. Una pantalla abierta no conserva permisos si el caso se reasigna. Dos bajas simultáneas producen un único evento.
@@ -25,7 +25,7 @@ npm run prisma:migrate:deploy -w backend
 npm run prisma:generate -w backend
 ```
 
-La migración `20261108120000_baja_documentos_siniestro` agrega dos columnas opcionales y la relación al usuario responsable. No borra ni reinicia datos y no ejecuta seeds. Ya se aplicó en la base local durante la implementación.
+La migración existente `20261108120000_baja_documentos_siniestro` agrega los datos opcionales de baja y la relación al usuario responsable. Se conserva sin cambios. Esta corrección no agrega migraciones ni aplica cambios a la base local; las pruebas usan bases temporales.
 
 Con Docker:
 
@@ -39,9 +39,9 @@ No se modificaron Dockerfile ni Compose. El servicio de migración existente apl
 
 1. Entrar a un siniestro abierto, pestaña Documentos. Subir una imagen y un PDF reales.
 2. Abrir la imagen: comprobar tamaño real y zoom. Abrir el PDF: comprobar páginas, ajuste, zoom y texto de la página. En celular los controles se acomodan y el desplazamiento queda dentro del visor.
-3. Descargar el original y comprobar nombre y contenido. Word y Excel se descargan directamente.
+3. Descargar el archivo guardado y comprobar nombre, formato y contenido. Word y Excel se descargan directamente.
 4. Elegir Dar de baja, escribir el motivo y confirmar. El documento desaparece y disminuye el contador. Revisar Historial para encontrar autor, fecha y motivo. El objeto sigue en R2.
-5. Como gestor, comprobar que otro autor o una carga de más de 48 horas muestran la explicación de la restricción. Intentarlo directamente por API también devuelve 403. El administrador puede dar de baja esos documentos en un caso abierto.
+5. Como gestor, comprobar que otro autor o una carga de más de 48 horas muestran una sola explicación de la restricción arriba de la grilla, sin repetirla por tarjeta. Intentarlo directamente por API también devuelve 403. El administrador puede dar de baja esos documentos en un caso abierto.
 6. Si otro usuario ya lo dio de baja, se informa el conflicto y se recarga el listado.
 
 ## API
@@ -62,3 +62,15 @@ node --experimental-strip-types --env-file-if-exists=.env --test tests/documento
 ```
 
 La prueba integrada crea y elimina su propia base local temporal. Prueba lectura privada, baja auditada, restricciones de autor y 48 horas, roles actuales, confirmaciones concurrentes, reversión por fallo de historial y reasignación mientras una baja espera un bloqueo. No carga ni elimina archivos reales en R2.
+
+## Correcciones E6-04
+
+- Baja con React Hook Form y zodResolver: motivo requerido de hasta 1000 caracteres, contador visible, error asociado al campo por aria-describedby/aria-invalid y foco en el campo inválido.
+- El aviso de baja exitosa permanece hasta cerrarlo o realizar otra acción. Se puede cerrar desde su botón; el foco vuelve al título de la pestaña.
+- La baja reutiliza prepararEdicion con bloqueo del autor, conserva el orden caso → usuario y vuelve a evaluar rol, acceso y las 48 horas. El servicio valida el cuerpo una vez; la ruta solo lo entrega.
+- Los contratos DocumentoFicha siempre incluyen baja e imagen (null si no corresponde).
+- El PDF privado se obtiene con un GET a R2, sin HEAD previo, y se transmite como stream con límite real de 10 MB y cancelación al cerrar la lectura. Los fallos previos a transmitir responden 404/503; los fallos a mitad del stream cortan la respuesta para que el visor permita reintentar.
+- Los recursos locales de PDF.js excluyen quickjs-eval.wasm y conservan openjpeg, fuentes y mapas. No se incorpora un ejecutor de JavaScript del PDF.
+- Se integra la cadena corregida de E6-01/E6-02/E6-03; no se implementan las correcciones pendientes de E5-05.
+
+Pruebas adicionales: r2-vista.test.mjs comprueba GET único, lectura progresiva, límites, errores y liberación del stream; pdf-recursos.test.mjs verifica recursos de desarrollo y build. La prueba integrada de consulta comprueba que los accesos denegados no leen R2 y que la vista PDF no hace HEAD.

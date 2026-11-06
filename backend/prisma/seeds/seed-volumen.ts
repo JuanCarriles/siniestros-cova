@@ -144,7 +144,6 @@ try {
               fechaAsignacion: hace(asignadoHace),
               fechaUltimoMovimiento: hace(sinMovimiento),
               fechaCierre: estado.esCierre ? hace(sinMovimiento) : null,
-              demorado: !estado.esCierre && sinMovimiento >= 3,
               menorEdadInvolucrado: entero(0, 9) === 0,
               idEstadoSiniestro: estado.id,
               idAseguradora: aseguradora.id,

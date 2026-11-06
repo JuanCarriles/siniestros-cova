@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Readable } from 'node:stream'
 import test from 'node:test'
 import { once } from 'node:events'
 import { execFile } from 'node:child_process'
@@ -76,7 +77,6 @@ test(
             idAseguradora: aseguradora.id,
             idUsuario: gestor.id,
             menorEdadInvolucrado: false,
-            demorado: false,
           },
         })
       const caso = await crearCaso('CONSULTA'),
@@ -99,9 +99,16 @@ test(
           },
         })
       const contenido = Buffer.from('%PDF-1.7 prueba')
+      let heads = 0,
+        lecturas = 0
       const r2 = {
-        comprobarExistencia: async () => {},
-        leerParaVista: async () => contenido,
+        comprobarExistencia: async () => {
+          heads++
+        },
+        leerParaVista: async () => {
+          lecturas++
+          return Readable.from([contenido.subarray(0, 6), contenido.subarray(6)])
+        },
         firmarDescarga: async () => ({ url: 'https://example.invalid/privado?X-Amz-Expires=60' }),
       }
       const transaccion = (trabajo) => db.$transaction(trabajo, { timeout: 15000 })
@@ -144,9 +151,13 @@ test(
         'PDF privado y descarga firmada; prohíbe otros expedientes y documentos ajenos al caso',
         async () => {
           const d = await crearDoc()
+          const headsAntes = heads,
+            lecturasAntes = lecturas
           const r = await pedir(ruta(d) + '/contenido')
           assert.equal(r.status, 200, await r.clone().text())
           assert.deepEqual(Buffer.from(await r.arrayBuffer()), contenido)
+          assert.equal(heads, headsAntes, 'la vista PDF usa GET sin HEAD previo')
+          assert.equal(lecturas, lecturasAntes + 1)
           assert.equal(r.headers.get('cache-control'), 'private, no-store')
           assert.match(r.headers.get('content-disposition'), /^attachment/)
           assert.equal((await pedir(ruta(d) + '/original')).status, 302)
@@ -154,6 +165,7 @@ test(
           actor = otro
           assert.equal((await pedir(ruta(d) + '/contenido')).status, 403)
           actor = gestor
+          assert.equal(lecturas, lecturasAntes + 1, 'rechazar acceso no lee R2')
         },
       )
       await t.test(

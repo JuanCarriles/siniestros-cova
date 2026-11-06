@@ -4,7 +4,7 @@ import type { DocumentoFicha } from '@cova/shared/schemas/ficha-siniestro'
 import { Button } from '@/components/ui/button'
 import { rutaArchivoDocumento } from '../documentos/rutas'
 
-/** El visor y Guardar imagen como usan los bytes del original, nunca el WebP de calidad 80. */
+/** El visor y la descarga usan el archivo principal guardado, con ajuste y zoom sin ampliación automática. */
 export function VistaImagenOriginal({
   documento,
   idSiniestro,
@@ -18,8 +18,8 @@ export function VistaImagenOriginal({
   const [error, setError] = useState(false)
   const [intento, setIntento] = useState(0)
   const [medidas, setMedidas] = useState({
-    ancho: documento.imagen?.anchoOriginal ?? 0,
-    alto: documento.imagen?.altoOriginal ?? 0,
+    ancho: documento.imagen?.ancho ?? 0,
+    alto: documento.imagen?.alto ?? 0,
   })
   const original = rutaArchivoDocumento(idSiniestro, documento.id, 'original')
 
@@ -36,7 +36,7 @@ export function VistaImagenOriginal({
         className="grid min-h-40 justify-items-center gap-3 rounded-lg border bg-muted p-6 text-center"
       >
         <ImageOff aria-hidden="true" className="size-8" />
-        <p>No se pudo cargar la imagen original. Podés reintentar o descargarla.</p>
+        <p>No se pudo cargar la imagen del expediente. Podés reintentar o descargarla.</p>
         <Button
           variant="outline"
           onClick={() => {
@@ -106,20 +106,20 @@ export function VistaImagenOriginal({
       {!cargada && (
         <p role="status" className="flex items-center gap-2 text-muted-foreground">
           <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
-          Cargando imagen original…
+          Cargando imagen del expediente…
         </p>
       )}
       <div
         tabIndex={0}
         role="region"
-        aria-label="Imagen original; al ampliar podés desplazarte horizontal y verticalmente"
+        aria-label="Imagen del expediente; al ampliar podés desplazarte horizontal y verticalmente"
         aria-busy={!cargada}
         className="max-h-[55dvh] min-h-40 min-w-0 overflow-auto overscroll-contain rounded-lg border-2 border-line bg-surface-subtle focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         <img
           ref={imagen}
           src={intento ? `${original}?intento=${intento}` : original}
-          alt={`Imagen original de ${documento.nombreOriginal}`}
+          alt={`Imagen del expediente de ${documento.nombreOriginal}`}
           referrerPolicy="no-referrer"
           onLoad={(e) => {
             const img = e.currentTarget
@@ -143,7 +143,7 @@ export function VistaImagenOriginal({
       <p className="min-w-0 break-words text-muted-foreground">
         {cargada && (
           <span className="block dato">
-            Original: {medidas.ancho} × {medidas.alto} px.{' '}
+            Archivo: {medidas.ancho} × {medidas.alto} px.{' '}
           </span>
         )}
         Tamaño real muestra el 100%. Al ampliar, desplazate dentro de la imagen para recorrerla.

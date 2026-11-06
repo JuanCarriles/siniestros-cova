@@ -1,6 +1,6 @@
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import type { Prisma } from '../../generated/prisma/client.ts'
-import type { AlmacenamientoR2 } from '../../lib/r2.ts'
+import { nombreDescargaArchivo, type AlmacenamientoR2 } from '../../lib/r2.ts'
 import { exigirAccesoSiniestro } from '../siniestros/siniestros-acceso.ts'
 import { HttpError } from '../../utils/httpError.ts'
 
@@ -34,18 +34,28 @@ export function crearServicioArchivosDocumento(
           ? documento.urlArchivoSinDominio
           : tipo === 'miniatura'
             ? documento.claveMiniatura
-            : documento.claveImagenOptimizada
+            : (documento.claveImagenOptimizada ?? documento.urlArchivoSinDominio)
       if (!clave)
         throw new HttpError(404, 'Esta imagen no tiene una vista reducida. Descargá el original.')
       if (!clave.startsWith(`siniestros/${idSiniestro}/`))
         throw new HttpError(409, 'La ubicación del documento no corresponde a este siniestro.')
-      if (tipo === 'contenido' && documento.tipoExtension.toLowerCase() !== 'pdf')
-        throw new HttpError(400, 'Esta vista está disponible para archivos PDF.')
-      await almacenamiento().comprobarExistencia(clave)
-      if (tipo === 'contenido') return { contenido: await almacenamiento().leerParaVista(clave) }
+      if (tipo === 'contenido') {
+        if (documento.tipoExtension.toLowerCase() !== 'pdf')
+          throw new HttpError(400, 'Esta vista está disponible para archivos PDF.')
+        // GET distingue ausencia y entrega el cuerpo como stream; no duplicar la consulta con HEAD.
+        return { contenido: await almacenamiento().leerParaVista(clave) }
+      }
+      // Las miniaturas ya tienen onError en la grilla: no pagar un HEAD por cada tarjeta.
+      if (tipo !== 'miniatura') await almacenamiento().comprobarExistencia(clave)
+      const principal = clave === documento.urlArchivoSinDominio
+      const nombre = nombreDescargaArchivo(
+        documento.nombreOriginal,
+        principal ? documento.tipoExtension : 'webp',
+      )
       return almacenamiento().firmarDescarga(
         clave,
-        tipo === 'original' ? documento.nombreOriginal : `${tipo}.webp`,
+        tipo === 'miniatura' ? nombre.replace(/\.webp$/i, '-miniatura.webp') : nombre,
+        principal ? documento.mimeType : 'image/webp',
       )
     },
   }

@@ -1,8 +1,8 @@
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import { PERICIAS_DASHBOARD_POR_PAGINA, type DashboardGestor } from '@cova/shared/schemas/dashboard'
-import { DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
+import { sinMovimiento } from '../siniestros/demora.ts'
 
 type BaseDashboard = {
   transaccion: <T>(trabajo: (tx: Prisma.TransactionClient) => Promise<T>) => Promise<T>
@@ -16,7 +16,6 @@ export function crearServicioDashboard(base: BaseDashboard, reloj = () => new Da
         throw new HttpError(403, 'Este dashboard muestra el trabajo asignado a un gestor.')
       }
       const ahora = reloj()
-      const limite = new Date(ahora.getTime() - DIAS_DEMORADO * DIA_MS)
       const activos = {
         idUsuario: usuario.id,
         eliminado: false,
@@ -34,13 +33,7 @@ export function crearServicioDashboard(base: BaseDashboard, reloj = () => new Da
       return base.transaccion(async (tx) => {
         const cantidadActivos = await tx.siniestro.count({ where: activos })
         const demorados = await tx.siniestro.count({
-          where: {
-            ...activos,
-            OR: [
-              { fechaUltimoMovimiento: { lte: limite } },
-              { fechaUltimoMovimiento: null, fechaAsignacion: { lte: limite } },
-            ],
-          },
+          where: { AND: [activos, sinMovimiento(ahora)] },
         })
         const total = await tx.perito.count({ where: pendientes })
         const porPagina = PERICIAS_DASHBOARD_POR_PAGINA

@@ -1,6 +1,8 @@
-import { useRef, useState } from 'react'
+import { useId, useRef } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import type { DocumentoFicha } from '@cova/shared/schemas/ficha-siniestro'
-import { bajaDocumentoSchema } from '@cova/shared/schemas/documentos'
+import { bajaDocumentoSchema, type BajaDocumento } from '@cova/shared/schemas/documentos'
 import { ArchiveX } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { Aviso } from '@/components/aviso'
@@ -29,37 +31,43 @@ export function BajaDocumentoDialog({
   onHecho: () => void
   onDesactualizado: () => void
 }) {
-  const [motivo, setMotivo] = useState('')
-  const [error, setError] = useState('')
-  const [enviando, setEnviando] = useState(false)
+  const id = useId()
+  const campoId = `${id}-motivo`
+  const ayudaId = `${id}-ayuda`
+  const contadorId = `${id}-contador`
+  const errorId = `${id}-error`
   const pendiente = useRef(false)
-  async function confirmar(e: React.FormEvent) {
-    e.preventDefault()
+  const {
+    register,
+    control,
+    handleSubmit,
+    setFocus,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<BajaDocumento>({
+    resolver: zodResolver(bajaDocumentoSchema),
+    defaultValues: { motivo: '' },
+  })
+  const motivo = useWatch({ control, name: 'motivo' })
+  async function confirmar(datos: BajaDocumento) {
     if (pendiente.current) return
-    const datos = bajaDocumentoSchema.safeParse({ motivo })
-    if (!datos.success) {
-      setError(datos.error.issues[0].message)
-      return
-    }
     pendiente.current = true
-    setEnviando(true)
-    setError('')
     try {
       await api(`/siniestros/${idSiniestro}/documentos/${documento.id}/baja`, {
         method: 'PATCH',
-        body: datos.data,
+        body: datos,
       })
       onHecho()
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : 'No se pudo dar de baja el documento. Probá de nuevo.',
-      )
+      setError('root', {
+        message:
+          err instanceof ApiError
+            ? err.message
+            : 'No se pudo dar de baja el documento. Probá de nuevo.',
+      })
       if (err instanceof ApiError && [403, 404, 409].includes(err.status)) onDesactualizado()
     } finally {
       pendiente.current = false
-      setEnviando(false)
     }
   }
   return (
@@ -70,7 +78,11 @@ export function BajaDocumentoDialog({
       }}
     >
       <DialogContent
-        showCloseButton={!enviando}
+        showCloseButton={!isSubmitting}
+        onOpenAutoFocus={(e) => {
+          e.preventDefault()
+          setFocus('motivo')
+        }}
         onEscapeKeyDown={(e) => {
           if (pendiente.current) e.preventDefault()
         }}
@@ -91,33 +103,40 @@ export function BajaDocumentoDialog({
           Dejará de aparecer en la grilla. El archivo se conserva y la baja quedará registrada con
           tu nombre, la fecha y el motivo.
         </p>
-        <form onSubmit={(e) => void confirmar(e)} className="grid gap-4">
+        <form noValidate onSubmit={(e) => void handleSubmit(confirmar)(e)} className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="motivo-baja-documento">Motivo de la baja (obligatorio)</Label>
+            <Label htmlFor={campoId}>Motivo de la baja (obligatorio)</Label>
             <Textarea
-              id="motivo-baja-documento"
-              autoFocus
+              {...register('motivo')}
+              id={campoId}
               required
               maxLength={1000}
-              value={motivo}
-              disabled={enviando}
-              onChange={(e) => setMotivo(e.target.value)}
-              aria-describedby="ayuda-motivo-documento"
+              disabled={isSubmitting}
+              aria-invalid={Boolean(errors.motivo)}
+              aria-describedby={`${ayudaId} ${contadorId}${errors.motivo ? ` ${errorId}` : ''}`}
             />
-            <p id="ayuda-motivo-documento" className="text-muted-foreground">
-              Explicá por qué se retira del expediente. Hasta 1000 caracteres.
+            <p id={ayudaId} className="text-muted-foreground">
+              Explicá por qué se retira del expediente.
             </p>
+            <p id={contadorId} className="text-right dato text-muted-foreground">
+              {motivo.length} / 1000 caracteres
+            </p>
+            {errors.motivo?.message && (
+              <p id={errorId} role="alert" className="font-semibold text-destructive">
+                {errors.motivo.message}
+              </p>
+            )}
           </div>
-          {error && (
+          {errors.root?.message && (
             <Aviso tipo="error" enfocar>
-              {error}
+              {errors.root.message}
             </Aviso>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={enviando} onClick={onCerrar}>
+            <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCerrar}>
               Cancelar
             </Button>
-            <Button type="submit" variant="destructive" loading={enviando}>
+            <Button type="submit" variant="destructive" loading={isSubmitting}>
               <ArchiveX aria-hidden="true" />
               Confirmar baja
             </Button>

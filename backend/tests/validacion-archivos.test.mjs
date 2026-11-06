@@ -64,12 +64,13 @@ async function servidor() {
   const siniestro = {
     id: 1,
     idUsuario: 1,
+    numeroSiniestro: 'PRUEBA-1',
     eliminado: false,
     eliminacionEnCurso: false,
     estadoSiniestro: { esCierre: false },
   }
   const prisma = {
-    usuario: { findFirst: async () => actor },
+    usuario: { findFirst: async () => actor, findMany: async () => [] },
     siniestro: {
       findUnique: async () => siniestro,
       findUniqueOrThrow: async () => siniestro,
@@ -171,11 +172,8 @@ test('firmas: formatos reales, JPEG y mayúsculas; un nombre permitido no hace v
       nombreOriginal: 'pagina.pdf',
       contenido: Buffer.from('<html><script>alert(1)</script></html>'),
     },
-    { nombreOriginal: 'imagen.png', contenido: await fixture('jpg') },
-    { nombreOriginal: 'documento.docx', contenido: await fixture('xlsx') },
     { nombreOriginal: 'zip.docx', contenido: Buffer.from('PK\x03\x04 ZIP genérico incompleto') },
     { nombreOriginal: 'vacio.pdf', contenido: Buffer.alloc(0) },
-    { nombreOriginal: 'sin-extension', contenido: await fixture('pdf') },
   ])
     await assert.rejects(validarArchivoPlantilla(archivo), (e) => {
       assert.equal(e.status, 400)
@@ -189,8 +187,6 @@ test('HTTP: ficha, alta y plantillas rechazan tipo falso, vacío y exceso antes 
   t.after(api.cerrar)
   const casos = [
     [Buffer.from('MZ falso PDF'), 'renombrado.pdf', 400],
-    [await fixture('xlsx'), 'renombrado.docx', 400],
-    [await fixture('jpg'), 'renombrado.png', 400],
     [Buffer.alloc(0), 'vacio.pdf', 400],
     [Buffer.alloc(ARCHIVO_MAX_BYTES + 1), 'grande.pdf', 413],
   ]
@@ -281,18 +277,21 @@ test('attachment: objetos y URLs firmadas de originales, vistas y miniaturas; ta
   const respuesta = await api.enviar(
     '/api/siniestros/1/documentos',
     bytes,
-    'Inspección vehículo.jpg',
+    'Inspección vehículo.pdf',
   )
   assert.equal(respuesta.status, 201)
   const { id } = await respuesta.json()
-  assert.equal(api.puts.length, 3)
+  assert.equal(api.puts.length, 2)
   for (const p of api.puts) {
     assert.match(p.ContentDisposition, /^attachment;/)
     assert.ok(p.ContentDisposition.includes("filename*=UTF-8''"))
   }
   for (const tipo of ['miniatura', 'vista', 'original']) {
     // Simula metadata de un objeto que existía antes de E6-03: la firma siempre fuerza attachment.
-    for (const p of api.objetos.values()) p.ContentDisposition = 'inline'
+    for (const p of api.objetos.values()) {
+      p.ContentDisposition = 'inline'
+      p.ContentType = 'text/plain'
+    }
     const r = await fetch(`${api.base}/api/siniestros/1/documentos/${id}/${tipo}`, {
       redirect: 'manual',
     })
@@ -305,17 +304,20 @@ test('attachment: objetos y URLs firmadas de originales, vistas y miniaturas; ta
         ? documento.urlArchivoSinDominio
         : tipo === 'miniatura'
           ? documento.claveMiniatura
-          : documento.claveImagenOptimizada
+          : (documento.claveImagenOptimizada ?? documento.urlArchivoSinDominio)
     assert.ok(
       decodeURIComponent(url.pathname).endsWith('/' + esperada),
       `La ruta ${tipo} debe servir su versión correcta`,
     )
     if (tipo === 'original') {
-      assert.notEqual(esperada, documento.claveImagenOptimizada)
-      assert.deepEqual(Buffer.from(api.objetos.get(esperada).Body), bytes)
+      assert.equal(documento.claveImagenOptimizada, null)
+      const metadata = await sharp(api.objetos.get(esperada).Body).metadata()
+      assert.equal(metadata.width, 1600)
+      assert.equal(metadata.format, 'webp')
     }
 
     assert.equal(url.searchParams.get('X-Amz-Expires'), '60')
+    assert.equal(url.searchParams.get('response-content-type'), 'image/webp')
     if (tipo === 'original')
       assert.ok(url.searchParams.get('response-content-disposition').includes('Inspecci%C3%B3n'))
   }
@@ -329,4 +331,83 @@ test('proxy: el rechazo de Nginx mantiene el mismo máximo y los mismos formatos
   const json = /return 413 '(.*?)';/.exec(conf)?.[1]
   requisitos(JSON.parse(json).error)
   assert.ok(conf.includes('error_page 413 = @archivo_grande;'))
+})
+
+test('contenido real: acepta nombres equivocados o sin extensión y guarda MIME/extensión canónicos en las tres subidas', async (t) => {
+  const api = await servidor()
+  t.after(api.cerrar)
+  const png = await sharp({ create: { width: 40, height: 30, channels: 3, background: 'white' } })
+    .png()
+    .toBuffer()
+  const casos = [
+    [png, 'foto.jpg', 'png', 'image/png'],
+    [await fixture('pdf'), 'informe', 'pdf', 'application/pdf'],
+    [await fixture('pdf'), 'nombre-erroneo.exe', 'pdf', 'application/pdf'],
+    [
+      await fixture('docx'),
+      'carta.xlsx',
+      'docx',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ],
+    [
+      await fixture('xlsx'),
+      'planilla.pdf',
+      'xlsx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ],
+  ]
+  for (const ruta of [
+    '/api/siniestros/1/documentos',
+    '/api/siniestros/alta/documentos',
+    '/api/plantillas',
+  ])
+    for (const [contenido, nombre, extension, mime] of casos) {
+      const antes = api.puts.length
+      const respuesta = await api.enviar(ruta, contenido, nombre, 'application/x-msdownload')
+      assert.equal(respuesta.status, 201, `${ruta}: ${nombre}: ${await respuesta.clone().text()}`)
+      const principal = api.puts.slice(antes).find((p) => !p.Key.endsWith('.miniatura.webp'))
+      assert.ok(principal.Key.endsWith('.' + extension))
+      assert.equal(principal.ContentType, mime)
+      assert.deepEqual(Buffer.from(principal.Body), contenido)
+      assert.match(principal.ContentDisposition, /^attachment;/)
+      const datos = await respuesta.json()
+      const guardado = ruta.endsWith('/1/documentos')
+        ? api.documentos.find((d) => d.id === datos.id)
+        : datos
+      assert.equal(guardado.nombreOriginal, nombre)
+      assert.equal(guardado.tipoExtension, extension)
+      if ('mimeType' in guardado) assert.equal(guardado.mimeType, mime)
+    }
+})
+
+test('firmas: JPEG principal fuerza image/jpeg y miniatura fuerza image/webp, aunque R2 tenga MIME incorrecto', async (t) => {
+  const api = await servidor()
+  t.after(api.cerrar)
+  const bytes = await sharp({ create: { width: 40, height: 30, channels: 3, background: 'white' } })
+    .jpeg()
+    .toBuffer()
+  const r = await api.enviar('/api/siniestros/1/documentos', bytes, 'imagen.pdf', 'application/pdf')
+  assert.equal(r.status, 201)
+  const { id } = await r.json()
+  for (const p of api.objetos.values()) {
+    p.ContentType = 'text/html'
+    p.ContentDisposition = 'inline'
+  }
+  for (const tipo of ['original', 'vista', 'miniatura']) {
+    const respuesta = await fetch(`${api.base}/api/siniestros/1/documentos/${id}/${tipo}`, {
+      redirect: 'manual',
+    })
+    assert.equal(respuesta.status, 302)
+    const url = new URL(respuesta.headers.get('location'))
+    assert.equal(
+      url.searchParams.get('response-content-type'),
+      tipo === 'miniatura' ? 'image/webp' : 'image/jpeg',
+    )
+    assert.match(url.searchParams.get('response-content-disposition'), /^attachment;/)
+    assert.ok(
+      url.searchParams
+        .get('response-content-disposition')
+        .includes(tipo === 'miniatura' ? 'imagen-miniatura.webp' : 'imagen.jpg'),
+    )
+  }
 })

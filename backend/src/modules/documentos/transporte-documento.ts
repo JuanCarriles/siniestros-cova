@@ -1,6 +1,6 @@
-import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { gunzip } from 'node:zlib'
 import { promisify } from 'node:util'
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { DOCUMENTO_MAX_BYTES, compresionDocumentoSchema } from '@cova/shared/schemas/documentos'
 import type { ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'

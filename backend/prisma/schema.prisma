@@ -22,6 +22,10 @@ enum TipoNotificacion {
   MENSAJE_NUEVO
   ASIGNACION_SINIESTRO
   REASIGNACION_SINIESTRO
+  /// La tarea programada de demoras (E5-10): 72 horas sin movimiento
+  CASO_DEMORADO
+  /// …y 7 días sin movimiento (el semáforo en rojo)
+  CASO_EN_ALERTA
 }
 
 // La descripción de cada evento la arma src/modules/historial/historial.textos.ts
@@ -40,6 +44,7 @@ enum TipoEventoHistorial {
   PERSONA
   ABOGADO
   PERITO
+  ALTA_SINIESTRO
 }
 
 enum TipoPerito {
@@ -133,6 +138,7 @@ model Usuario {
   lecturasMensajes      LecturaMensajeChat[]
   documentosSiniestro   DocumentoSiniestro[]
   documentosDadosDeBaja DocumentoSiniestro[]    @relation("BajaDocumentoSiniestro")
+  novedadesSiniestro    NovedadSiniestro[]
   siniestros            Siniestro[]
   sesiones              Sesion[]
   recuperacion          RecuperacionContrasena?
@@ -198,14 +204,18 @@ model Notificacion {
 }
 
 model HistorialSiniestro {
-  id          Int                 @id @default(autoincrement())
-  tipoEvento  TipoEventoHistorial
-  descripcion String
-  fechaEvento DateTime            @default(now()) @db.Timestamptz(3)
-  idSiniestro Int
-  idUsuario   Int
-  eliminado   Boolean             @default(false)
-  fechaBaja   DateTime?           @db.Timestamptz(3)
+  id               Int                 @id @default(autoincrement())
+  tipoEvento       TipoEventoHistorial
+  descripcion      String
+  fechaEvento      DateTime            @default(now()) @db.Timestamptz(3)
+  idSiniestro      Int
+  idUsuario        Int
+  /// Nombre y rol de quien lo hizo, tal como eran en ese momento (E5-09). Los completa la base al registrar el evento
+  /// (trigger de la migración historial_autor); la ficha muestra estos y no los actuales del usuario.
+  autorNombre      String?
+  autorTipoUsuario TipoUsuario?
+  eliminado        Boolean             @default(false)
+  fechaBaja        DateTime?           @db.Timestamptz(3)
 
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -252,7 +262,7 @@ model DocumentoSiniestro {
   /// Identifica una carga para no duplicar documentos cuando se reintenta una respuesta perdida.
   idCarga               String?   @unique @db.Uuid
   hashContenido         String?   @db.VarChar(64)
-  /// Derivados privados; urlArchivoSinDominio siempre conserva el original intacto.
+  /// Archivo principal y miniatura privados. La clave de vista solo se conserva para imágenes v1.
   claveImagenOptimizada String?
   claveMiniatura        String?
   anchoOriginal         Int?
@@ -265,6 +275,7 @@ model DocumentoSiniestro {
   urlArchivoSinDominio  String
   tipoExtension         String
   mimeType              String
+  /// Tamaño real del archivo guardado, después de la compresión si corresponde.
   tamanoBytes           BigInt
   fechaCarga            DateTime  @default(now()) @db.Timestamptz(3)
   idUsuario             Int
@@ -284,17 +295,28 @@ model DocumentoSiniestro {
 }
 
 model NovedadSiniestro {
-  id          Int       @id @default(autoincrement())
-  descripcion String
-  /// Nombre y apellido del usuario asignado al siniestro al momento de cargarla (texto, no FK).
-  autor       String
-  fechaCarga  DateTime  @default(now()) @db.Timestamptz(3)
-  idSiniestro Int
-  eliminado   Boolean   @default(false)
-  fechaBaja   DateTime? @db.Timestamptz(3)
+  id               Int          @id @default(autoincrement())
+  descripcion      String
+  /// Nombre y apellido de quien la cargó, tal como era en ese momento: es lo que muestra la ficha, aunque
+  /// después cambie su perfil
+  autor            String
+  /// Su tipo de usuario en ese momento (E5-08). Vacío en las anteriores a E5-08: no se registraba
+  tipoUsuarioAutor TipoUsuario?
+  fechaCarga       DateTime     @default(now()) @db.Timestamptz(3)
+  /// Quien la cargó (E5-08). En las anteriores, solo si el nombre guardado es el de un único usuario (migración
+  /// novedades_autor_historico); si no, queda vacío. Las novedades no se editan ni se borran desde el sistema;
+  /// solo se van con el borrado físico del siniestro.
+  idUsuario        Int?
+  /// Identificador de cada envío del formulario: si se reintenta después de perder la respuesta, no se duplica
+  claveEnvio       String?      @unique
+  idSiniestro      Int
+  eliminado        Boolean      @default(false)
+  fechaBaja        DateTime?    @db.Timestamptz(3)
 
+  usuario   Usuario?  @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  @@index([idUsuario])
   @@index([idSiniestro, eliminado, fechaCarga])
 }
 
@@ -469,7 +491,6 @@ model Siniestro {
   numeroSiniestro       String
   numeroPoliza          String
   fechaAsignacion       DateTime  @db.Timestamptz(3)
-  demorado              Boolean
   menorEdadInvolucrado  Boolean
   idEstadoSiniestro     Int
   idAseguradora         Int
@@ -480,6 +501,8 @@ model Siniestro {
   sucursal              String?
   causa                 String?
   fechaCierre           DateTime? @db.Timestamptz(3)
+  /// Cuándo se movió el caso por última vez (RF-19, E5-10): cambio de estado, novedad, documento o cierre de pericia.
+  /// La demora (72 horas) y el semáforo se calculan al consultar, desde acá; no se guardan.
   fechaUltimoMovimiento DateTime? @db.Timestamptz(3)
   idAjustador           Int?
   idDireccion           Int?

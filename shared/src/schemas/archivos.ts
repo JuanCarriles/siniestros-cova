@@ -16,8 +16,5 @@ export function errorSeleccionArchivo(archivo: { name: string; size: number }): 
     return rechazoArchivo('El archivo está vacío o su tamaño no es válido. Elegí otro documento.')
   if (archivo.size > ARCHIVO_MAX_BYTES)
     return rechazoArchivo(`El archivo supera el máximo de ${ARCHIVO_MAX_MB} MB.`)
-  const extension = archivo.name.split('.').pop()?.toLowerCase()
-  if (!ARCHIVO_EXTENSIONES.some((permitida) => permitida === extension))
-    return rechazoArchivo('La extensión del archivo no está permitida.')
   return null
 }

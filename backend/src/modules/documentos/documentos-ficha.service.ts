@@ -51,7 +51,7 @@ export function crearServicioDocumentosFicha(prisma: Base, reloj = () => new Dat
           idUsuario,
           eliminado,
           claveMiniatura,
-          claveImagenOptimizada,
+          claveImagenOptimizada: _claveImagenOptimizada,
           anchoOriginal,
           altoOriginal,
           anchoImagen,
@@ -67,7 +67,6 @@ export function crearServicioDocumentosFicha(prisma: Base, reloj = () => new Dat
           ),
           imagen:
             claveMiniatura &&
-            claveImagenOptimizada &&
             anchoOriginal &&
             altoOriginal &&
             anchoImagen &&

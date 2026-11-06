@@ -29,6 +29,16 @@ export const eventoHistorial = {
       TipoEventoHistorial.MODIFICACION_DATOS,
       `Se modificaron datos del caso: ${cambios.join('; ')}.`,
     ),
+  /**
+   * "María Rearte dio de alta el siniestro el 20/10/2026" (E5-09). Es el primer evento de cada siniestro dado de alta
+   * desde esta historia. Los cargados antes no lo tienen y no se reconstruye: la ficha avisa que su historial puede
+   * estar incompleto.
+   */
+  altaSiniestro: (autor: Persona, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.ALTA_SINIESTRO,
+      `${nombreCompleto(autor)} dio de alta el siniestro el ${formatearFecha(fecha)}`,
+    ),
   bajaSiniestro: (autor: Persona, fecha: Date) =>
     evento(
       TipoEventoHistorial.BAJA_SINIESTRO,

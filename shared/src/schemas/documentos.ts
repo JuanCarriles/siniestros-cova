@@ -1,5 +1,15 @@
 import { z } from 'zod'
 import {
+  claveArchivoSchema,
+  esquemaEdicion,
+  extensionArchivoSchema,
+  fechaHoraSchema,
+  idSchema,
+  mimeTypeSchema,
+  tamanoBytesSchema,
+  textoSchema,
+} from './comunes.ts'
+import {
   PLANTILLA_MAX_BYTES,
   PLANTILLA_ACCEPT,
   PLANTILLA_FORMATOS,
@@ -55,17 +65,6 @@ export function permisoBajaDocumento(
     }
   return { permitida: true, motivo: null }
 }
-
-import {
-  claveArchivoSchema,
-  esquemaEdicion,
-  extensionArchivoSchema,
-  fechaHoraSchema,
-  idSchema,
-  mimeTypeSchema,
-  tamanoBytesSchema,
-  textoSchema,
-} from './comunes.ts'
 
 // Datos de alta de DocumentoSiniestro; id y baja lógica se gestionan por separado.
 export const documentoSiniestroSchema = z.strictObject({

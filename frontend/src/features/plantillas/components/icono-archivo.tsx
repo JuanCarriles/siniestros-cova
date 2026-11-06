@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 // Marcas de formato en SVG local: visibles con zoom, sin imágenes remotas ni colores literales.
 export function IconoArchivo({ extension, className }: { extension: string; className?: string }) {
   const formato = extension.toLowerCase()
-  const esImagen = ['jpg', 'jpeg', 'png'].includes(formato)
+  const esImagen = ['jpg', 'jpeg', 'png', 'webp'].includes(formato)
   const esExcel = ['xlsx', 'xls'].includes(formato)
   const esWord = ['docx', 'doc'].includes(formato)
   const etiqueta =
