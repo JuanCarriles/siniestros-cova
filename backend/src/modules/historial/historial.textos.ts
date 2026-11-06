@@ -84,7 +84,13 @@ export const eventoHistorial = {
       `${nombreCompleto(autor)} subió el documento "${nombreArchivo}" el ${formatearFecha(fecha)}`,
     ),
 
-  /** 'Pedro González eliminó el documento "Acta policial.pdf" el 20/10/2026' (RF-22) */
+  /** Baja lógica: conserva el archivo y registra el motivo en el historial. */
+  documentoDadoDeBaja: (autor: Persona, nombreArchivo: string, motivo: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.DOCUMENTO,
+      `${nombreCompleto(autor)} dio de baja el documento "${nombreArchivo}" el ${formatearFecha(fecha)}. Motivo: ${motivo}`,
+    ),
+
   documentoEliminado: (autor: Persona, nombreArchivo: string, fecha: Date) =>
     evento(
       TipoEventoHistorial.DOCUMENTO,

@@ -28,6 +28,7 @@ export function PestanaFicha({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-surface-subtle px-5 py-3">
         <h2
           id="titulo-pestana"
+          tabIndex={-1}
           className="flex items-center gap-2 text-base font-bold tracking-wider text-ink-2 uppercase"
         >
           {titulo}

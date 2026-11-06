@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import {
   CopyObjectCommand,
@@ -9,7 +10,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { rechazoArchivo } from '@cova/shared/schemas/archivos'
+import { ARCHIVO_MAX_BYTES, rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
 import { z } from 'zod'
 import { leerConfiguracionR2 } from '../config/r2.ts'
@@ -214,6 +215,62 @@ export function crearAlmacenamientoR2(
           )
         }
         throw errorR2('No se pudo comprobar la disponibilidad del archivo en R2', error)
+      }
+    },
+
+    /** Lectura privada para PDF.js: GET único y consumo progresivo con límite de bytes. */
+    async leerParaVista(clave: string) {
+      const key = claveArchivoSchema.parse(clave)
+      const abortar = new AbortController()
+      try {
+        const objeto = await s3.send(new GetObjectCommand({ Bucket: config.R2_BUCKET, Key: key }), {
+          abortSignal: AbortSignal.any([abortar.signal, AbortSignal.timeout(30000)]),
+        })
+        const cuerpo = objeto.Body
+        if (!cuerpo) throw new Error('Sin contenido')
+        const cerrar = () => {
+          abortar.abort()
+          if ('destroy' in cuerpo && typeof cuerpo.destroy === 'function') cuerpo.destroy()
+        }
+        if (objeto.ContentLength !== undefined && objeto.ContentLength > ARCHIVO_MAX_BYTES) {
+          cerrar()
+          throw new Error('Archivo demasiado grande')
+        }
+        const stream = Readable.from(
+          (async function* () {
+            let longitud = 0
+            try {
+              for await (const trozo of cuerpo as AsyncIterable<Uint8Array>) {
+                longitud += trozo.byteLength
+                if (longitud > ARCHIVO_MAX_BYTES) throw new Error('Archivo demasiado grande')
+                yield trozo
+              }
+            } catch (error) {
+              throw errorR2(
+                'No se pudo completar la lectura del documento. Volvé a intentarlo.',
+                error,
+              )
+            } finally {
+              cerrar()
+            }
+          })(),
+          { objectMode: false },
+        )
+        stream.once('close', cerrar)
+        return stream
+      } catch (error) {
+        abortar.abort()
+        const fallo = error as { name?: string; $metadata?: { httpStatusCode?: number } } | null
+        if (
+          fallo?.name === 'NoSuchKey' ||
+          fallo?.name === 'NotFound' ||
+          fallo?.$metadata?.httpStatusCode === 404
+        )
+          throw new HttpError(
+            404,
+            'El archivo no está disponible en el almacenamiento. Pedile a un administrador que lo revise.',
+          )
+        throw errorR2('No se pudo abrir el documento. Volvé a intentarlo.', error)
       }
     },
 

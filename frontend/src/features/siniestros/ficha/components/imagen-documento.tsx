@@ -1,5 +1,7 @@
 import { rutaArchivoDocumento } from '../documentos/rutas'
-import { useState } from 'react'
+import { VistaImagenOriginal } from './vista-imagen-original'
+import { lazy, Suspense, useState } from 'react'
+const VistaPdfDocumento = lazy(() => import('./vista-pdf-documento'))
 import { Download, ImageOff, Maximize2 } from 'lucide-react'
 import type { DocumentoFicha } from '@cova/shared/schemas/ficha-siniestro'
 import { Button } from '@/components/ui/button'
@@ -13,27 +15,6 @@ import {
 } from '@/components/ui/dialog'
 import { IconoArchivo } from '@/features/plantillas/components/icono-archivo'
 
-function Vista({ documento, idSiniestro }: { documento: DocumentoFicha; idSiniestro: number }) {
-  const [error, setError] = useState(false)
-  return error ? (
-    <div
-      role="status"
-      className="grid min-h-40 justify-items-center gap-3 rounded-lg border bg-muted p-6 text-center"
-    >
-      <ImageOff aria-hidden="true" className="size-8" />
-      <p>No se pudo cargar la vista. Podés descargar el archivo del expediente.</p>
-    </div>
-  ) : (
-    <img
-      src={rutaArchivoDocumento(idSiniestro, documento.id, 'vista')}
-      alt={`Vista de ${documento.nombreOriginal}`}
-      referrerPolicy="no-referrer"
-      onError={() => setError(true)}
-      className="max-h-[65dvh] w-full rounded-lg bg-muted object-contain"
-    />
-  )
-}
-
 export function ImagenDocumento({
   documento,
   idSiniestro,
@@ -43,19 +24,25 @@ export function ImagenDocumento({
 }) {
   const [error, setError] = useState(false)
   const imagen = documento.imagen
-  if (!imagen) return <IconoArchivo extension={documento.tipoExtension} />
+  const esPdf = documento.tipoExtension.toLowerCase() === 'pdf'
+  if (!esPdf && !['jpg', 'jpeg', 'png', 'webp'].includes(documento.tipoExtension.toLowerCase()))
+    return <IconoArchivo extension={documento.tipoExtension} />
   return (
     <Dialog>
       <DialogTrigger asChild>
         <button
           type="button"
-          aria-label={`Ampliar ${documento.nombreOriginal}`}
+          aria-label={`Ver ${documento.nombreOriginal}`}
           className="group relative grid h-44 w-full place-items-center overflow-hidden rounded-lg border-2 border-line bg-surface-subtle transition-colors hover:border-primary focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          {error ? (
+          {error || !imagen ? (
             <span className="grid justify-items-center gap-2 p-4 text-muted-foreground">
-              <ImageOff aria-hidden="true" className="size-8" />
-              <span>Ampliar imagen</span>
+              {error ? (
+                <ImageOff aria-hidden="true" className="size-8" />
+              ) : (
+                <IconoArchivo extension={documento.tipoExtension} />
+              )}
+              {!esPdf && <span>Ampliar imagen</span>}
             </span>
           ) : (
             <img
@@ -72,22 +59,28 @@ export function ImagenDocumento({
           )}
           <span className="absolute right-2 bottom-2 inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 font-semibold text-primary">
             <Maximize2 aria-hidden="true" className="size-4" />
-            Ampliar
+            {esPdf ? 'Ver PDF' : 'Ampliar'}
           </span>
         </button>
       </DialogTrigger>
-      <DialogContent size="wide">
+      <DialogContent size="wide" className="min-w-0 grid-cols-1 sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle className="break-words">{documento.nombreOriginal}</DialogTitle>
           <DialogDescription>
-            Archivo del expediente de {imagen.ancho} × {imagen.alto} px.
+            {esPdf
+              ? 'Leé el PDF aquí, sin guardarlo en tu equipo. Podés cambiar de página y ampliar.'
+              : 'Imagen guardada en el expediente. Ajustá el tamaño o usá el zoom para leer los detalles.'}
           </DialogDescription>
         </DialogHeader>
-        <Vista documento={documento} idSiniestro={idSiniestro} />
-        <p className="text-muted-foreground">
-          Las imágenes grandes se guardan comprimidas cuando ahorra espacio. La descarga entrega la
-          versión guardada en el expediente.
-        </p>
+        {esPdf ? (
+          <Suspense fallback={<p role="status">Preparando visor…</p>}>
+            <VistaPdfDocumento
+              ruta={`/api/siniestros/${idSiniestro}/documentos/${documento.id}/contenido`}
+            />
+          </Suspense>
+        ) : (
+          <VistaImagenOriginal key={documento.id} documento={documento} idSiniestro={idSiniestro} />
+        )}
         <Button asChild>
           <a
             href={rutaArchivoDocumento(idSiniestro, documento.id, 'original')}
