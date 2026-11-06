@@ -170,12 +170,16 @@ test('R2: exactamente dos PUT privados, tamaño real, metadatos v2, nombres y fo
       (e) => e.status === 400,
     )
     await assert.rejects(
-      r2.subir({ nombreOriginal: 'entrada.webp', contenido: original }, 'siniestros/123'),
+      r2.subir(
+        { nombreOriginal: 'entrada.webp', contenido: await sharp(original).webp().toBuffer() },
+        'siniestros/123',
+      ),
       (e) => e.status === 400,
     )
     const firma = await r2.firmarDescarga(
       resultado.objeto.clave,
       nombreDescargaArchivo('Acta policial.jpg', 'webp'),
+      'image/webp',
     )
     assert.equal(firma.venceEnSegundos, 60)
     assert.ok(

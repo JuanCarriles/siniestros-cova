@@ -13,7 +13,7 @@ export function crearServicioArchivosDocumento(
       usuario: SesionUsuario,
       idSiniestro: number,
       idDocumento: number,
-      tipo: 'miniatura' | 'vista' | 'original',
+      tipo: 'miniatura' | 'vista' | 'original' | 'contenido',
     ) {
       const actor = await prisma.usuario.findFirst({
         where: { id: usuario.id, eliminado: false },
@@ -30,7 +30,7 @@ export function crearServicioArchivosDocumento(
       })
       if (!documento) throw new HttpError(404, 'El documento no está disponible.')
       const clave =
-        tipo === 'original'
+        tipo === 'original' || tipo === 'contenido'
           ? documento.urlArchivoSinDominio
           : tipo === 'miniatura'
             ? documento.claveMiniatura
@@ -39,6 +39,12 @@ export function crearServicioArchivosDocumento(
         throw new HttpError(404, 'Esta imagen no tiene una vista reducida. Descargá el original.')
       if (!clave.startsWith(`siniestros/${idSiniestro}/`))
         throw new HttpError(409, 'La ubicación del documento no corresponde a este siniestro.')
+      if (tipo === 'contenido') {
+        if (documento.tipoExtension.toLowerCase() !== 'pdf')
+          throw new HttpError(400, 'Esta vista está disponible para archivos PDF.')
+        // GET distingue ausencia y entrega el cuerpo como stream; no duplicar la consulta con HEAD.
+        return { contenido: await almacenamiento().leerParaVista(clave) }
+      }
       // Las miniaturas ya tienen onError en la grilla: no pagar un HEAD por cada tarjeta.
       if (tipo !== 'miniatura') await almacenamiento().comprobarExistencia(clave)
       const principal = clave === documento.urlArchivoSinDominio
@@ -49,7 +55,7 @@ export function crearServicioArchivosDocumento(
       return almacenamiento().firmarDescarga(
         clave,
         tipo === 'miniatura' ? nombre.replace(/\.webp$/i, '-miniatura.webp') : nombre,
-        tipo !== 'original',
+        principal ? documento.mimeType : 'image/webp',
       )
     },
   }

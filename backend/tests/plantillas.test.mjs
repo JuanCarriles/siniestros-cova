@@ -173,14 +173,14 @@ test('tipo real: acepta PDF, JPG, PNG, DOCX y XLSX; rechaza extensiones camuflad
   await validarArchivoPlantilla({ ...(await entrada('jpg')), nombreOriginal: 'foto.JPEG' })
   for (const archivo of [
     { nombreOriginal: 'virus.pdf', contenido: Buffer.from('MZ esto no es PDF') },
-    { nombreOriginal: 'cambiado.docx', contenido: await leer('xlsx') },
-    { nombreOriginal: 'cambiado.png', contenido: await leer('jpg') },
     { nombreOriginal: 'vacio.pdf', contenido: Buffer.alloc(0) },
     { nombreOriginal: 'grande.pdf', contenido: Buffer.alloc(PLANTILLA_MAX_BYTES + 1) },
     { nombreOriginal: 'incompleto.docx', contenido: Buffer.from('PK\x03\x04incompleto') },
     { nombreOriginal: 'pagina.html', contenido: Buffer.from('<html/>') },
   ])
-    await assert.rejects(validarArchivoPlantilla(archivo), { status: 400 })
+    await assert.rejects(validarArchivoPlantilla(archivo), {
+      status: archivo.contenido.byteLength > PLANTILLA_MAX_BYTES ? 413 : 400,
+    })
 })
 
 test('HTTP: permisos del servidor; el gestor puede consultar y descargar pero no cargar', async (t) => {
@@ -446,4 +446,16 @@ test('eliminar: si falla R2 se conserva el registro; si falla la base se puede r
   assert.equal(sinBase.llamadas.filter(([accion]) => accion === 'retirar').length, 1)
   assert.equal((await sinBase.pedir('admin', '/8', { method: 'DELETE' })).status, 204)
   assert.deepEqual(await (await sinBase.pedir('admin')).json(), [])
+})
+
+test('tipo real: detecta PNG/JPEG/Office aunque el nombre indique otro formato', async () => {
+  for (const [contenido, nombreOriginal, extension] of [
+    [await leer('xlsx'), 'archivo.docx', 'xlsx'],
+    [await leer('png'), 'foto.jpg', 'png'],
+    [await leer('jpg'), 'foto.pdf', 'jpg'],
+  ]) {
+    const resultado = await validarArchivoPlantilla({ nombreOriginal, contenido })
+    assert.equal(resultado.tipoExtension, extension)
+    assert.ok(resultado.mimeType)
+  }
 })

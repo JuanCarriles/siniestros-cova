@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { z } from 'zod'
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
+import { validarArchivo } from '../../lib/validar-archivo.ts'
 import { nombreDescargaArchivo, type AlmacenamientoR2, type ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
 
@@ -103,14 +105,12 @@ export async function prepararImagen(archivo: ArchivoEntrada) {
         tipoExtension = 'webp'
       }
     }
-    const mini = base
-      .clone()
-      .resize({
-        width: LADO_MINIATURA,
-        height: LADO_MINIATURA,
-        fit: 'inside',
-        withoutEnlargement: true,
-      })
+    const mini = base.clone().resize({
+      width: LADO_MINIATURA,
+      height: LADO_MINIATURA,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
     let miniatura = await mini
       .clone()
       .webp({ quality: CALIDAD_IMAGEN, alphaQuality: 100 })
@@ -136,7 +136,9 @@ export async function prepararImagen(archivo: ArchivoEntrada) {
   } catch {
     throw new HttpError(
       400,
-      'No se pudo procesar la imagen. Usá un JPG o PNG estático válido de hasta 40 millones de píxeles.',
+      rechazoArchivo(
+        'No se pudo procesar la imagen. Usá un JPG o PNG estático válido de hasta 40 millones de píxeles.',
+      ),
     )
   }
 }
@@ -147,7 +149,11 @@ export async function subirDocumentoProcesado(
   archivo: ArchivoEntrada,
   carpeta: string,
 ) {
-  const imagen = await prepararImagen(archivo)
+  const detectado = await validarArchivo(archivo)
+  const imagen = await prepararImagen({
+    ...archivo,
+    nombreOriginal: nombreDescargaArchivo(archivo.nombreOriginal, detectado.tipoExtension),
+  })
   const metadata = imagen ? { 'imagen-v2': JSON.stringify(imagen.datos) } : undefined
   const comprimida = imagen?.datos.tipoExtension === 'webp'
   // Validar también el nombre antes de subir por el camino interno de WebP.

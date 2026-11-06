@@ -116,8 +116,8 @@ test(
           if (!objetos.has(clave)) throw new HttpError(404, 'No existe')
           return objetos.get(clave).metadata
         },
-        firmarDescarga: async (clave, nombre, inline = false) => {
-          firmas.push({ clave, nombre, inline })
+        firmarDescarga: async (clave, nombre, mimeType) => {
+          firmas.push({ clave, nombre, mimeType })
           return { url: `https://example.invalid/${clave}`, venceEnSegundos: 60 }
         },
         copiar: async (clave, carpeta) => {
@@ -210,7 +210,7 @@ test(
         const r = await fetch(`${base}/${s.id}/documentos/${id}/${tipo}`, { redirect: 'manual' })
         assert.equal(r.status, 302)
         assert.equal(r.headers.get('cache-control'), 'private, no-store')
-        assert.equal(firmas.at(-1).inline, tipo !== 'original')
+        assert.equal(firmas.at(-1).mimeType, 'image/webp')
         assert.equal(heads.length - headsAntes, tipo === 'miniatura' ? 0 : 1)
         assert.equal(
           firmas.at(-1).clave,

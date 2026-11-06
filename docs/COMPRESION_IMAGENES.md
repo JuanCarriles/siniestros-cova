@@ -34,7 +34,7 @@ El backend escribe metadatos `imagen-v2` en el objeto principal. El alta los lee
 
 Los endpoints `/miniatura`, `/vista` y `/original` mantienen sesión, rol vigente, permiso sobre el expediente y pertenencia del documento. Guardan claves relativas y entregan URLs firmadas cortas; no hay bucket público ni credenciales en el frontend.
 
-Las miniaturas no hacen HEAD adicional: si el objeto no está disponible, el `onError` existente muestra el aviso visual. El archivo principal mantiene la comprobación de disponibilidad. Los nombres de vistas/miniaturas parten del nombre recibido y llevan extensión WebP cuando corresponde.
+Las miniaturas no hacen HEAD adicional: si el objeto no está disponible, el `onError` existente muestra el aviso visual. El archivo principal mantiene la comprobación de disponibilidad. Los nombres de vistas/miniaturas parten del nombre recibido y llevan extensión WebP cuando corresponde. Las firmas fuerzan attachment y el MIME del principal guardado; las de derivados fuerzan image/webp, aunque R2 conserve metadata diferente. El formato de entrada se detecta por contenido, también si el nombre tiene otra extensión.
 
 sharp sigue ejecutándose en la petición con el límite de 40 MP. No se cambió su concurrencia global sin mediciones de carga.
 
@@ -52,3 +52,7 @@ node --experimental-strip-types --env-file-if-exists=.env --test tests/imagenes-
 La prueba integrada usa una base temporal y R2 simulado. Comprueba dos objetos, ahorro en una foto grande, tamaño/formato registrados, original no subido como copia, metadatos v1/v2, alta y descarte, acceso privado sin HEAD para miniaturas, reintentos y limpieza. No altera archivos reales ni datos locales.
 
 Prueba manual: cargar una foto grande y verificar dos objetos en R2, descargar y comprobar WebP de hasta 1600 px; cargar una imagen de menos de 1600 px y verificar que su archivo conserve exactamente sus bytes; cargar un PDF y comprobar que no genere derivados. Verificar orientación, transparencia y legibilidad del contenido que utiliza el estudio.
+
+## Visor y descarga (E6-04)
+
+La grilla muestra la miniatura; el modal de imagen muestra el archivo principal guardado, con Ajustar, Tamaño real y zoom. No se promete recuperar el original si la política de compresión guardó la versión optimizada. Los archivos anteriores conservan su original existente. Los PDF se leen con PDF.js local; Word y Excel solo se descargan.
