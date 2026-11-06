@@ -22,8 +22,17 @@ export type Transaccion = <T>(trabajo: (tx: Tx) => Promise<T>) => Promise<T>
  * controla el acceso, con el responsable y el rol vigentes en la base y no los de la sesión: una reasignación, una
  * baja o un cambio de rol que terminaron mientras se esperaba el bloqueo ya cuentan.
  */
-export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestro: number) {
+export async function prepararEdicion(
+  tx: Tx,
+  usuario: SesionUsuario,
+  idSiniestro: number,
+  opciones: { bloquearAutor?: boolean } = {},
+) {
   await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${idSiniestro} FOR UPDATE`
+  // La carga de archivos conserva el rol estable hasta el commit. Siempre después del caso,
+  // en el mismo orden que la reasignación; las demás operaciones mantienen su comportamiento.
+  if (opciones.bloquearAutor)
+    await tx.$queryRaw`SELECT "id" FROM "Usuario" WHERE "id" = ${usuario.id} FOR SHARE`
   const autor = await tx.usuario.findFirst({
     where: { id: usuario.id, eliminado: false },
     select: { nombres: true, apellidos: true, tipoUsuario: true },
@@ -46,7 +55,7 @@ export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestr
 
 /**
  * Cuenta como movimiento del caso: reinicia los días sin movimiento (RF-19). Desde la ficha lo hacen cargar una
- * novedad (E5-08) y registrar el cierre de una pericia (E5-07). Los demás cambios de vehículos, personas, abogados y
+ * novedad (E5-08), subir un documento (E6-01) y registrar el cierre de una pericia (E5-07). Los demás cambios de vehículos, personas, abogados y
  * peritos quedan en el historial, pero no son movimiento.
  */
 export async function registrarMovimiento(tx: Tx, idSiniestro: number, fecha: Date) {

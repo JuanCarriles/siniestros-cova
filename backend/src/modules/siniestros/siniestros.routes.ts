@@ -1,4 +1,6 @@
 import { Router, type RequestHandler } from 'express'
+import { rechazoArchivo } from '@cova/shared/schemas/archivos'
+import { idCargaDocumentoSchema, compresionDocumentoSchema } from '@cova/shared/schemas/documentos'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import { idSchema } from '@cova/shared/schemas/comunes'
 import {
@@ -25,6 +27,9 @@ import {
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import { nombreOriginalUtf8, recibirArchivo } from '../../middlewares/recibir-archivo.ts'
 import { HttpError } from '../../utils/httpError.ts'
+import type { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
+import type { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
+import { decodificarDocumento } from '../documentos/transporte-documento.ts'
 import type { crearServicioCrearSiniestro } from './siniestros-alta-crear.service.ts'
 import type { crearServicioAltaSiniestros } from './siniestros-alta.service.ts'
 import type { crearServicioBajasSiniestros } from './siniestros-bajas.service.ts'
@@ -85,6 +90,8 @@ export const PESTANAS_FICHA = [
 // DELETE /api/siniestros/alta/documentos  { clave } lo quita
 // POST   /api/siniestros/alta             crea el siniestro con todo lo cargado y avisa al asignado
 export function crearSiniestrosRouter(deps: {
+  documentosArchivos: ReturnType<typeof crearServicioArchivosDocumento>
+  documentosCarga: ReturnType<typeof crearServicioDocumentosGestion>
   reasignacion: ReturnType<typeof crearServicioReasignacion>
   edicion: ReturnType<typeof crearServicioEdicionCaso>
   estados: ReturnType<typeof crearServicioEstadoSiniestro>
@@ -124,7 +131,7 @@ export function crearSiniestrosRouter(deps: {
     res.status(204).end()
   })
   router.post('/alta/documentos', soloAdministracion, recibirArchivo(), async (req, res) => {
-    if (!req.file) throw new HttpError(400, 'Elegí el archivo que querés cargar.')
+    if (!req.file) throw new HttpError(400, rechazoArchivo('Elegí el archivo que querés cargar.'))
     res.status(201).json(
       await creacion.subirDocumento(usuarioDeSesion(req), {
         nombreOriginal: nombreOriginalUtf8(req.file.originalname),
@@ -153,6 +160,44 @@ export function crearSiniestrosRouter(deps: {
   router.get('/partes/opciones', async (_req, res) => {
     res.json(await alta.opcionesPartes())
   })
+
+  router.post(
+    '/:id/documentos',
+    async (req, _res, next) => {
+      idCargaDocumentoSchema.parse(req.header('X-Id-Carga'))
+      compresionDocumentoSchema.parse(req.header('X-Archivo-Compresion'))
+      await deps.documentosCarga.comprobar(usuarioDeSesion(req), idSchema.parse(req.params.id))
+      next()
+    },
+    recibirArchivo(),
+    async (req, res) => {
+      if (!req.file) throw new HttpError(400, rechazoArchivo('Elegí el archivo que querés cargar.'))
+      const archivo = await decodificarDocumento(
+        { nombreOriginal: nombreOriginalUtf8(req.file.originalname), contenido: req.file.buffer },
+        req.header('X-Archivo-Compresion'),
+      )
+      const resultado = await deps.documentosCarga.subir(
+        usuarioDeSesion(req),
+        idSchema.parse(req.params.id),
+        { idCarga: idCargaDocumentoSchema.parse(req.header('X-Id-Carga')), archivo },
+      )
+      res.status(resultado.reutilizado ? 200 : 201).json({ id: resultado.id })
+    },
+  )
+
+  for (const tipo of ['miniatura', 'vista', 'original'] as const) {
+    router.get(`/:id/documentos/:idDocumento/${tipo}`, async (req, res) => {
+      res.set('Cache-Control', 'private, no-store')
+      res.set('Referrer-Policy', 'no-referrer')
+      const firma = await deps.documentosArchivos.obtener(
+        usuarioDeSesion(req),
+        idSchema.parse(req.params.id),
+        idSchema.parse(req.params.idDocumento),
+        tipo,
+      )
+      res.redirect(302, firma.url)
+    })
+  }
 
   router.get('/:id/edicion', async (req, res) => {
     res.set('Cache-Control', 'no-store')

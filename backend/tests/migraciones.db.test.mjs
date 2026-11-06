@@ -25,7 +25,7 @@ const migraciones = (await readdir(CARPETA, { withFileTypes: true }))
 const sql = (nombre) => readFile(new URL(`${nombre}/migration.sql`, CARPETA), 'utf8')
 
 // Una base nueva con todas las migraciones anteriores a `hasta`
-async function baseHasta(hasta) {
+async function baseHasta(hasta, omitir = []) {
   const nombre = `cova_prueba_migraciones_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
   const admin = new pg.Client({ connectionString: process.env.DATABASE_URL })
   await admin.connect()
@@ -36,7 +36,8 @@ async function baseHasta(hasta) {
   url.searchParams.delete('schema')
   const db = new pg.Client({ connectionString: url.toString() })
   await db.connect()
-  for (const m of migraciones.filter((m) => m < hasta)) await db.query(await sql(m))
+  for (const m of migraciones.filter((m) => m < hasta && !omitir.includes(m)))
+    await db.query(await sql(m))
   return {
     db,
     async borrar() {
@@ -555,6 +556,71 @@ test('migración semaforo_demora: borra la bandera guardada sin tocar los casos 
       `SELECT unnest(enum_range(NULL::"TipoNotificacion"))::text AS tipo`,
     )
     assert.ok(['CASO_DEMORADO', 'CASO_EN_ALERTA'].every((t) => rows.some((r) => r.tipo === t)))
+  } finally {
+    await borrar()
+  }
+})
+
+test('migración de carga: se agrega después de desarrollo sin renombrar ni perder documentos existentes', async () => {
+  const carga = '20261106120000_carga_documentos_idempotente'
+  const { db, borrar } = await baseHasta('99999999999999', [carga])
+  try {
+    const direccion = (await db.query('INSERT INTO "Direccion" DEFAULT VALUES RETURNING id'))
+      .rows[0].id
+    const usuario = (
+      await db.query(
+        `INSERT INTO "Usuario" (nombres, apellidos, documento, telefono, email, contrasena, "tipoUsuario", "idDireccion") VALUES ('Autor', 'Prueba', '0', '0', 'carga@example.invalid', '-', 'GESTOR', $1) RETURNING id`,
+        [direccion],
+      )
+    ).rows[0].id
+    const estado = (
+      await db.query(
+        `INSERT INTO "EstadoSiniestro" (nombre, descripcion) VALUES ('Abierto', '-') RETURNING id`,
+      )
+    ).rows[0].id
+    const aseguradora = (
+      await db.query(
+        `INSERT INTO "Aseguradora" (nombre) VALUES ('Prueba de actualización') RETURNING id`,
+      )
+    ).rows[0].id
+    const siniestro = (
+      await db.query(
+        `INSERT INTO "Siniestro" ("numeroSiniestro", "numeroPoliza", "fechaAsignacion", "menorEdadInvolucrado", "idEstadoSiniestro", "idAseguradora", "idUsuario") VALUES ('MIG-CARGA', 'P', now(), false, $1, $2, $3) RETURNING id`,
+        [estado, aseguradora, usuario],
+      )
+    ).rows[0].id
+    const documento = (
+      await db.query(
+        `INSERT INTO "DocumentoSiniestro" ("nombreOriginal", "urlArchivoSinDominio", "tipoExtension", "mimeType", "tamanoBytes", "idUsuario", "idSiniestro") VALUES ('Original.pdf', 'siniestros/prueba/original.pdf', 'pdf', 'application/pdf', 123, $1, $2) RETURNING *`,
+        [usuario, siniestro],
+      )
+    ).rows[0]
+    await db.query(await sql(carga))
+    const actualizado = (
+      await db.query('SELECT * FROM "DocumentoSiniestro" WHERE id=$1', [documento.id])
+    ).rows[0]
+    assert.deepEqual(actualizado, { ...documento, idCarga: null, hashContenido: null })
+    const uuid = '37a87f2e-d34e-4716-a331-7dc5a50edbaf'
+    await db.query('UPDATE "DocumentoSiniestro" SET "idCarga"=$1, "hashContenido"=$2 WHERE id=$3', [
+      uuid,
+      'a'.repeat(64),
+      documento.id,
+    ])
+    await assert.rejects(
+      db.query(
+        `INSERT INTO "DocumentoSiniestro" ("nombreOriginal", "urlArchivoSinDominio", "tipoExtension", "mimeType", "tamanoBytes", "idUsuario", "idSiniestro", "idCarga") VALUES ('Duplicado.pdf', 'siniestros/prueba/duplicado.pdf', 'pdf', 'application/pdf', 123, $1, $2, $3)`,
+        [usuario, siniestro, uuid],
+      ),
+      { code: '23505' },
+    )
+    assert.equal(
+      (
+        await db.query(
+          `SELECT count(*)::int AS cantidad FROM information_schema.columns WHERE table_name='Siniestro' AND column_name='demorado'`,
+        )
+      ).rows[0].cantidad,
+      0,
+    )
   } finally {
     await borrar()
   }

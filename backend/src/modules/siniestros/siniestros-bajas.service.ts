@@ -79,9 +79,17 @@ export function crearServicioBajasSiniestros(deps: {
     // Incluye los documentos dados de baja: también conservan su archivo en R2.
     const documentos = await tx.documentoSiniestro.findMany({
       where: { idSiniestro: id },
-      select: { urlArchivoSinDominio: true },
+      select: { urlArchivoSinDominio: true, claveImagenOptimizada: true, claveMiniatura: true },
     })
-    const claves = [...new Set(documentos.map((d) => d.urlArchivoSinDominio))]
+    const claves = [
+      ...new Set(
+        documentos.flatMap((d) =>
+          [d.urlArchivoSinDominio, d.claveImagenOptimizada, d.claveMiniatura].filter(
+            (c): c is string => !!c,
+          ),
+        ),
+      ),
+    ]
     if (claves.some((clave) => !clave.startsWith(`siniestros/${id}/`))) {
       throw new HttpError(
         409,
@@ -93,7 +101,11 @@ export function crearServicioBajasSiniestros(deps: {
       (await tx.documentoSiniestro.count({
         where: {
           idSiniestro: { not: id },
-          urlArchivoSinDominio: { in: claves },
+          OR: [
+            { urlArchivoSinDominio: { in: claves } },
+            { claveImagenOptimizada: { in: claves } },
+            { claveMiniatura: { in: claves } },
+          ],
         },
       }))
     ) {

@@ -10,6 +10,14 @@ import type { AlmacenamientoR2, ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial, type EventoHistorial } from '../historial/historial.textos.ts'
+import {
+  clavesDocumento,
+  claveDerivada,
+  datosImagenEnBase,
+  leerDatosImagen,
+  subirDocumentoProcesado,
+  type DatosImagen,
+} from '../documentos/imagenes-documento.ts'
 import { validarArchivoPlantilla } from '../plantillas/validar-archivo.ts'
 import {
   datosAbogado,
@@ -58,9 +66,15 @@ export function crearServicioCrearSiniestro(deps: {
   // Se avisan todos juntos para volver a cargarlos; si R2 no responde, no se crea nada y se puede reintentar.
   async function exigirDocumentos(documentos: DocumentoAlta[]) {
     const faltan: string[] = []
+    const imagenes = new Map<string, DatosImagen>()
     for (const d of documentos) {
       try {
-        await almacenamiento().comprobarExistencia(d.clave)
+        const imagen = leerDatosImagen(await almacenamiento().comprobarExistencia(d.clave))
+        if (imagen) {
+          for (const clave of clavesDocumento(d.clave, imagen).slice(1))
+            await almacenamiento().comprobarExistencia(clave)
+          imagenes.set(d.clave, imagen)
+        }
       } catch (error) {
         if (error instanceof HttpError && error.status === 404) faltan.push(d.nombreOriginal)
         else throw errorAlmacenamiento()
@@ -72,6 +86,7 @@ export function crearServicioCrearSiniestro(deps: {
         `${faltan.map((n) => `«${n}»`).join(', ')} ya no ${faltan.length === 1 ? 'está disponible' : 'están disponibles'}: ${faltan.length === 1 ? 'quitalo y volvé a cargarlo' : 'quitalos y volvé a cargarlos'} en el paso 5.`,
         { campo: 'documentos' },
       )
+    return imagenes
   }
 
   // Un documento del alta es de quien lo subió: nadie puede asociar ni borrar los de otro
@@ -85,7 +100,11 @@ export function crearServicioCrearSiniestro(deps: {
     async subirDocumento(actor: Actor, archivo: ArchivoEntrada): Promise<DocumentoAlta> {
       await validarArchivoPlantilla(archivo)
       try {
-        const objeto = await almacenamiento().subir(archivo, carpetaDe(actor))
+        const { objeto } = await subirDocumentoProcesado(
+          almacenamiento(),
+          archivo,
+          carpetaDe(actor),
+        )
         return {
           clave: objeto.clave,
           nombreOriginal: objeto.nombreOriginal,
@@ -112,7 +131,7 @@ export function crearServicioCrearSiniestro(deps: {
         }),
       )
       if (enUso) return
-      await almacenamiento().eliminar(clave)
+      for (const parte of clavesDocumento(clave)) await almacenamiento().eliminar(parte)
     },
 
     /** alta: ya validada con crearSiniestroSchema */
@@ -171,7 +190,7 @@ export function crearServicioCrearSiniestro(deps: {
           )
         // Después del número repetido: si el alta se mandó dos veces, el motivo es el número, no los archivos
         // (la primera ya los copió y borró los originales)
-        await exigirDocumentos(alta.documentos)
+        const imagenes = await exigirDocumentos(alta.documentos)
 
         // El primer estado abierto del catálogo: "En tratamiento"
         const estado = await tx.estadoSiniestro.findFirst({
@@ -346,15 +365,39 @@ export function crearServicioCrearSiniestro(deps: {
             throw errorAlmacenamiento()
           }
           copias.push(clave)
+          const imagen = imagenes.get(d.clave) ?? null
+          if (imagen)
+            for (const tipo of ['vista', 'miniatura'] as const) {
+              if (tipo === 'vista' && imagen.version === 2) continue
+              const destino = claveDerivada(clave, tipo)
+              copias.push(destino)
+              try {
+                await almacenamiento().copiar(
+                  claveDerivada(d.clave, tipo),
+                  `siniestros/${idSiniestro}`,
+                )
+              } catch {
+                throw errorAlmacenamiento()
+              }
+            }
           await tx.documentoSiniestro.create({
             data: {
               idSiniestro,
               idUsuario: actor.id,
               nombreOriginal: d.nombreOriginal,
               urlArchivoSinDominio: clave,
-              tipoExtension: d.tipoExtension,
-              mimeType: d.mimeType,
-              tamanoBytes: BigInt(d.tamanoBytes),
+              ...datosImagenEnBase(clave, imagen),
+              // La imagen v2 registra el formato/tamaño guardados, no valores alterables del formulario.
+              tipoExtension: imagen?.version === 2 ? imagen.tipoExtension : d.tipoExtension,
+              mimeType:
+                imagen?.version === 2
+                  ? imagen.tipoExtension === 'webp'
+                    ? 'image/webp'
+                    : imagen.tipoExtension === 'png'
+                      ? 'image/png'
+                      : 'image/jpeg'
+                  : d.mimeType,
+              tamanoBytes: BigInt(imagen?.version === 2 ? imagen.tamanoBytes : d.tamanoBytes),
             },
           })
           await registrar(eventoHistorial.documentoSubido(autor, d.nombreOriginal, ahora))
@@ -383,11 +426,12 @@ export function crearServicioCrearSiniestro(deps: {
 
       // El siniestro ya tiene sus copias: si algún original no se puede borrar, lo limpia la regla de altas/
       for (const d of alta.documentos)
-        await almacenamiento()
-          .eliminar(d.clave)
-          .catch(() =>
-            console.error(`Original sobrante en R2 (lo borra la regla de altas/): ${d.clave}`),
-          )
+        for (const parte of clavesDocumento(d.clave))
+          await almacenamiento()
+            .eliminar(parte)
+            .catch(() =>
+              console.error(`Original sobrante en R2 (lo borra la regla de altas/): ${d.clave}`),
+            )
 
       // El mail va después de confirmar: si falla, el siniestro y el aviso interno ya quedaron (36.a)
       let correoEnviado = true
