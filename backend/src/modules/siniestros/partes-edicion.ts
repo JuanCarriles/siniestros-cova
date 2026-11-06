@@ -7,7 +7,7 @@ import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 import type { TipoPersona } from './partes-datos.ts'
 
 // Reglas comunes para agregar, modificar y dar de baja vehículos y personas (CU-10 1.c, E5-06), abogados y peritos
-// (1.d y 1.e, E5-07) desde la ficha.
+// (1.d y 1.e, E5-07) desde la ficha. Cargar una novedad (1.f.1, E5-08) usa las mismas comprobaciones.
 
 export type Tx = Prisma.TransactionClient
 export type Transaccion = <T>(trabajo: (tx: Tx) => Promise<T>) => Promise<T>
@@ -16,13 +16,20 @@ export type Transaccion = <T>(trabajo: (tx: Tx) => Promise<T>) => Promise<T>
  * Antes de cualquier cambio: el acceso de la ficha (el gestor, solo sus casos) y que el siniestro se pueda tocar.
  * Uno dado de baja o cerrado se consulta pero no se modifica. Devuelve quién hace el cambio, para el historial.
  *
- * Bloquea la fila del siniestro hasta el final de la transacción: los cambios de partes de un mismo siniestro se
- * hacen de a uno. Así lo que se controla (dominio y documento sin repetir, un titular por vehículo, un vehículo sin
- * personas antes de su baja) sigue valiendo al guardar, aunque dos usuarios confirmen a la vez.
+ * Primero bloquea la fila del siniestro hasta el final de la transacción: los cambios de un mismo siniestro se hacen
+ * de a uno. Así lo que se controla (dominio y documento sin repetir, un titular por vehículo, un vehículo sin
+ * personas antes de su baja) sigue valiendo al guardar, aunque dos usuarios confirmen a la vez. Recién después
+ * controla el acceso, con el responsable y el rol vigentes en la base y no los de la sesión: una reasignación, una
+ * baja o un cambio de rol que terminaron mientras se esperaba el bloqueo ya cuentan.
  */
 export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestro: number) {
-  await exigirAccesoSiniestro(tx, usuario, idSiniestro)
   await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${idSiniestro} FOR UPDATE`
+  const autor = await tx.usuario.findFirst({
+    where: { id: usuario.id, eliminado: false },
+    select: { nombres: true, apellidos: true, tipoUsuario: true },
+  })
+  if (!autor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
+  await exigirAccesoSiniestro(tx, { ...usuario, tipoUsuario: autor.tipoUsuario }, idSiniestro)
   const siniestro = await tx.siniestro.findUniqueOrThrow({
     where: { id: idSiniestro },
     select: { eliminado: true, estadoSiniestro: { select: { esCierre: true } } },
@@ -34,17 +41,13 @@ export async function prepararEdicion(tx: Tx, usuario: SesionUsuario, idSiniestr
     )
   if (siniestro.estadoSiniestro.esCierre)
     throw new HttpError(409, 'Este siniestro está cerrado: se puede consultar, pero no modificar.')
-  const autor = await tx.usuario.findFirst({
-    where: { id: usuario.id, eliminado: false },
-    select: { nombres: true, apellidos: true },
-  })
-  if (!autor) throw new HttpError(401, 'Tu sesión venció. Volvé a ingresar.')
   return autor
 }
 
 /**
- * Cuenta como movimiento del caso: reinicia los días sin movimiento (RF-19). Desde la ficha, de vehículos, personas,
- * abogados y peritos solo lo hace registrar el cierre de una pericia (E5-07); lo demás queda en el historial.
+ * Cuenta como movimiento del caso: reinicia los días sin movimiento (RF-19). Desde la ficha lo hacen cargar una
+ * novedad (E5-08) y registrar el cierre de una pericia (E5-07). Los demás cambios de vehículos, personas, abogados y
+ * peritos quedan en el historial, pero no son movimiento.
  */
 export async function registrarMovimiento(tx: Tx, idSiniestro: number, fecha: Date) {
   await tx.siniestro.update({

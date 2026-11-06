@@ -20,6 +20,8 @@ const schema = z.object({
   COOKIE_SECURE: z.preprocess((v) => (v === '' ? undefined : v), z.stringbool().optional()),
   // RNF-08: la sesión vence tras estas horas sin actividad (cada pedido la renueva)
   SESSION_TTL_HOURS: z.coerce.number().positive().max(24).default(7),
+  // E5-10: cada cuántos minutos revisa la tarea de casos demorados (0 la apaga, p. ej. en una segunda instancia)
+  DEMORAS_CADA_MINUTOS: z.coerce.number().int().min(0).max(1440).default(60),
 })
 
 const parsed = schema.safeParse(process.env)

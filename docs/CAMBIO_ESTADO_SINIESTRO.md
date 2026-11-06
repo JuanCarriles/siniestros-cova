@@ -20,7 +20,7 @@ permiten salir sin guardar; mientras se guarda no se puede cerrar. Al cancelar e
 
 `PATCH /api/siniestros/:id/estado` recibe `{ idEstadoAnterior, idEstadoSiniestro }`.
 En una transacción y con bloqueo del siniestro comprueba el acceso y el catálogo, actualiza el estado
-y `fechaUltimoMovimiento`, limpia la demora, agrega `CAMBIO_ESTADO` al historial con autor y fecha del servidor,
+y `fechaUltimoMovimiento`; el semáforo se calcula al consultar, agrega `CAMBIO_ESTADO` al historial con autor y fecha del servidor,
 y crea las notificaciones. Conserva los eventos anteriores. Al cerrar registra `fechaCierre`; al reabrir la limpia.
 Si otro usuario cambió el estado, responde 409 y permite volver a consultar. Un estado retirado o inexistente,
 un cambio al mismo estado y una reapertura con responsables dados de baja se rechazan.
@@ -75,3 +75,13 @@ Las pruebas HTTP conectadas al servicio y PostgreSQL comprueban catálogo filtra
 rechazada, rol inventado en el cuerpo, caso ajeno, historial y destinatarios de la solicitud, confirmación por
 ambos roles administrativos y cambio de rol mientras la operación espera. Usan una base temporal aislada.
 No se agregan migraciones ni cambios de Docker para E5-05.
+
+## Correcciones E5-05
+
+- Se integra origin/desarrollo, con E5-08/E5-09/E5-10. El cambio de estado solo escribe fechaUltimoMovimiento; no reintroduce la columna demorado ni su bandera almacenada.
+- Se mantienen el permiso por esCierre y los bloqueos en orden Siniestro → Usuario. El rol vigente se consulta después de esperar el siniestro y queda protegido con FOR SHARE hasta el commit.
+- La prueba HTTP de E5-05 tiene su propio test y su propia base temporal, separada de la prueba general de cambios de estado. Ambas usan una preparación común sin depender de las mutaciones de la otra.
+- La simulación de degradación de rol comprueba que la pausa realmente ocurrió una sola vez y falla con un mensaje específico si la consulta deja de interceptarse. La espera tiene un límite de 3 segundos y la pausa se libera siempre.
+- No se agrega requiereRevision ni otra migración para distinguir la solicitud de cierre: es una propuesta opcional pendiente de acuerdo. Se mantiene el aviso interno CAMBIO_ESTADO a los administradores activos.
+
+Validación: siniestros-estado.test.mjs, siniestros-estado.db.test.mjs y siniestros-reasignacion.db.test.mjs. Las pruebas integradas crean y eliminan bases temporales; no aplican migraciones ni alteran datos de la base del proyecto. No se modifican Dockerfile ni Compose.

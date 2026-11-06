@@ -9,6 +9,7 @@ import { requerirSesion } from '../auth/auth.module.ts'
 import { crearServicioDocumentosFicha } from '../documentos/documentos-ficha.service.ts'
 import { crearServicioHistorialFicha } from '../historial/historial-ficha.service.ts'
 import { crearServicioNovedadesFicha } from '../novedades/novedades-ficha.service.ts'
+import { crearServicioNovedadesGestion } from '../novedades/novedades-gestion.service.ts'
 import { crearServicioAbogadosFicha } from './abogados/abogados-ficha.service.ts'
 import { crearServicioAbogadosGestion } from './abogados/abogados-gestion.service.ts'
 import { crearServicioPeritosFicha } from './peritos/peritos-ficha.service.ts'
@@ -87,7 +88,8 @@ const operaciones = crearServicioBajasSiniestros({
   },
 })
 
-// Vehículos, personas, abogados y peritos desde la ficha (E5-06 y E5-07): cada cambio y su evento del historial, juntos
+// Vehículos, personas, abogados, peritos (E5-06 y E5-07) y novedades (E5-08) desde la ficha: cada cambio y su evento
+// del historial, juntos
 const transaccionPartes: Transaccion = (trabajo) =>
   getPrisma().$transaction(trabajo, { timeout: 15_000 })
 
@@ -124,5 +126,6 @@ export const siniestrosRouter = crearSiniestrosRouter({
     enviarAviso: crearCorreoReasignacion(configCorreo),
     urlSistema: env.APP_URL,
   }),
+  novedades: crearServicioNovedadesGestion({ transaccion: transaccionPartes }),
   requerirSesion,
 })

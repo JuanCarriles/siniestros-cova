@@ -40,7 +40,6 @@ test('PostgreSQL: agregar, modificar y dar de baja abogados y peritos desde la f
                 numeroPoliza: 'P',
                 fechaAsignacion: new Date('2026-09-01T12:00:00Z'),
                 fechaUltimoMovimiento: ultimoMovimiento,
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idEstadoSiniestro: abierto.id,
                 idAseguradora: aseguradora.id,

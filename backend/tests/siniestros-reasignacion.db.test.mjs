@@ -100,7 +100,6 @@ test(
             fechaAsignacion: inicial,
             fechaUltimoMovimiento: inicial,
             menorEdadInvolucrado: false,
-            demorado: true,
             idAseguradora: aseguradora.id,
             idEstadoSiniestro: estado.id,
             idUsuario: anterior.id,
@@ -153,7 +152,6 @@ test(
       assert.equal(guardado.idUsuario, nuevo.id)
       assert.equal(guardado.fechaAsignacion.toISOString(), inicial.toISOString())
       assert.equal(guardado.fechaUltimoMovimiento.toISOString(), inicial.toISOString())
-      assert.equal(guardado.demorado, true)
       const historial = await prisma.historialSiniestro.findMany({
         where: { idSiniestro: s.id },
         orderBy: { id: 'asc' },
