@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import {
+  ArrowLeftRight,
   Building2,
   CalendarDays,
   Clock,
@@ -12,6 +13,7 @@ import type { FichaSiniestro } from '@cova/shared/schemas/ficha-siniestro'
 import { Aviso } from '@/components/aviso'
 import { EstadoChip } from '@/components/estado-chip'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { DiasSinMovimiento } from '../../components/celdas-siniestro'
 import { fechaDe } from '../formato'
@@ -66,9 +68,13 @@ function Dato({
 export function CabeceraFicha({
   ficha,
   onVerAjustador,
+  onCambiarEstado,
+  botonEstadoRef,
 }: {
   ficha: FichaSiniestro
   onVerAjustador: () => void
+  onCambiarEstado?: () => void
+  botonEstadoRef?: Ref<HTMLButtonElement>
 }) {
   return (
     <header className="@container mb-4 overflow-hidden rounded-2xl border bg-card shadow-card">
@@ -79,7 +85,24 @@ export function CabeceraFicha({
             <span className="sr-only">Siniestro </span>
             {ficha.numeroSiniestro}
           </h1>
-          <EstadoChip estado={ficha.estado.nombre} className="text-base" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                tabIndex={0}
+                aria-label={`Estado: ${ficha.estado.nombre}. ${ficha.estado.descripcion}`}
+                className="rounded-md"
+              >
+                <EstadoChip estado={ficha.estado.nombre} className="text-base" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{ficha.estado.descripcion}</TooltipContent>
+          </Tooltip>
+          {onCambiarEstado && !ficha.fechaBaja && (
+            <Button ref={botonEstadoRef} onClick={onCambiarEstado} className="ml-auto shrink-0">
+              <ArrowLeftRight aria-hidden="true" />
+              Cambiar estado
+            </Button>
+          )}
         </div>
       </div>
 
@@ -108,7 +131,11 @@ export function CabeceraFicha({
           <Dato icono={Clock} etiqueta="Sin movimiento" className="@4xl:col-span-3">
             {/* El semáforo es más alto que una línea de texto: sin agrandar la fila */}
             <span className="-my-1.5 inline-flex">
-              <DiasSinMovimiento dias={ficha.diasSinMovimiento} cerrado={ficha.estado.esCierre} />
+              <DiasSinMovimiento
+                dias={ficha.diasSinMovimiento}
+                cerrado={ficha.estado.esCierre}
+                dadoDeBaja={!!ficha.fechaBaja}
+              />
             </span>
             <span aria-hidden="true">{ficha.diasSinMovimiento === 1 ? 'día' : 'días'}</span>
           </Dato>

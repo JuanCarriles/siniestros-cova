@@ -168,13 +168,14 @@ test('PostgreSQL: CU-04, jerarquía, contraseñas, casos, baja y sesiones; todos
           const cierre = await tx.estadoSiniestro.create({
             data: { nombre: `${marca}-cerrado`, descripcion: '-', esCierre: true },
           })
+          // Cada uno con su número: no se repite en una aseguradora (migración numero_siniestro_unico)
+          let numero = 0
           const caso = (idEstadoSiniestro, eliminado = false) =>
             tx.siniestro.create({
               data: {
-                numeroSiniestro: marca,
+                numeroSiniestro: `${marca}-${++numero}`,
                 numeroPoliza: marca,
                 fechaAsignacion: new Date(),
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idUsuario: creado.id,
                 idAseguradora: aseguradora.id,

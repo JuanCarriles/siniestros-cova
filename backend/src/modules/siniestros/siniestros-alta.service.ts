@@ -1,4 +1,8 @@
-import type { DatosCasoData, OpcionesAltaSiniestro } from '@cova/shared/schemas/siniestros-alta'
+import type {
+  DatosCasoData,
+  OpcionesAltaSiniestro,
+  OpcionesPartes,
+} from '@cova/shared/schemas/siniestros-alta'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 
@@ -16,66 +20,70 @@ const siniestroActivo = {
 // CU-09 alta de siniestro (E4-04). El borrador vive en el navegador hasta confirmar el último paso; el servidor
 // da las opciones de cada paso y valida lo cargado antes de avanzar.
 export function crearServicioAltaSiniestros(prisma: BaseAlta) {
+  // Lo que usan los formularios de vehículos y personas, en el alta y en la ficha: solo lo activo
+  async function catalogosPartes(): Promise<OpcionesPartes> {
+    const [aseguradoras, paises, provincias, tiposDocumento] = await Promise.all([
+      prisma.aseguradora.findMany({
+        where: { eliminado: false },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: 'asc' },
+      }),
+      prisma.pais.findMany({
+        where: { eliminado: false },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: 'asc' },
+      }),
+      prisma.provincia.findMany({
+        where: { eliminado: false, pais: { eliminado: false } },
+        select: { id: true, nombre: true, idPais: true },
+        orderBy: { nombre: 'asc' },
+      }),
+      // En el orden del catálogo: "DNI Tarjeta" primero, "Otro" al final
+      prisma.tipoDocumento.findMany({
+        where: { eliminado: false },
+        select: { id: true, nombre: true },
+        orderBy: { id: 'asc' },
+      }),
+    ])
+    return { aseguradoras, paises, provincias, tiposDocumento }
+  }
+
   return {
     async opciones(): Promise<OpcionesAltaSiniestro> {
-      const [aseguradoras, ajustadores, paises, provincias, tiposDocumento, usuarios] =
-        await Promise.all([
-          prisma.aseguradora.findMany({
-            where: { eliminado: false },
-            select: { id: true, nombre: true },
-            orderBy: { nombre: 'asc' },
-          }),
-          prisma.ajustador.findMany({
-            where: { eliminado: false, aseguradora: { eliminado: false } },
-            select: {
-              id: true,
-              nombres: true,
-              apellidos: true,
-              idAseguradora: true,
-              _count: { select: { siniestros: { where: siniestroActivo } } },
-            },
-            orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
-          }),
-          prisma.pais.findMany({
-            where: { eliminado: false },
-            select: { id: true, nombre: true },
-            orderBy: { nombre: 'asc' },
-          }),
-          prisma.provincia.findMany({
-            where: { eliminado: false, pais: { eliminado: false } },
-            select: { id: true, nombre: true, idPais: true },
-            orderBy: { nombre: 'asc' },
-          }),
-          // En el orden del catálogo: "DNI Tarjeta" primero, "Otro" al final
-          prisma.tipoDocumento.findMany({
-            where: { eliminado: false },
-            select: { id: true, nombre: true },
-            orderBy: { id: 'asc' },
-          }),
-          // Paso 5: todos los usuarios activos se pueden asignar (gestores, administradores y superadministradores),
-          // con sus casos activos para repartir la carga
-          prisma.usuario.findMany({
-            where: { eliminado: false },
-            select: {
-              id: true,
-              nombres: true,
-              apellidos: true,
-              tipoUsuario: true,
-              _count: { select: { siniestros: { where: siniestroActivo } } },
-            },
-            orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
-          }),
-        ])
+      const [catalogos, ajustadores, usuarios] = await Promise.all([
+        catalogosPartes(),
+        prisma.ajustador.findMany({
+          where: { eliminado: false, aseguradora: { eliminado: false } },
+          select: {
+            id: true,
+            nombres: true,
+            apellidos: true,
+            idAseguradora: true,
+            _count: { select: { siniestros: { where: siniestroActivo } } },
+          },
+          orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
+        }),
+        // Paso 5: todos los usuarios activos se pueden asignar (gestores, administradores y superadministradores),
+        // con sus casos activos para repartir la carga
+        prisma.usuario.findMany({
+          where: { eliminado: false },
+          select: {
+            id: true,
+            nombres: true,
+            apellidos: true,
+            tipoUsuario: true,
+            _count: { select: { siniestros: { where: siniestroActivo } } },
+          },
+          orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
+        }),
+      ])
       return {
-        aseguradoras,
+        ...catalogos,
         ajustadores: ajustadores.map(({ _count, nombres, apellidos, ...a }) => ({
           ...a,
           nombre: `${nombres} ${apellidos}`,
           casosActivos: _count.siniestros,
         })),
-        paises,
-        provincias,
-        tiposDocumento,
         usuarios: usuarios.map(({ _count, nombres, apellidos, ...u }) => ({
           ...u,
           nombre: `${nombres} ${apellidos}`,
@@ -83,6 +91,9 @@ export function crearServicioAltaSiniestros(prisma: BaseAlta) {
         })),
       }
     },
+
+    /** Los formularios de vehículos y personas de la ficha (CU-10 1.c, E5-06): sin ajustadores ni usuarios */
+    opcionesPartes: (): Promise<OpcionesPartes> => catalogosPartes(),
 
     // Paso 1 (CU-09 5.a y 5.b). El formato ya lo validó el schema; acá, lo que depende de la base. Cada error
     // indica su campo para que el formulario lo marque y conserve el resto de lo cargado.

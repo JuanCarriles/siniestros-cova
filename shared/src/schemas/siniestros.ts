@@ -16,7 +16,6 @@ export const siniestroSchema = z.strictObject({
   numeroSiniestro: textoSchema,
   numeroPoliza: textoSchema,
   fechaAsignacion: fechaHoraSchema,
-  demorado: booleanoSchema,
   menorEdadInvolucrado: booleanoSchema,
   idEstadoSiniestro: idSchema,
   idAseguradora: idSchema,
@@ -45,9 +44,16 @@ export type SiniestroUpdateData = z.output<typeof siniestroUpdateSchema>
 export const DIAS_DEMORADO = 3
 export const DIAS_ALERTA = 7
 
-/** Tono del semáforo de días sin movimiento. Un caso cerrado ya no se mueve: no se marca. */
-export function tonoDemora(dias: number, cerrado: boolean): 'normal' | 'demorado' | 'alerta' {
-  if (cerrado || dias < DIAS_DEMORADO) return 'normal'
+/**
+ * Tono del semáforo de días sin movimiento. Un caso cerrado o dado de baja ya no se mueve: no se marca (los contadores
+ * y la tarea de avisos tampoco lo cuentan como demorado).
+ */
+export function tonoDemora(
+  dias: number,
+  cerrado: boolean,
+  dadoDeBaja = false,
+): 'normal' | 'demorado' | 'alerta' {
+  if (cerrado || dadoDeBaja || dias < DIAS_DEMORADO) return 'normal'
   return dias < DIAS_ALERTA ? 'demorado' : 'alerta'
 }
 

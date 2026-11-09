@@ -3,9 +3,9 @@ import type {
   ConsultaDashboardAdministrador,
   DashboardAdministrador,
 } from '@cova/shared/schemas/dashboard'
-import { DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
+import { limiteDemora, sinMovimiento } from '../siniestros/demora.ts'
 
 type Trabajo<T> = (tx: Prisma.TransactionClient) => Promise<T>
 export type BaseDashboardAdministrador = {
@@ -54,18 +54,12 @@ export function crearServicioDashboardAdministrador(
     ): Promise<DashboardAdministrador> {
       exigirAdministrador(actor)
       const ahora = reloj()
-      const limite = new Date(ahora.getTime() - DIAS_DEMORADO * DIA)
-      const demora = {
-        ...activo,
-        OR: [
-          { fechaUltimoMovimiento: { lte: limite } },
-          { fechaUltimoMovimiento: null, fechaAsignacion: { lte: limite } },
-        ],
-      } satisfies Prisma.SiniestroWhereInput
-      // La actividad de casos de baja sigue en su historial; este panel solo enlaza casos disponibles.
+      const demora = { AND: [activo, sinMovimiento(ahora)] } satisfies Prisma.SiniestroWhereInput
+      // La baja no borra la actividad: administradores pueden abrir estas fichas y su historial.
+      // Solo se excluyen las eliminaciones en curso, cuyo acceso está bloqueado.
       const actividad = {
         eliminado: false,
-        siniestro: visible,
+        siniestro: { eliminacionEnCurso: false },
       } satisfies Prisma.HistorialSiniestroWhereInput
       const dias = (desde: Date) =>
         Math.max(0, Math.floor((ahora.getTime() - desde.getTime()) / DIA))
@@ -107,7 +101,7 @@ export function crearServicioDashboardAdministrador(
           SELECT s."id" FROM "Siniestro" s
           JOIN "EstadoSiniestro" e ON e."id" = s."idEstadoSiniestro"
           WHERE NOT s."eliminado" AND NOT s."eliminacionEnCurso" AND NOT e."esCierre"
-            AND COALESCE(s."fechaUltimoMovimiento", s."fechaAsignacion") <= ${limite}
+            AND COALESCE(s."fechaUltimoMovimiento", s."fechaAsignacion") <= ${limiteDemora(ahora)}
           ORDER BY COALESCE(s."fechaUltimoMovimiento", s."fechaAsignacion") ASC, s."id" ASC
           LIMIT ${pd.porPagina} OFFSET ${(pd.pagina - 1) * pd.porPagina}`
         const filasDemoradas = await tx.siniestro.findMany({

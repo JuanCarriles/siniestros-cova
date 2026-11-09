@@ -11,6 +11,8 @@ import { crearAlmacenamientoR2 } from '../src/lib/r2.ts'
 import { crearAppDemo } from '../src/dev/r2-demo/app.ts'
 import { abrirRegistroDemo } from '../src/dev/r2-demo/registro.ts'
 
+const imagenPrueba = await readFile(new URL('./fixtures/plantillas/valido.png', import.meta.url))
+
 async function fixture(t, { vencido = false, corrupto = false } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'cova-r2-demo-'))
   const ruta = join(dir, 'archivos.json')
@@ -98,7 +100,7 @@ async function fixture(t, { vencido = false, corrupto = false } = {}) {
       req.end(options.body)
     })
   }
-  async function subir(nombre = 'foto.png', contenido = Buffer.from('contenido de prueba')) {
+  async function subir(nombre = 'foto.png', contenido = imagenPrueba) {
     const respuesta = await pedir('/api/files', {
       method: 'POST',
       headers: {
@@ -163,7 +165,7 @@ test('demo: bloquea otro host, otro origen, solicitudes cross-site y cambios sin
   assert.equal(f.objetos.size, 0)
 })
 
-test('demo: rechaza archivos vacíos, extensiones no admitidas, rutas y exceso de tamaño', async (t) => {
+test('demo: rechaza archivos vacíos, contenidos no admitidos, rutas y exceso de tamaño', async (t) => {
   const f = await fixture(t)
   for (const [nombre, contenido, estado] of [
     ['foto.png', Buffer.alloc(0), 400],
@@ -218,9 +220,8 @@ test('demo: serializa subidas concurrentes y compensa un fallo al guardar el reg
   const bloqueado = join(f.dir, 'bloqueado')
   const registro = await abrirRegistroDemo(join(bloqueado, 'archivos.json'), f.almacenamiento)
   await writeFile(bloqueado, 'Impide crear el directorio')
-  await assert.rejects(
-    registro.subir({ nombreOriginal: 'tres.png', contenido: Buffer.from('prueba') }),
-    { status: 500 },
-  )
+  await assert.rejects(registro.subir({ nombreOriginal: 'tres.png', contenido: imagenPrueba }), {
+    status: 500,
+  })
   assert.equal(f.objetos.size, 2)
 })

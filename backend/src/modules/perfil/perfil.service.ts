@@ -3,7 +3,6 @@ import type {
   PerfilContrasenaData,
   PerfilVerificarData,
 } from '@cova/shared/schemas/perfil'
-import { DIAS_DEMORADO } from '@cova/shared/schemas/siniestros'
 import { motivoFalloCorreo } from '../../lib/correo-resend.ts'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import type { BaseUsuarios } from '../usuarios/usuarios.service.ts'
@@ -13,6 +12,7 @@ import { hashPassword, verifyPassword } from '../../lib/password.ts'
 import { hashToken } from '../auth/sesiones.service.ts'
 import { crearLimiteIntentos } from '../auth/limite-intentos.ts'
 import { HttpError } from '../../utils/httpError.ts'
+import { sinMovimiento } from '../siniestros/demora.ts'
 
 const activo = {
   eliminado: false,
@@ -120,14 +120,9 @@ export function crearServicioPerfil({
   return {
     async obtener(id: number) {
       const t = ahora()
-      const limite = new Date(t - DIAS_DEMORADO * 86_400_000)
-      // RF-19: mismo umbral inclusivo que el listado; la bandera almacenada puede estar desactualizada.
+      // RF-19: el mismo umbral que el listado, calculado al consultar (E5-10)
       const demorado = {
-        ...activo,
-        OR: [
-          { fechaUltimoMovimiento: { lte: limite } },
-          { fechaUltimoMovimiento: null, fechaAsignacion: { lte: limite } },
-        ],
+        AND: [activo, sinMovimiento(new Date(t))],
       } satisfies Prisma.SiniestroWhereInput
       const usuario = await base.usuario.findUnique({
         where: { id },

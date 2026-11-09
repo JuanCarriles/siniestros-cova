@@ -50,13 +50,7 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
             })
           const gestorA = await usuario('Ana', 'GESTOR')
           const gestorB = await usuario('Beto', 'GESTOR')
-          const admin = {
-            id: 0,
-            nombres: 'A',
-            apellidos: 'A',
-            email: 'a@x.test',
-            tipoUsuario: 'ADMINISTRADOR',
-          }
+          const admin = await usuario('Admin', 'ADMINISTRADOR')
           const sesionA = { ...gestorA, tipoUsuario: 'GESTOR' }
 
           const direccion = async (datos) =>
@@ -70,7 +64,6 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
               sucursal: 'Casa central',
               fechaAsignacion: new Date(ahora.getTime() - 10 * DIA),
               fechaUltimoMovimiento: new Date(ahora.getTime() - 4 * DIA - 60_000),
-              demorado: false,
               menorEdadInvolucrado: true,
               causa: 'Colisión por alcance',
               fechaOcurrencia: new Date('2026-01-27T00:00:00Z'),
@@ -194,19 +187,25 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
               {
                 idSiniestro,
                 descripcion: 'Segunda',
+                idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
+                tipoUsuarioAutor: 'GESTOR',
                 fechaCarga: new Date('2026-02-03T12:00:00Z'),
               },
               {
                 idSiniestro,
                 descripcion: 'Primera',
+                idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
+                tipoUsuarioAutor: 'GESTOR',
                 fechaCarga: new Date('2026-02-02T12:00:00Z'),
               },
               {
                 idSiniestro,
                 descripcion: 'Baja',
+                idUsuario: gestorA.id,
                 autor: 'Ana Prueba',
+                tipoUsuarioAutor: 'GESTOR',
                 eliminado: true,
                 fechaBaja: ahora,
               },
@@ -261,7 +260,9 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
             causa: 'Colisión por alcance',
           })
           assert.deepEqual(ficha.lugar, {
+            idPais: provincia.idPais,
             pais: provincia.pais.nombre,
+            idProvincia: provincia.id,
             provincia: provincia.nombre,
             localidad: 'Almagro',
             calle: 'Av. Rivadavia',
@@ -326,10 +327,12 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
           )
 
           const novedades = await crearServicioNovedadesFicha(tx).listar(sesionA, idSiniestro)
+          // Novedades: de la más nueva a la más vieja, con el nombre y el tipo de quien la cargó
           assert.deepEqual(
             novedades.map((n) => n.descripcion),
-            ['Primera', 'Segunda'],
+            ['Segunda', 'Primera'],
           )
+          assert.deepEqual(novedades[0].autor, { nombre: 'Ana Prueba', tipoUsuario: 'GESTOR' })
 
           // Documentos: del más nuevo al más viejo, sin la clave de R2
           const documentos = await crearServicioDocumentosFicha(tx).listar(sesionA, idSiniestro)
@@ -341,14 +344,29 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
           assert.deepEqual(documentos[0].autor, { nombre: 'Ana Prueba', tipoUsuario: 'GESTOR' })
           assert.ok(!('urlArchivoSinDominio' in documentos[0]))
 
+          // Historial: del más nuevo al más viejo (E5-09)
           const historial = await crearServicioHistorialFicha(tx).listar(sesionA, idSiniestro)
           assert.deepEqual(
             historial.map((e) => [e.tipo, e.descripcion]),
             [
-              ['ASIGNACION', 'Antes'],
               ['DOCUMENTO', 'Después'],
+              ['ASIGNACION', 'Antes'],
             ],
           )
+          // Quien lo hizo, como era en ese momento: cambiarle el nombre o el rol no cambia los eventos anteriores
+          assert.deepEqual(historial[0].usuario, { nombre: 'Ana Prueba', tipoUsuario: 'GESTOR' })
+          await tx.usuario.update({
+            where: { id: gestorA.id },
+            data: { nombres: 'NombreNuevo', tipoUsuario: 'ADMINISTRADOR' },
+          })
+          assert.deepEqual(
+            (await crearServicioHistorialFicha(tx).listar(sesionA, idSiniestro))[0].usuario,
+            { nombre: 'Ana Prueba', tipoUsuario: 'GESTOR' },
+          )
+          await tx.usuario.update({
+            where: { id: gestorA.id },
+            data: { nombres: 'Ana', tipoUsuario: 'GESTOR' },
+          })
 
           // Cada pestaña controla el acceso: un gestor ajeno recibe 403; el administrador entra
           const pestanas = [

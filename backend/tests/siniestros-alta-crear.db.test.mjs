@@ -250,10 +250,35 @@ test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno 
           // Pasó a la carpeta del siniestro y el original de altas/ se borró
           assert.equal(s.documentos[0].urlArchivoSinDominio, `siniestros/${creado.id}/doc.pdf`)
           assert.deepEqual(r2.borradas, [`altas/${admin.id}/doc.pdf`])
+          // Historial (E5-09): el alta y cada parte, en el orden de la línea de tiempo, todo a nombre de quien lo
+          // cargó y con la hora de la transacción
+          const yo = `Admin Prueba ${marca}`
           assert.deepEqual(
-            s.eventosHistorial.map((e) => e.tipoEvento),
-            ['DOCUMENTO', 'ASIGNACION'],
+            s.eventosHistorial.map((e) => [
+              e.tipoEvento,
+              e.descripcion.replace(/,? el \d\d\/\d\d\/\d{4}$/, ''),
+            ]),
+            [
+              ['ALTA_SINIESTRO', `${yo} dio de alta el siniestro`],
+              ['VEHICULO', `${yo} agregó el vehículo AE 123 CD`],
+              ['PERSONA', `${yo} agregó a Ana Ruiz como titular del vehículo AE 123 CD`],
+              [
+                'PERSONA',
+                `${yo} agregó a una persona sin nombre como ocupante del vehículo AE 123 CD`,
+              ],
+              ['VEHICULO', `${yo} agregó el vehículo AB 456 EF`],
+              ['PERSONA', `${yo} agregó a una persona sin nombre como testigo`],
+              [
+                'ABOGADO',
+                `${yo} agregó al abogado Dra. Paula Sánchez, que representa a 2 personas sin nombre`,
+              ],
+              ['PERITO', `${yo} cargó al perito médico Dra. Ríos`],
+              ['DOCUMENTO', `${yo} subió el documento "Denuncia.pdf"`],
+              ['ASIGNACION', `Se asignó el caso al usuario Gestora Prueba ${marca}`],
+            ],
           )
+          assert.ok(s.eventosHistorial.every((e) => e.idUsuario === admin.id))
+          assert.equal(new Set(s.eventosHistorial.map((e) => e.fechaEvento.getTime())).size, 1)
           assert.deepEqual(
             s.notificaciones.map((n) => [n.idUsuario, n.tipoNotificacion, n.leida]),
             [[gestor.id, 'ASIGNACION_SINIESTRO', false]],

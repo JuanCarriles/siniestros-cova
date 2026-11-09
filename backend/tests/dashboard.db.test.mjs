@@ -54,7 +54,6 @@ test('PostgreSQL: dashboard propio, límite exacto de 72 h, pendientes y paginac
                 numeroPoliza: marca,
                 fechaAsignacion: hace(200),
                 fechaUltimoMovimiento: hace(1),
-                demorado: false,
                 menorEdadInvolucrado: false,
                 idUsuario: propio.id,
                 idEstadoSiniestro: abierto.id,
@@ -63,11 +62,11 @@ test('PostgreSQL: dashboard propio, límite exacto de 72 h, pendientes y paginac
                 ...extra,
               },
             })
-          const reciente = await caso({ demorado: true }) // El flag persistido no define el cálculo.
+          const reciente = await caso()
           const limite = await caso({ fechaUltimoMovimiento: hace(72) })
-          await caso({ fechaUltimoMovimiento: new Date(hace(72).getTime() + 1) })
-          await caso({ fechaUltimoMovimiento: null, fechaAsignacion: hace(72) })
-          await caso({ fechaUltimoMovimiento: null, fechaAsignacion: hace(2) })
+          const otro1 = await caso({ fechaUltimoMovimiento: new Date(hace(72).getTime() + 1) })
+          const otro2 = await caso({ fechaUltimoMovimiento: null, fechaAsignacion: hace(72) })
+          const otro3 = await caso({ fechaUltimoMovimiento: null, fechaAsignacion: hace(2) })
           const extranjero = await caso({ idUsuario: ajeno.id, fechaUltimoMovimiento: hace(100) })
           const cerrado = await caso({ idEstadoSiniestro: cierre.id })
           const baja = await caso({ eliminado: true, fechaBaja: ahora })
@@ -87,10 +86,20 @@ test('PostgreSQL: dashboard propio, límite exacto de 72 h, pendientes y paginac
             fechaSolicitud: hace(240),
             tipoPerito: 'MEDICO',
           })
-          for (let i = 0; i < 5; i++) await pericia(reciente.id, { fechaSolicitud: hace(120 - i) })
+          // Un perito activo de cada tipo por siniestro (índice Perito_tipo_activo_key): las cinco pendientes que
+          // completan la paginación se reparten entre los casos del gestor
+          const lugares = [
+            [reciente.id, 'CESVI'],
+            [reciente.id, 'MEDICO'],
+            [limite.id, 'CESVI'],
+            [otro1.id, 'CESVI'],
+            [otro2.id, 'CESVI'],
+          ]
+          for (const [i, [id, tipoPerito]] of lugares.entries())
+            await pericia(id, { tipoPerito, fechaSolicitud: hace(120 - i) })
           for (const id of [extranjero.id, cerrado.id, baja.id, borrando.id]) await pericia(id)
-          await pericia(reciente.id, { cerrado: true, fechaCierre: ahora })
-          await pericia(reciente.id, { eliminado: true, fechaBaja: ahora })
+          await pericia(otro3.id, { cerrado: true, fechaCierre: ahora })
+          await pericia(otro3.id, { eliminado: true, fechaBaja: ahora, tipoPerito: 'MEDICO' })
 
           const resultado = await servicio.obtenerGestor(propio, 1)
           dashboardGestorSchema.parse(resultado)

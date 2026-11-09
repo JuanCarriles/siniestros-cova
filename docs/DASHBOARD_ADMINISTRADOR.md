@@ -9,8 +9,10 @@ Reemplaza el inicio anterior de accesos a las secciones; esos accesos continúan
   Cada tarjeta abre el listado filtrado por estado. Incluye estados sin casos y estados retirados con casos.
 - Casos activos demorados, ordenados por el último movimiento o por la asignación si nunca hubo uno.
   El semáforo reutiliza `DiasSinMovimiento`: amarillo desde 72 horas y rojo desde siete días, con iconos y texto.
-- Actividad reciente real, con autor, fecha y enlace a cada ficha E5-01. No incluye eventos o casos de baja,
-  ni casos con eliminación en curso, para enlazar fichas disponibles.
+- Actividad reciente real, con autor, fecha y enlace a cada ficha E5-01. Incluye los siniestros dados de baja,
+  sus eventos anteriores y el evento de baja registrado en `HistorialSiniestro`. El historial particular sigue
+  disponible en la ficha para administradores. Solo excluye eventos retirados y casos con eliminación en curso,
+  cuyo acceso está bloqueado. La eliminación definitiva sigue eliminando el historial asociado.
 - Cinco elementos en cada bloque; «Ver todos» ofrece páginas de 25 resultados.
 - Actualización manual, fecha de consulta, estados vacíos y vista adaptable a celular.
 - Título visible con `SectionHeading`, márgenes comunes del panel y fechas compartidas con la ficha.

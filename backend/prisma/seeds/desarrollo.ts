@@ -1044,7 +1044,10 @@ export async function seedDesarrollo(
     ).id
 
   // Usuarios
-  const usuarios = new Map<string, { id: number; nombres: string; apellidos: string }>()
+  const usuarios = new Map<
+    string,
+    { id: number; nombres: string; apellidos: string; tipoUsuario: TipoUsuario }
+  >()
   for (const u of USUARIOS_DEV) {
     const creado = await tx.usuario.create({
       data: {
@@ -1128,7 +1131,6 @@ export async function seedDesarrollo(
         fechaUltimoMovimiento: haceDias(s.ultimoMovimientoHaceDias, 16),
         fechaCierre: s.cerradoHaceDias !== undefined ? haceDias(s.cerradoHaceDias, 12) : null,
         // RF-19: sin cambios en más de 72 h (los cerrados no cuentan)
-        demorado: !cerrado && s.ultimoMovimientoHaceDias >= 3,
         idEstadoSiniestro: obtener(estados, s.estado, 'el estado'),
         idAseguradora: obtener(aseguradoras, s.aseguradora, 'la aseguradora'),
         idAjustador: obtener(ajustadores, s.ajustador, 'el ajustador'),
@@ -1222,10 +1224,15 @@ export async function seedDesarrollo(
     const desde = s.asignadoHaceDias
     const hasta = s.ultimoMovimientoHaceDias
 
-    // Asignación (RF-10) y reasignación (RF-12): las hace el supervisor
+    // Alta (E5-09), asignación (RF-10) y reasignación (RF-12): las hace el supervisor
     if (s.reasignadoDe) {
       const anterior = obtener(usuarios, s.reasignadoDe, 'el usuario')
       const fechaOriginal = haceDias(s.asignadoHaceDias + 7, 9)
+      await historial(
+        idSupervisor,
+        eventoHistorial.altaSiniestro(supervisor, fechaOriginal),
+        fechaOriginal,
+      )
       await historial(
         idSupervisor,
         eventoHistorial.asignacion(anterior, fechaOriginal),
@@ -1251,6 +1258,11 @@ export async function seedDesarrollo(
     } else {
       await historial(
         idSupervisor,
+        eventoHistorial.altaSiniestro(supervisor, fechaAsignacion),
+        fechaAsignacion,
+      )
+      await historial(
+        idSupervisor,
         eventoHistorial.asignacion(asignado, fechaAsignacion),
         fechaAsignacion,
       )
@@ -1267,7 +1279,14 @@ export async function seedDesarrollo(
     for (const [i, descripcion] of s.novedades.entries()) {
       const fechaCarga = haceDias(diasNovedades[i] ?? hasta, 11)
       await tx.novedadSiniestro.create({
-        data: { idSiniestro, descripcion, autor: nombreCompleto(asignado), fechaCarga },
+        data: {
+          idSiniestro,
+          idUsuario: idAsignado,
+          descripcion,
+          autor: nombreCompleto(asignado),
+          tipoUsuarioAutor: asignado.tipoUsuario,
+          fechaCarga,
+        },
       })
       await historial(idAsignado, eventoHistorial.novedad(asignado, fechaCarga), fechaCarga)
       await notificar(

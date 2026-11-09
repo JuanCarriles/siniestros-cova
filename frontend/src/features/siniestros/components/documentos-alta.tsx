@@ -117,6 +117,10 @@ export function DocumentosAlta({
           Denuncia, fotos, presupuestos… Si todavía no tenés documentos, podés crear el siniestro
           sin cargarlos.
         </p>
+        <p className="text-muted-foreground">
+          Las imágenes grandes se guardan reducidas para ahorrar espacio; cuando se comprimen, no se
+          conserva el original. Los PDF no se modifican.
+        </p>
       </div>
 
       <div

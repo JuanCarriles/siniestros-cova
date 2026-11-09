@@ -54,6 +54,7 @@ export function TarjetaSiniestro({
         <DiasSinMovimiento
           dias={siniestro.diasSinMovimiento}
           cerrado={siniestro.estado.esCierre}
+          dadoDeBaja={siniestro.eliminado}
           conTexto
         />
       </div>

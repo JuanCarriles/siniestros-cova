@@ -79,9 +79,17 @@ export function crearServicioBajasSiniestros(deps: {
     // Incluye los documentos dados de baja: también conservan su archivo en R2.
     const documentos = await tx.documentoSiniestro.findMany({
       where: { idSiniestro: id },
-      select: { urlArchivoSinDominio: true },
+      select: { urlArchivoSinDominio: true, claveImagenOptimizada: true, claveMiniatura: true },
     })
-    const claves = [...new Set(documentos.map((d) => d.urlArchivoSinDominio))]
+    const claves = [
+      ...new Set(
+        documentos.flatMap((d) =>
+          [d.urlArchivoSinDominio, d.claveImagenOptimizada, d.claveMiniatura].filter(
+            (c): c is string => !!c,
+          ),
+        ),
+      ),
+    ]
     if (claves.some((clave) => !clave.startsWith(`siniestros/${id}/`))) {
       throw new HttpError(
         409,
@@ -93,7 +101,11 @@ export function crearServicioBajasSiniestros(deps: {
       (await tx.documentoSiniestro.count({
         where: {
           idSiniestro: { not: id },
-          urlArchivoSinDominio: { in: claves },
+          OR: [
+            { urlArchivoSinDominio: { in: claves } },
+            { claveImagenOptimizada: { in: claves } },
+            { claveMiniatura: { in: claves } },
+          ],
         },
       }))
     ) {
@@ -184,7 +196,8 @@ export function crearServicioBajasSiniestros(deps: {
         const ahora = reloj()
         await tx.siniestro.update({
           where: { id },
-          data: { eliminado: true, fechaBaja: ahora, fechaUltimoMovimiento: ahora },
+          // La baja no es movimiento del caso (E5-10): un caso dado de baja no se marca demorado igual
+          data: { eliminado: true, fechaBaja: ahora },
         })
         await tx.historialSiniestro.create({
           data: {
@@ -235,6 +248,7 @@ export function crearServicioBajasSiniestros(deps: {
         const ahora = reloj()
         await tx.siniestro.update({
           where: { id },
+          // Reactivar reinicia el reloj (E5-10): el tiempo dado de baja no cuenta como demora
           data: { eliminado: false, fechaBaja: null, fechaUltimoMovimiento: ahora },
         })
         await tx.historialSiniestro.create({

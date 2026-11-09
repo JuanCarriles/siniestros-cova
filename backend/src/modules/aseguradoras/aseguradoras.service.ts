@@ -31,6 +31,16 @@ function aListado({ _count, ...fila }: FilaPrisma) {
 
 // CU-02: alta, modificación, baja lógica y reactivación de aseguradoras.
 export function crearServicioAseguradoras(prisma: BaseAseguradoras) {
+  // El índice único es el resguardo si dos altas/modificaciones pasan la consulta previa a la vez.
+  function conflictoUnico(error: unknown): never {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002')
+      throw new HttpError(
+        409,
+        'Ya existe una aseguradora con ese nombre. Si está dada de baja, podés reactivarla con «Mostrar dadas de baja».',
+        { campo: 'nombre' },
+      )
+    throw error
+  }
   // "No puede repetirse" (mockup): sin distinguir mayúsculas y contando también las dadas de baja, para que no
   // convivan "Sancor" activa y "SANCOR" dada de baja
   async function exigirNombreLibre(nombre: string, excepto?: number) {
@@ -69,7 +79,9 @@ export function crearServicioAseguradoras(prisma: BaseAseguradoras) {
 
     async crear(datos: AseguradoraData) {
       await exigirNombreLibre(datos.nombre)
-      return aListado(await prisma.aseguradora.create({ data: datos, select: detalle }))
+      return aListado(
+        await prisma.aseguradora.create({ data: datos, select: detalle }).catch(conflictoUnico),
+      )
     },
 
     async modificar(id: number, datos: AseguradoraUpdateData) {
@@ -79,7 +91,9 @@ export function crearServicioAseguradoras(prisma: BaseAseguradoras) {
       }
       if (datos.nombre !== undefined) await exigirNombreLibre(datos.nombre, id)
       return aListado(
-        await prisma.aseguradora.update({ where: { id }, data: datos, select: detalle }),
+        await prisma.aseguradora
+          .update({ where: { id }, data: datos, select: detalle })
+          .catch(conflictoUnico),
       )
     },
 

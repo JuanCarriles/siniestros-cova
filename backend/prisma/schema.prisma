@@ -22,6 +22,10 @@ enum TipoNotificacion {
   MENSAJE_NUEVO
   ASIGNACION_SINIESTRO
   REASIGNACION_SINIESTRO
+  /// La tarea programada de demoras (E5-10): 72 horas sin movimiento
+  CASO_DEMORADO
+  /// …y 7 días sin movimiento (el semáforo en rojo)
+  CASO_EN_ALERTA
 }
 
 // La descripción de cada evento la arma src/modules/historial/historial.textos.ts
@@ -33,8 +37,14 @@ enum TipoEventoHistorial {
   ASIGNACION
   REASIGNACION
   CAMBIO_ESTADO
+  MODIFICACION_DATOS
   BAJA_SINIESTRO
   REACTIVACION_SINIESTRO
+  VEHICULO
+  PERSONA
+  ABOGADO
+  PERITO
+  ALTA_SINIESTRO
 }
 
 enum TipoPerito {
@@ -120,16 +130,18 @@ model Usuario {
   eliminado      Boolean     @default(false)
   fechaBaja      DateTime?   @db.Timestamptz(3)
 
-  direccion           Direccion               @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  documentosPlantilla DocumentoPlantilla[]
-  notificaciones      Notificacion[]
-  eventosHistorial    HistorialSiniestro[]
-  mensajes            MensajeChat[]
-  lecturasMensajes    LecturaMensajeChat[]
-  documentosSiniestro DocumentoSiniestro[]
-  siniestros          Siniestro[]
-  sesiones            Sesion[]
-  recuperacion        RecuperacionContrasena?
+  direccion             Direccion               @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  documentosPlantilla   DocumentoPlantilla[]
+  notificaciones        Notificacion[]
+  eventosHistorial      HistorialSiniestro[]
+  mensajes              MensajeChat[]
+  lecturasMensajes      LecturaMensajeChat[]
+  documentosSiniestro   DocumentoSiniestro[]
+  documentosDadosDeBaja DocumentoSiniestro[]    @relation("BajaDocumentoSiniestro")
+  novedadesSiniestro    NovedadSiniestro[]
+  siniestros            Siniestro[]
+  sesiones              Sesion[]
+  recuperacion          RecuperacionContrasena?
 
   @@index([idDireccion])
 }
@@ -192,14 +204,18 @@ model Notificacion {
 }
 
 model HistorialSiniestro {
-  id          Int                 @id @default(autoincrement())
-  tipoEvento  TipoEventoHistorial
-  descripcion String
-  fechaEvento DateTime            @default(now()) @db.Timestamptz(3)
-  idSiniestro Int
-  idUsuario   Int
-  eliminado   Boolean             @default(false)
-  fechaBaja   DateTime?           @db.Timestamptz(3)
+  id               Int                 @id @default(autoincrement())
+  tipoEvento       TipoEventoHistorial
+  descripcion      String
+  fechaEvento      DateTime            @default(now()) @db.Timestamptz(3)
+  idSiniestro      Int
+  idUsuario        Int
+  /// Nombre y rol de quien lo hizo, tal como eran en ese momento (E5-09). Los completa la base al registrar el evento
+  /// (trigger de la migración historial_autor); la ficha muestra estos y no los actuales del usuario.
+  autorNombre      String?
+  autorTipoUsuario TipoUsuario?
+  eliminado        Boolean             @default(false)
+  fechaBaja        DateTime?           @db.Timestamptz(3)
 
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -242,38 +258,65 @@ model LecturaMensajeChat {
 }
 
 model DocumentoSiniestro {
-  id                   Int       @id @default(autoincrement())
-  nombreOriginal       String
+  id                    Int       @id @default(autoincrement())
+  /// Identifica una carga para no duplicar documentos cuando se reintenta una respuesta perdida.
+  idCarga               String?   @unique @db.Uuid
+  hashContenido         String?   @db.VarChar(64)
+  /// Archivo principal y miniatura privados. La clave de vista solo se conserva para imágenes v1.
+  claveImagenOptimizada String?
+  claveMiniatura        String?
+  anchoOriginal         Int?
+  altoOriginal          Int?
+  anchoImagen           Int?
+  altoImagen            Int?
+  tamanoOptimizadoBytes BigInt?
+  nombreOriginal        String
   /// Clave relativa de R2 (siniestros/id/uuid.ext), nunca una URL firmada.
-  urlArchivoSinDominio String
-  tipoExtension        String
-  mimeType             String
-  tamanoBytes          BigInt
-  fechaCarga           DateTime  @default(now()) @db.Timestamptz(3)
-  idUsuario            Int
-  idSiniestro          Int
-  eliminado            Boolean   @default(false)
-  fechaBaja            DateTime? @db.Timestamptz(3)
+  urlArchivoSinDominio  String
+  tipoExtension         String
+  mimeType              String
+  /// Tamaño real del archivo guardado, después de la compresión si corresponde.
+  tamanoBytes           BigInt
+  fechaCarga            DateTime  @default(now()) @db.Timestamptz(3)
+  idUsuario             Int
+  idSiniestro           Int
+  eliminado             Boolean   @default(false)
+  fechaBaja             DateTime? @db.Timestamptz(3)
 
-  usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  motivoBaja    String?   @db.VarChar(1000)
+  idUsuarioBaja Int?
+  usuarioBaja   Usuario?  @relation("BajaDocumentoSiniestro", fields: [idUsuarioBaja], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario       Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siniestro     Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  @@index([idUsuarioBaja])
   @@index([idUsuario])
   @@index([idSiniestro, eliminado, fechaCarga])
 }
 
 model NovedadSiniestro {
-  id          Int       @id @default(autoincrement())
-  descripcion String
-  /// Nombre y apellido del usuario asignado al siniestro al momento de cargarla (texto, no FK).
-  autor       String
-  fechaCarga  DateTime  @default(now()) @db.Timestamptz(3)
-  idSiniestro Int
-  eliminado   Boolean   @default(false)
-  fechaBaja   DateTime? @db.Timestamptz(3)
+  id               Int          @id @default(autoincrement())
+  descripcion      String
+  /// Nombre y apellido de quien la cargó, tal como era en ese momento: es lo que muestra la ficha, aunque
+  /// después cambie su perfil
+  autor            String
+  /// Su tipo de usuario en ese momento (E5-08). Vacío en las anteriores a E5-08: no se registraba
+  tipoUsuarioAutor TipoUsuario?
+  fechaCarga       DateTime     @default(now()) @db.Timestamptz(3)
+  /// Quien la cargó (E5-08). En las anteriores, solo si el nombre guardado es el de un único usuario (migración
+  /// novedades_autor_historico); si no, queda vacío. Las novedades no se editan ni se borran desde el sistema;
+  /// solo se van con el borrado físico del siniestro.
+  idUsuario        Int?
+  /// Identificador de cada envío del formulario: si se reintenta después de perder la respuesta, no se duplica
+  claveEnvio       String?      @unique
+  idSiniestro      Int
+  eliminado        Boolean      @default(false)
+  fechaBaja        DateTime?    @db.Timestamptz(3)
 
+  usuario   Usuario?  @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  @@index([idUsuario])
   @@index([idSiniestro, eliminado, fechaCarga])
 }
 
@@ -290,9 +333,13 @@ model Perito {
   idDireccion    Int?       @unique
   eliminado      Boolean    @default(false)
   fechaBaja      DateTime?  @db.Timestamptz(3)
+  /// Cuántas veces se modificó desde la ficha: un formulario abierto antes del último cambio no lo pisa (E5-07)
+  revision       Int        @default(0)
 
   siniestro Siniestro  @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   direccion Direccion? @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // Un perito activo de cada tipo por siniestro: índice parcial "Perito_tipo_activo_key", creado a mano en la
+  // migración 20261104130000_abogados_peritos_concurrencia (Prisma no declara índices parciales). Falla con P2002.
 
   @@index([idSiniestro])
 }
@@ -303,6 +350,7 @@ model Aseguradora {
   eliminado Boolean   @default(false)
   fechaBaja DateTime? @db.Timestamptz(3)
 
+  // Nombre único sin distinguir mayúsculas ni espacios de borde: índice de expresión en 20261105130000_maestros_unicos.
   ajustadores Ajustador[]
   vehiculos   Vehiculo[]
   siniestros  Siniestro[]
@@ -318,6 +366,7 @@ model Ajustador {
   eliminado     Boolean   @default(false)
   fechaBaja     DateTime? @db.Timestamptz(3)
 
+  // Email único sin distinguir mayúsculas ni espacios de borde: índice de expresión en 20261105130000_maestros_unicos.
   aseguradora Aseguradora @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestros  Siniestro[]
 
@@ -332,6 +381,8 @@ model Abogado {
   email           String?
   eliminado       Boolean   @default(false)
   fechaBaja       DateTime? @db.Timestamptz(3)
+  /// Cuántas veces se modificó desde la ficha, incluido a quién representa (E5-07)
+  revision        Int       @default(0)
 
   personasInvolucradas PersonaInvolucrada[]
 }
@@ -356,10 +407,15 @@ model Vehiculo {
   idSiniestro       Int
   eliminado         Boolean       @default(false)
   fechaBaja         DateTime?     @db.Timestamptz(3)
+  /// Cuántas veces se modificó desde la ficha: un formulario abierto antes del último cambio no lo pisa (E5-06)
+  revision          Int           @default(0)
 
   aseguradora          Aseguradora?         @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro            Siniestro            @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   personasInvolucradas PersonaInvolucrada[]
+  // Dominio único entre los vehículos activos del siniestro, sin espacios ni guiones y sin distinguir mayúsculas:
+  // índice parcial "Vehiculo_dominio_activo_key", creado a mano en la migración 20261104120000_partes_concurrencia
+  // (Prisma no declara índices parciales ni sobre expresiones). Un repetido falla con P2002.
 
   @@index([idAseguradora])
   @@index([idSiniestro])
@@ -399,12 +455,16 @@ model PersonaInvolucrada {
   tipoLesion                TipoLesion?
   eliminado                 Boolean     @default(false)
   fechaBaja                 DateTime?   @db.Timestamptz(3)
+  /// Cuántas veces se modificó desde la ficha: un formulario abierto antes del último cambio no lo pisa (E5-06)
+  revision                  Int         @default(0)
 
   siniestro     Siniestro      @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   direccion     Direccion?     @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
   abogado       Abogado?       @relation(fields: [idAbogado], references: [id], onDelete: Restrict, onUpdate: Restrict)
   tipoDocumento TipoDocumento? @relation(fields: [idTipoDocumento], references: [id], onDelete: Restrict, onUpdate: Restrict)
   vehiculo      Vehiculo?      @relation(fields: [idVehiculo], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // Un titular activo por vehículo: índice parcial "PersonaInvolucrada_titular_activo_key", creado a mano en la
+  // migración 20261104120000_partes_concurrencia (Prisma no declara índices parciales). Un segundo falla con P2002.
 
   @@index([idSiniestro])
   @@index([idAbogado])
@@ -426,10 +486,11 @@ model EstadoSiniestro {
 
 model Siniestro {
   id                    Int       @id @default(autoincrement())
+  /// Control de cambios simultáneos de los datos del caso; no cuenta como movimiento.
+  revision              Int       @default(0)
   numeroSiniestro       String
   numeroPoliza          String
   fechaAsignacion       DateTime  @db.Timestamptz(3)
-  demorado              Boolean
   menorEdadInvolucrado  Boolean
   idEstadoSiniestro     Int
   idAseguradora         Int
@@ -440,6 +501,8 @@ model Siniestro {
   sucursal              String?
   causa                 String?
   fechaCierre           DateTime? @db.Timestamptz(3)
+  /// Cuándo se movió el caso por última vez (RF-19, E5-10): cambio de estado, novedad, documento o cierre de pericia.
+  /// La demora (72 horas) y el semáforo se calculan al consultar, desde acá; no se guardan.
   fechaUltimoMovimiento DateTime? @db.Timestamptz(3)
   idAjustador           Int?
   idDireccion           Int?
@@ -461,6 +524,9 @@ model Siniestro {
   novedades            NovedadSiniestro[]
   peritos              Perito[]
   personasInvolucradas PersonaInvolucrada[]
+  // Único por aseguradora sin distinguir mayúsculas: índice "Siniestro_idAseguradora_numeroSiniestro_key" sobre
+  // (idAseguradora, lower(numeroSiniestro)), creado a mano en la migración 20261028120000_numero_siniestro_unico
+  // (Prisma no declara índices sobre expresiones). Un alta repetida falla con P2002.
 
   @@index([idEstadoSiniestro, eliminado])
   @@index([idAseguradora, eliminado])
@@ -468,9 +534,6 @@ model Siniestro {
   @@index([idAjustador])
   @@index([idDireccion])
   @@index([numeroSiniestro])
-  // Único por aseguradora sin distinguir mayúsculas: índice "Siniestro_idAseguradora_numeroSiniestro_key" sobre
-  // (idAseguradora, lower(numeroSiniestro)), creado a mano en la migración 20261028120000_numero_siniestro_unico
-  // (Prisma no declara índices sobre expresiones). Un alta repetida falla con P2002.
 }
 
 /// Una recuperación vigente por usuario. Sólo hashes de desafíos/tokens y del código vinculado al desafío.

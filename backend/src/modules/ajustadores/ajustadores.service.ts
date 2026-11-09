@@ -40,6 +40,15 @@ const siniestros = (cantidad: number) =>
 
 // CU-03: alta, modificación, baja lógica y reactivación de ajustadores.
 export function crearServicioAjustadores(prisma: BaseAjustadores) {
+  function conflictoUnico(error: unknown): never {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002')
+      throw new HttpError(
+        409,
+        'Ya existe un ajustador con ese email. Si está dado de baja, podés reactivarlo con «Mostrar dados de baja».',
+        { campo: 'email' },
+      )
+    throw error
+  }
   // Sin distinguir mayúsculas y contando también los dados de baja, como el nombre de las aseguradoras
   async function exigirEmailLibre(email: string, excepto?: number) {
     const otro = await prisma.ajustador.findFirst({
@@ -102,7 +111,9 @@ export function crearServicioAjustadores(prisma: BaseAjustadores) {
     async crear(datos: AjustadorData) {
       await exigirEmailLibre(datos.email)
       await exigirAseguradoraActiva(datos.idAseguradora)
-      return aListado(await prisma.ajustador.create({ data: datos, select: detalle }))
+      return aListado(
+        await prisma.ajustador.create({ data: datos, select: detalle }).catch(conflictoUnico),
+      )
     },
 
     // CU-03 3.b. Cambiar de aseguradora solo sin siniestros activos: si no, esos siniestros quedarían con una
@@ -120,10 +131,12 @@ export function crearServicioAjustadores(prisma: BaseAjustadores) {
         await exigirAseguradoraActiva(datos.idAseguradora!)
       }
       // La condición va en la misma sentencia: si mientras tanto le asignaron un siniestro, no se cambia
-      const resultado = await prisma.ajustador.updateMany({
-        where: { id, eliminado: false, ...(cambiaAseguradora ? sinSiniestrosActivos : {}) },
-        data: datos,
-      })
+      const resultado = await prisma.ajustador
+        .updateMany({
+          where: { id, eliminado: false, ...(cambiaAseguradora ? sinSiniestrosActivos : {}) },
+          data: datos,
+        })
+        .catch(conflictoUnico)
       if (resultado.count === 0) {
         const ahora = await buscar(id)
         if (ahora.eliminado) {
