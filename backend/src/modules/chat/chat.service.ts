@@ -179,12 +179,6 @@ export function crearServicioChat({
       return mensaje
     },
 
-    /**
-     * CU-10 1.h.3 (E7-03): el usuario entró a la conversación, o la está mirando cuando llega un mensaje. Marca como
-     * leídos, con su usuario y la hora del servidor, los mensajes de otros que todavía no leyó; retira su aviso de
-     * mensajes nuevos de este siniestro de la bandeja, y después del commit informa la lectura a la sala.
-     * Leer también se puede en un caso cerrado o dado de baja: la conversación se sigue consultando.
-     */
     /** Cuántos mensajes de otros no leyó todavía: el número de la pestaña del chat, al día en tiempo real */
     sinLeer(usuario: SesionUsuario, idSiniestro: number): Promise<SinLeerChat> {
       return transaccion(async (tx) => {
@@ -197,8 +191,20 @@ export function crearServicioChat({
       })
     },
 
+    /**
+     * CU-10 1.h.3 (E7-03): el usuario entró a la conversación, o la está mirando cuando llega un mensaje. Marca como
+     * leídos, con su usuario y la hora del servidor, los mensajes de otros que todavía no leyó; retira su aviso de
+     * mensajes nuevos de este siniestro de la bandeja, y después del commit informa la lectura a la sala.
+     *
+     * Bloquea el siniestro antes de todo, igual que el envío (prepararEdicion): un mensaje no puede llegar entre que
+     * se buscan los pendientes y se retira el aviso (si no, se borraría el aviso de un mensaje que quedó sin leer), y
+     * dos pestañas que marcan a la vez van una detrás de otra (la segunda ya no encuentra pendientes). Es un
+     * bloqueo NO KEY UPDATE: choca con el envío y con otra lectura, pero no con agregar filas que apunten al caso.
+     * Leer también se puede en un caso cerrado o dado de baja: la conversación se sigue consultando.
+     */
     async leer(usuario: SesionUsuario, idSiniestro: number): Promise<ResultadoLecturaChat> {
       const resultado = await transaccion(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${idSiniestro} FOR NO KEY UPDATE`
         const actor = await lector(tx, usuario, idSiniestro)
         const ahora = reloj()
         const pendientes = await tx.mensajeChat.findMany({
@@ -206,17 +212,28 @@ export function crearServicioChat({
           select: { id: true },
           orderBy: { id: 'asc' },
         })
-        // Dos pestañas pueden marcar a la vez: el único (mensaje, usuario) deja la primera lectura y no falla
-        const { count: leidos } = pendientes.length
-          ? await tx.lecturaMensajeChat.createMany({
-              data: pendientes.map((m) => ({
-                idMensajeChat: m.id,
+        // El único (mensaje, usuario) sigue de resguardo: si una lectura ya existiera, se conserva la guardada
+        if (pendientes.length)
+          await tx.lecturaMensajeChat.createMany({
+            data: pendientes.map((m) => ({
+              idMensajeChat: m.id,
+              idUsuario: actor.id,
+              fechaLeido: ahora,
+            })),
+            skipDuplicates: true,
+          })
+        // La respuesta y el aviso a la sala salen de lo que quedó guardado por esta lectura, no de lo que se intentó
+        const marcados = pendientes.length
+          ? await tx.lecturaMensajeChat.findMany({
+              where: {
                 idUsuario: actor.id,
                 fechaLeido: ahora,
-              })),
-              skipDuplicates: true,
+                idMensajeChat: { in: pendientes.map((m) => m.id) },
+              },
+              select: { idMensajeChat: true },
+              orderBy: { idMensajeChat: 'asc' },
             })
-          : { count: 0 }
+          : []
         const { count: avisosRetirados } = await tx.notificacion.updateMany({
           where: {
             idUsuario: actor.id,
@@ -227,11 +244,11 @@ export function crearServicioChat({
           data: { eliminado: true, fechaBaja: ahora },
         })
         return {
-          leidos,
+          leidos: marcados.length,
           avisosRetirados,
           lecturas: {
             idSiniestro,
-            idsMensajes: pendientes.map((m) => m.id),
+            idsMensajes: marcados.map((m) => m.idMensajeChat),
             lector: { id: actor.id, nombre: nombreCompleto(actor), tipoUsuario: actor.tipoUsuario },
             fechaLeido: ahora.toISOString(),
           } satisfies LecturasNuevasChat,

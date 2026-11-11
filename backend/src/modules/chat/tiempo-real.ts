@@ -129,14 +129,21 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
     return true
   }
 
+  /**
+   * Revisa varias conexiones a la vez. Devuelve los ids de las que no se pudieron revisar (por ejemplo, la base no
+   * respondió): no se sabe si conservan el acceso, así que quien envía contenido del caso las tiene que dejar afuera.
+   */
   async function revisarVarios(sockets: SocketCova[], soloSala?: number) {
+    const sinRevisar: string[] = []
     await Promise.all(
       sockets.map((s) =>
-        revisar(s, soloSala).catch((error: unknown) =>
-          console.error('No se pudo revisar una conexión en tiempo real:', error),
-        ),
+        revisar(s, soloSala).catch((error: unknown) => {
+          sinRevisar.push(s.id)
+          console.error('No se pudo revisar una conexión en tiempo real:', error)
+        }),
       ),
     )
+    return sinRevisar
   }
 
   function socketsEn(sala: string) {
@@ -237,7 +244,8 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
 
     /**
      * Manda un evento a la sala, revisando antes a cada conectado: si perdió la sesión o el acceso, lo saca y no
-     * recibe el contenido. Llamar después del commit.
+     * recibe el contenido. Si no se pudo comprobar (falló la consulta), tampoco lo recibe: ante la duda, no se manda.
+     * Sigue en la sala y la próxima revisión decide. Llamar después del commit.
      */
     async emitirASala<E extends keyof EventosServidor>(
       idSiniestro: number,
@@ -245,18 +253,20 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
       ...datos: Parameters<EventosServidor[E]>
     ) {
       const sala = salaSiniestro(idSiniestro)
-      await revisarVarios(socketsEn(sala), idSiniestro)
-      io.to(sala).emit(evento, ...datos)
+      const sinRevisar = await revisarVarios(socketsEn(sala), idSiniestro)
+      io.to(sala)
+        .except(sinRevisar)
+        .emit(evento, ...datos)
     },
 
     /** Después de una reasignación o una baja del caso: el que perdió el acceso sale de la sala ya. */
-    revisarSala(idSiniestro: number) {
-      return revisarVarios(socketsEn(salaSiniestro(idSiniestro)), idSiniestro)
+    async revisarSala(idSiniestro: number) {
+      await revisarVarios(socketsEn(salaSiniestro(idSiniestro)), idSiniestro)
     },
 
     /** Después de un cambio de rol, una baja o un cambio de contraseña del usuario. */
-    revisarUsuario(idUsuario: number) {
-      return revisarVarios(socketsEn(`${PREFIJO_USUARIO}${idUsuario}`))
+    async revisarUsuario(idUsuario: number) {
+      await revisarVarios(socketsEn(`${PREFIJO_USUARIO}${idUsuario}`))
     },
 
     /** Logout: cierra ya las conexiones de esa sesión (las demás sesiones del usuario siguen). */

@@ -105,7 +105,22 @@ test(
         const ajeno = await caso(otroGestor.id)
 
         servidor = createServer()
-        tiempoReal = crearTiempoReal(servidor, { sesiones, base: () => prisma, revisarCadaMs: 300 })
+        // La base del control de acceso puede fallar a pedido, para una persona (una caída breve de la base)
+        let fallaRevisionDe = null
+        const baseRevisable = {
+          siniestro: prisma.siniestro,
+          usuario: {
+            findFirst: (args) =>
+              args?.where?.id === fallaRevisionDe
+                ? Promise.reject(new Error('La base no respondió (simulado)'))
+                : prisma.usuario.findFirst(args),
+          },
+        }
+        tiempoReal = crearTiempoReal(servidor, {
+          sesiones,
+          base: () => baseRevisable,
+          revisarCadaMs: 300,
+        })
         servidor.listen(0, '127.0.0.1')
         await once(servidor, 'listening')
         const puerto = servidor.address().port
@@ -200,6 +215,33 @@ test(
         assert.ok(!tiempoReal.conectados(propio.id).has(gestor.id))
         assert.ok(tiempoReal.conectados(propio.id).has(admin.id), 'la administración sigue')
         assert.equal((await unirse(gestorC, propio.id)).status, 403)
+        await prisma.siniestro.update({ where: { id: propio.id }, data: { idUsuario: gestor.id } })
+        assert.deepEqual(await unirse(gestorC, propio.id), { ok: true })
+
+        // Si no se puede comprobar el acceso de una conexión (falla la consulta), no recibe el contenido: ante la
+        // duda, no se manda. El gestor ya no es responsable, pero la revisión de su conexión falla.
+        // (la falla se activa antes del cambio: si no, la revisión periódica podría sacarlo antes de enviar)
+        fallaRevisionDe = gestor.id
+        await prisma.siniestro.update({
+          where: { id: propio.id },
+          data: { idUsuario: otroGestor.id },
+        })
+        const llegoAlGestor = []
+        const llegoAlAdmin = []
+        const anotar = (lista) => (m) => lista.push(m)
+        gestorC.on('chat:mensaje', anotar(llegoAlGestor))
+        adminC.on('chat:mensaje', anotar(llegoAlAdmin))
+        await tiempoReal.emitirASala(propio.id, 'chat:mensaje', { id: -1, texto: 'privado' })
+        await hasta(() => llegoAlAdmin.length === 1, 'la administración recibe el mensaje')
+        await esperar(150)
+        assert.deepEqual(llegoAlGestor, [], 'sin poder comprobar su acceso, no recibe nada')
+        // Cuando la base vuelve, la revisión lo saca de la sala
+        fallaRevisionDe = null
+        const sacado = once(gestorC, 'sala:expulsado')
+        await tiempoReal.revisarSala(propio.id)
+        await sacado
+        gestorC.off('chat:mensaje')
+        adminC.off('chat:mensaje')
         await prisma.siniestro.update({ where: { id: propio.id }, data: { idUsuario: gestor.id } })
         assert.deepEqual(await unirse(gestorC, propio.id), { ok: true })
 

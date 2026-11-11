@@ -66,14 +66,40 @@ test('E7-03: indicador de mensaje leído', { timeout: 120_000 }, () =>
       })
 
       let ahora = new Date('2026-11-10T13:00:00.000Z')
+      // Para simular dos pestañas que leen en momentos distintos: cada llamada al reloj avanza un minuto
+      let relojAvanza = false
+      let minutos = 0
+      const reloj = () => (relojAvanza ? new Date(ahora.getTime() + 60_000 * minutos++) : ahora)
+      // Para meter algo justo antes de que la lectura retire el aviso (una sola vez)
+      let antesDeRetirarAviso = null
+      const conPausa = (tx) =>
+        new Proxy(tx, {
+          get(t, k) {
+            if (k === 'notificacion')
+              return new Proxy(t.notificacion, {
+                get(d, m) {
+                  if (m !== 'updateMany' || !antesDeRetirarAviso) return d[m]
+                  const pausa = antesDeRetirarAviso
+                  antesDeRetirarAviso = null
+                  return async (args) => {
+                    await pausa()
+                    return d.updateMany(args)
+                  }
+                },
+              })
+            const v = t[k]
+            return typeof v === 'function' ? v.bind(t) : v
+          },
+        })
       servidor = createServer()
       tiempoReal = crearTiempoReal(servidor, { sesiones, base: () => prisma })
       const chat = crearServicioChat({
-        transaccion: (trabajo) => prisma.$transaction(trabajo, { timeout: 15_000 }),
+        transaccion: (trabajo) =>
+          prisma.$transaction((tx) => trabajo(conPausa(tx)), { timeout: 15_000 }),
         presentes: (id) => tiempoReal.presentes(id),
         repartir: (m) => tiempoReal.emitirASala(m.idSiniestro, 'chat:mensaje', m),
         repartirLecturas: (l) => tiempoReal.emitirASala(l.idSiniestro, 'chat:leido', l),
-        reloj: () => ahora,
+        reloj,
       })
       const app = express()
       app.use(express.json(), cookieParser())
@@ -217,13 +243,44 @@ test('E7-03: indicador de mensaje leído', { timeout: 120_000 }, () =>
       await esperar(50)
       await enviar('admin', 'Otro más')
       assert.equal(await avisoVisible(gestor.id), 1)
-      // Dos pestañas marcando a la vez: una sola lectura por mensaje, sin error
+      // Dos pestañas marcando a la vez, cada una con su hora: una sola lectura por mensaje, sin error, y lo que
+      // responde cada una es lo que quedó guardado (no la hora de un intento que no se guardó)
+      relojAvanza = true
       const [a, b] = await Promise.all([leer('gestor'), leer('gestor')])
+      relojAvanza = false
       assert.equal(a.status, 200)
       assert.equal(b.status, 200)
       assert.equal(a.cuerpo.leidos + b.cuerpo.leidos, 1)
       assert.equal(await prisma.lecturaMensajeChat.count({ where: { idUsuario: gestor.id } }), 2)
       assert.equal(await avisoVisible(gestor.id), 0)
+      for (const r of [a.cuerpo, b.cuerpo]) {
+        assert.equal(r.lecturas.idsMensajes.length, r.leidos)
+        for (const idMensaje of r.lecturas.idsMensajes) {
+          const fila = await prisma.lecturaMensajeChat.findFirstOrThrow({
+            where: { idUsuario: gestor.id, idMensajeChat: idMensaje },
+          })
+          assert.equal(r.lecturas.fechaLeido, fila.fechaLeido.toISOString())
+        }
+      }
+
+      // Un mensaje que llega mientras se marca la lectura: no se marca (no estaba entre los pendientes), así que su
+      // aviso tiene que quedar. El envío espera a que termine la lectura (bloqueo del siniestro).
+      await enviar('admin', 'Antes de entrar')
+      let enMedio
+      antesDeRetirarAviso = async () => {
+        enMedio = enviar('admin', 'Llega en medio')
+        await esperar(300)
+      }
+      const conLlegada = await leer('gestor')
+      assert.equal(conLlegada.status, 200)
+      await enMedio
+      assert.equal(
+        (await pedir('gestor', '/sin-leer')).cuerpo.sinLeer,
+        1,
+        'el mensaje del medio sigue sin leer',
+      )
+      assert.equal(await avisoVisible(gestor.id), 1, 'y conserva su aviso en la bandeja')
+      await leer('gestor')
 
       // --- Permisos: solo los participantes; en un caso cerrado se sigue leyendo
       assert.equal((await leer('otroGestor')).status, 403)

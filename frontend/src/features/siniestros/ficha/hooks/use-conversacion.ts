@@ -4,7 +4,8 @@ import { ApiError } from '@/lib/api'
 import { escuchar, useSalaSiniestro } from '@/lib/tiempo-real'
 import { actualizarNotificaciones } from '@/features/notificaciones/actualizar-notificaciones'
 import { enviarMensajeChat, marcarChatLeido, obtenerChat } from '../api/ficha.api'
-import { aplicarLecturas, hayPorLeer, unirMensajes } from '../chat'
+import { aplicarLecturas, idsPorLeer, unirMensajes } from '../chat'
+import { crearMarcadoLeido } from '../marcado-leido'
 
 /** Un envío propio que todavía no confirmó el servidor */
 export type MensajePendiente = {
@@ -33,7 +34,8 @@ function useVisible() {
  * también pudieron leerse mensajes viejos mientras tanto (E7-03).
  *
  * E7-03: al entrar, y cada vez que llega algo de otro mientras se mira la conversación (pestaña visible), marca lo
- * pendiente como leído; el servidor retira el aviso de la bandeja e informa la lectura a los demás.
+ * pendiente como leído; el servidor retira el aviso de la bandeja e informa la lectura a los demás. Cuándo pedirlo
+ * (un pedido por vez, otra pasada si llegó algo mientras tanto, reintentos) lo decide crearMarcadoLeido.
  */
 export function useConversacion(idSiniestro: number, idUsuario: number, inicial: MensajeChat[]) {
   const [mensajes, setMensajes] = useState(inicial)
@@ -90,24 +92,26 @@ export function useConversacion(idSiniestro: number, idUsuario: number, inicial:
   }, [unida, idSiniestro, agregar])
 
   // E7-03: marcar como leído al entrar (aunque no haya nada pendiente: retira un aviso que haya quedado) y cada vez
-  // que aparece algo sin leer mientras se mira la conversación
+  // que cambia lo que hay sin leer mientras se mira la conversación
   const visible = useVisible()
-  const porLeer = hayPorLeer(mensajes, idUsuario)
-  const entro = useRef(false)
+  const porLeer = idsPorLeer(mensajes, idUsuario)
+  const marcado = useRef<ReturnType<typeof crearMarcadoLeido> | null>(null)
   useEffect(() => {
-    if (!unida || !visible || (entro.current && !porLeer)) return
-    const espera = setTimeout(() => {
-      entro.current = true
-      marcarChatLeido(idSiniestro)
-        .then((r) => {
-          setMensajes((actuales) => aplicarLecturas(actuales, r.lecturas))
-          if (r.avisosRetirados) actualizarNotificaciones()
-        })
-        .catch(() => {
-          // Se reintenta con el próximo mensaje, al volver a la pestaña o al reconectar
-        })
-    }, 400)
-    return () => clearTimeout(espera)
+    const nuevo = crearMarcadoLeido({
+      marcar: () => marcarChatLeido(idSiniestro),
+      alMarcar: (r) => {
+        setMensajes((actuales) => aplicarLecturas(actuales, r.lecturas))
+        if (r.avisosRetirados) actualizarNotificaciones()
+      },
+    })
+    marcado.current = nuevo
+    return () => {
+      nuevo.cerrar()
+      marcado.current = null
+    }
+  }, [idSiniestro])
+  useEffect(() => {
+    marcado.current?.actualizar({ activo: unida && visible, porLeer })
   }, [unida, visible, porLeer, idSiniestro])
 
   const enviar = useCallback(

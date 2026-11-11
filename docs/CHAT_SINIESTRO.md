@@ -26,7 +26,9 @@
 
 Además, **antes de cada envío a una sala** (`emitirASala`) se revisa a cada conectado. Así el contenido del
 caso nunca le llega a quien ya no tiene acceso, aunque no haya pasado la revisión periódica. El que pierde la
-sala recibe `sala:expulsado`; el que pierde la sesión, `sesion:vencida`.
+sala recibe `sala:expulsado`; el que pierde la sesión, `sesion:vencida`. Si la revisión de una conexión falla (por
+ejemplo, la base no responde), esa conexión **no recibe** el envío: ante la duda, no se manda. Sigue en la sala y la
+próxima revisión decide.
 
 ### Navegador
 
@@ -152,8 +154,12 @@ existía) toman el nombre y el rol actuales de su usuario.
 ## E7-03: indicador de mensaje leído (RF-26, CU-10 1.h.3)
 
 - `POST /api/siniestros/:id/chat/leidos`: marca como leídos los mensajes de otros que el usuario todavía no leyó.
+  - Bloquea el siniestro antes de todo (`FOR NO KEY UPDATE`), igual que el envío. Así un mensaje no puede llegar
+    entre que se buscan los pendientes y se retira el aviso (se borraría el aviso de un mensaje que quedó sin
+    leer), y dos pestañas que marcan a la vez van una detrás de otra.
   - Guarda una fila en `LecturaMensajeChat` por mensaje, con el usuario y la hora del servidor. El índice único
-    (mensaje, usuario) y `skipDuplicates` dejan la primera lectura si dos pestañas marcan a la vez.
+    (mensaje, usuario) y `skipDuplicates` quedan de resguardo. La respuesta y el aviso a la sala salen de las
+    lecturas que quedaron guardadas, no de las que se intentaron.
   - En la misma transacción retira de la bandeja el aviso de mensajes nuevos de ese siniestro (baja lógica:
     `eliminado` y `fechaBaja`). El próximo mensaje vuelve a generar un aviso.
   - Responde `{ leidos, avisosRetirados, lecturas }`. Si marcó algo, después del commit avisa a la sala con
@@ -162,7 +168,11 @@ existía) toman el nombre y el rol actuales de su usuario.
 - Cada mensaje trae `leidoPor`: quién lo leyó y cuándo, en orden, sin contar al autor.
 - **Cuándo se marca:** al entrar a la conversación (aunque no haya nada pendiente: así se retira un aviso que
   haya quedado) y cada vez que aparece algo sin leer mientras la conversación está a la vista, con la pestaña
-  del navegador visible. Si la pestaña está oculta, se marca al volver.
+  del navegador visible. Si la pestaña está oculta, se marca al volver. Lo decide `marcado-leido.ts` (sin React,
+  con pruebas propias): un pedido por vez; si llega algo mientras hay uno en curso, otra pasada al terminar; si
+  falla, reintenta solo cada 1 s, 2 s, 4 s… hasta 30 s.
+- Cuando un mensaje llega por dos caminos (socket y recarga después de un corte), se juntan sus lectores (uno por
+  lector, el más temprano), en lugar de quedarse con la copia que tiene más.
 - **Pantalla:** debajo de cada mensaje propio, "Leído por María Rearte a las 14:31" (con la fecha si no fue hoy, y
   todos los lectores si leyó más de uno) o "Enviado. Todavía no lo leyó nadie". Siempre en texto, con un ícono
   de apoyo. Se actualiza en tiempo real y la campana de notificaciones se refresca al retirar el aviso.
@@ -190,7 +200,12 @@ existía) toman el nombre y el rol actuales de su usuario.
   - que el autor no se cuenta;
   - que el mensaje de quien mira no genera aviso, pero queda sin leer hasta marcarlo;
   - que un aviso retirado no impide el próximo;
-  - dos pestañas marcando a la vez;
+  - dos pestañas marcando a la vez, cada una con su hora: la respuesta coincide con lo guardado;
+  - un mensaje que llega mientras se marca la lectura: queda sin leer y conserva su aviso;
   - permisos (403) y caso cerrado (se lee);
   - la cantidad sin leer de cada uno (endpoint y ficha), y que unirse a la sala no cuenta como mirar.
-- `chat.test.mjs` (frontend): lecturas sin repetir y sin el autor, y la versión más completa al recargar.
+- `chat.test.mjs` (frontend): lecturas sin repetir y sin el autor, y que se juntan los lectores de dos copias del
+  mismo mensaje (socket y recarga).
+- `marcado-leido.test.mjs` (frontend, relojes simulados): marcar al entrar, otra pasada si llega algo durante el
+  pedido, reintentos con espera creciente, nada con la pestaña oculta, sin bucle si el servidor no marcó nada.
+- `chat-tiempo-real.db.test.mjs`: si no se puede comprobar el acceso de una conexión, no recibe el envío.
