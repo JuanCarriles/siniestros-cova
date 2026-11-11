@@ -11,7 +11,7 @@ export type PanelSection =
   | 'perfil'
   | 'notificaciones'
 
-export type PanelUser = { nombre: string; tipo: TipoUsuario }
+export type PanelUser = { id: number; nombre: string; tipo: TipoUsuario }
 
 export const roleLabels: Record<TipoUsuario, string> = {
   GESTOR: 'Gestor',

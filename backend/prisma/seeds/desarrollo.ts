@@ -1331,7 +1331,14 @@ export async function seedDesarrollo(
       const enviado = haceDias(hasta, 9, 10 + i * 5)
       const ultimo = i === chat.length - 1
       const mensaje = await tx.mensajeChat.create({
-        data: { idSiniestro, idUsuario: autor.id, contenidoMensaje: m.texto, fechaEnvio: enviado },
+        data: {
+          idSiniestro,
+          idUsuario: autor.id,
+          autor: `${autor.nombres} ${autor.apellidos}`,
+          tipoUsuarioAutor: autor.tipoUsuario,
+          contenidoMensaje: m.texto,
+          fechaEnvio: enviado,
+        },
       })
       await historial(autor.id, eventoHistorial.mensaje(autor, enviado), enviado)
       if (ultimo && s.ultimoMensajeSinLeer) {

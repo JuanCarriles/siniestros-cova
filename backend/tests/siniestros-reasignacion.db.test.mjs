@@ -175,10 +175,13 @@ test(
           (n) => !n.leida && !n.revisada && n.tipoNotificacion === 'REASIGNACION_SINIESTRO',
         ),
       )
-      assert.deepEqual(mails.map((m) => m.email).sort(), [anterior.email, nuevo.email].sort())
+      assert.deepEqual(
+        mails.map((m) => m.email),
+        [nuevo.email],
+      )
       assert.equal(
-        mails.find((m) => m.email === anterior.email).enlace,
-        'https://cova.example.invalid/siniestros',
+        mails.some((m) => m.email === anterior.email),
+        false,
       )
       assert.equal(
         mails.find((m) => m.email === nuevo.email).enlace,
@@ -201,7 +204,7 @@ test(
         nuevo.id,
       )
       await assert.rejects(servicio.reasignar(admin, s.id, pedido), { status: 409 })
-      assert.equal(mails.length, 2)
+      assert.equal(mails.length, 1)
 
       const casoInactivo = await caso({ idUsuario: inactivo.id })
       const antesMails = mails.length

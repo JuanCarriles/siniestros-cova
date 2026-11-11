@@ -174,16 +174,19 @@ export function crearServicioReasignacion(deps: Deps, reloj = () => new Date()) 
             fechaCreacion: ahora,
           })),
         })
-        return destinatarios.map((u): AvisoReasignacion => ({
-          email: u.email,
-          nombre: nombreCompleto(u),
-          numeroSiniestro: caso.numeroSiniestro,
-          anterior: nombreAnterior,
-          nuevo: nombreNuevo,
-          autor,
-          enlace: `${deps.urlSistema.replace(/\/$/, '')}/siniestros${u.id === nuevo.id || u.tipoUsuario !== 'GESTOR' ? `/${id}` : ''}`,
-          esNuevoResponsable: u.id === nuevo.id,
-        }))
+        // E8: ambos conservan el aviso interno; solo quien recibe la asignación recibe mail.
+        return destinatarios
+          .filter((u) => u.id === nuevo.id)
+          .map((u): AvisoReasignacion => ({
+            email: u.email,
+            nombre: nombreCompleto(u),
+            numeroSiniestro: caso.numeroSiniestro,
+            anterior: nombreAnterior,
+            nuevo: nombreNuevo,
+            autor,
+            enlace: `${deps.urlSistema.replace(/\/$/, '')}/siniestros${u.id === nuevo.id || u.tipoUsuario !== 'GESTOR' ? `/${id}` : ''}`,
+            esNuevoResponsable: u.id === nuevo.id,
+          }))
       })
       // El proveedor se invoca después del commit: un mail fallido nunca duplica ni revierte la reasignación.
       const envios = await Promise.allSettled(

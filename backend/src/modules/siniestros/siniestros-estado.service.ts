@@ -1,3 +1,4 @@
+import { notificarEventoCaso } from '../notificaciones/eventos-notificaciones.ts'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import {
   cambiarEstadoSiniestroSchema,
@@ -125,30 +126,14 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
             ...eventoHistorial.cambioEstado(caso.estadoSiniestro.nombre, nuevo.nombre, ahora),
           },
         })
-        // Usuarios internos involucrados: responsable actual y administración activa, sin avisarse a sí mismo.
-        const destinatarios = await tx.usuario.findMany({
-          where: {
-            eliminado: false,
-            id: { not: actor.id },
-            OR: [
-              { id: caso.idUsuario },
-              { tipoUsuario: { in: ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'] } },
-            ],
-          },
-          select: { id: true },
+        await notificarEventoCaso(tx, {
+          idSiniestro: id,
+          idUsuarioAsignado: caso.idUsuario,
+          idAutor: actor.id,
+          tipo: 'CAMBIO_ESTADO',
+          mensaje: `${nombreCompleto(actor)} cambió el siniestro ${caso.numeroSiniestro} de “${caso.estadoSiniestro.nombre}” a “${nuevo.nombre}”.`,
+          fecha: ahora,
         })
-        if (destinatarios.length)
-          await tx.notificacion.createMany({
-            data: destinatarios.map((destinatario) => ({
-              idUsuario: destinatario.id,
-              idSiniestro: id,
-              tipoNotificacion: 'CAMBIO_ESTADO' as const,
-              mensaje: `${nombreCompleto(actor)} cambió el siniestro ${caso.numeroSiniestro} de “${caso.estadoSiniestro.nombre}” a “${nuevo.nombre}”.`,
-              fechaCreacion: ahora,
-              leida: false,
-              revisada: false,
-            })),
-          })
       })
     },
   }

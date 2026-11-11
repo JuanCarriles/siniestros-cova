@@ -21,6 +21,13 @@ import type {
   VehiculoAltaData,
 } from '@cova/shared/schemas/siniestros-alta'
 import type { NovedadData } from '@cova/shared/schemas/novedades'
+import type {
+  ConversacionChat,
+  EnviarMensajeChatData,
+  MensajeChat,
+  ResultadoLecturaChat,
+  SinLeerChat,
+} from '@cova/shared/schemas/chat'
 import { api } from '@/lib/api'
 
 // Ficha del siniestro (CU-10, E5-01): la cabecera con los datos del caso, y lo de cada pestaña por separado
@@ -52,6 +59,8 @@ export const pestanasFicha = {
   novedades: (id: number): Promise<NovedadFicha[]> => api(`/siniestros/${id}/novedades`),
   documentos: (id: number): Promise<DocumentoFicha[]> => api(`/siniestros/${id}/documentos`),
   historial: (id: number): Promise<EventoHistorialFicha[]> => api(`/siniestros/${id}/historial`),
+  // E7-02: la conversación; lo que llegue después entra por el tiempo real
+  chat: (id: number): Promise<ConversacionChat> => obtenerChat(id),
 }
 
 // ------------------------------------------------------------------ Vehículos y personas (CU-10 1.c, E5-06)
@@ -126,3 +135,19 @@ export const profesionales = {
 /** Carga una novedad. No hay modificar ni dar de baja: las novedades no se editan ni se borran. */
 export const cargarNovedad = (id: number, datos: NovedadData): Promise<ParteCreada> =>
   api(`/siniestros/${id}/novedades`, { method: 'POST', body: datos })
+
+/** E7-02: la conversación del chat; con `despues`, solo lo posterior a ese mensaje (al reconectar) */
+export const obtenerChat = (id: number, despues?: number): Promise<ConversacionChat> =>
+  api(`/siniestros/${id}/chat${despues ? `?despues=${despues}` : ''}`)
+
+/** E7-02: envía un mensaje; responde el mensaje guardado (el mismo si se reintenta con la misma clave) */
+export const enviarMensajeChat = (id: number, datos: EnviarMensajeChatData): Promise<MensajeChat> =>
+  api(`/siniestros/${id}/chat`, { method: 'POST', body: datos })
+
+/** Cuántos mensajes de otros no leyó todavía (el número de la pestaña del chat) */
+export const obtenerChatSinLeer = (id: number): Promise<SinLeerChat> =>
+  api(`/siniestros/${id}/chat/sin-leer`)
+
+/** E7-03: marca como leído lo pendiente de la conversación y retira el aviso de mensajes nuevos de la bandeja */
+export const marcarChatLeido = (id: number): Promise<ResultadoLecturaChat> =>
+  api(`/siniestros/${id}/chat/leidos`, { method: 'POST' })

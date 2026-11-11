@@ -8,6 +8,7 @@ import { tokenDeSesion, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import { borrarCookieSesion } from '../../config/cookies.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import type { crearServicioPerfil } from './perfil.service.ts'
+import { tiempoReal } from '../chat/tiempo-real.ts'
 
 export function crearPerfilRouter({
   servicio,
@@ -47,6 +48,8 @@ export function crearPerfilRouter({
     const { id, token } = contexto(req)
     const datos = perfilContrasenaSchema.parse(req.body)
     const resultado = await servicio.cambiarContrasena(id, token, datos, req.ip)
+    // E7-01: cambiar la contraseña cierra todas las sesiones, también las del chat abierto
+    await tiempoReal.revisarUsuario(id)
     borrarCookieSesion(res)
     res.json(resultado)
   })

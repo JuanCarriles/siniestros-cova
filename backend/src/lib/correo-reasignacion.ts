@@ -18,9 +18,9 @@ const escapar = (texto: string) =>
 
 export function crearCorreoReasignacion(config: ConfigCorreo) {
   return (a: AvisoReasignacion): Promise<void> => {
-    const aviso = a.esNuevoResponsable
-      ? 'Ahora sos responsable de este siniestro.'
-      : 'Este siniestro dejó de estar asignado a vos.'
+    // E8: no enviar correo al responsable anterior, aun si un consumidor conserva el contrato viejo.
+    if (!a.esNuevoResponsable) return Promise.resolve()
+    const aviso = 'Ahora sos responsable de este siniestro.'
     const texto = `Hola, ${a.nombre}. ${aviso}\n${a.autor} reasignó el siniestro ${a.numeroSiniestro}.\nResponsable anterior: ${a.anterior}\nNuevo responsable: ${a.nuevo}\n\nVer en el sistema: ${a.enlace}`
     return enviarCorreoResend(config, {
       email: a.email,
@@ -38,7 +38,7 @@ export function crearCorreoReasignacion(config: ConfigCorreo) {
 <div style="padding:16px;background:#f2f6fb;border-radius:12px;font-size:16px;line-height:26px;">
 <p style="margin:0 0 12px;">Responsable anterior<br><strong>${escapar(a.anterior)}</strong></p>
 <p style="margin:0;">Nuevo responsable<br><strong>${escapar(a.nuevo)}</strong></p></div>
-<table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:24px auto 0;"><tr><td style="background:#1e3a5f;border-radius:10px;"><a href="${escapar(a.enlace)}" style="display:inline-block;padding:14px 24px;color:#ffffff;font-size:18px;font-weight:bold;text-decoration:none;">${a.esNuevoResponsable ? 'Ver el siniestro' : 'Ir al sistema'}</a></td></tr></table>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:24px auto 0;"><tr><td style="background:#1e3a5f;border-radius:10px;"><a href="${escapar(a.enlace)}" style="display:inline-block;padding:14px 24px;color:#ffffff;font-size:18px;font-weight:bold;text-decoration:none;">Ver el siniestro</a></td></tr></table>
 </td></tr><tr><td align="center" style="padding:24px 8px;font-size:16px;line-height:24px;color:#4b5563;">El cambio también está disponible en las notificaciones del sistema.</td></tr>
 </table></td></tr></table></body></html>`,
     })
