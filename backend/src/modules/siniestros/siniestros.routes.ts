@@ -46,6 +46,7 @@ import type { crearServicioEdicionCaso } from './siniestros-edicion.service.ts'
 import type { crearServicioReasignacion } from './siniestros-reasignacion.service.ts'
 import { reasignarSiniestroSchema } from '@cova/shared/schemas/reasignacion-siniestro'
 import type { crearServicioNovedadesGestion } from '../novedades/novedades-gestion.service.ts'
+import { tiempoReal } from '../chat/tiempo-real.ts'
 
 /** Lectura de cada pestaña de la ficha (CU-10). Cada historia suma sus acciones en su propio servicio. */
 type PestanaFicha = {
@@ -257,7 +258,9 @@ export function crearSiniestrosRouter(deps: {
     requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'),
     async (req, res) => {
       confirmarBajaSiniestroSchema.parse(req.body ?? {})
-      await operaciones.darDeBaja(usuarioDeSesion(req), idSchema.parse(req.params.id))
+      const id = idSchema.parse(req.params.id)
+      await operaciones.darDeBaja(usuarioDeSesion(req), id)
+      await tiempoReal.revisarSala(id)
       res.status(204).end()
     },
   )
@@ -267,11 +270,9 @@ export function crearSiniestrosRouter(deps: {
     res.status(204).end()
   })
   router.delete('/:id', requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'), async (req, res) => {
-    await operaciones.eliminar(
-      usuarioDeSesion(req),
-      idSchema.parse(req.params.id),
-      confirmarSiniestroSchema.parse(req.body),
-    )
+    const id = idSchema.parse(req.params.id)
+    await operaciones.eliminar(usuarioDeSesion(req), id, confirmarSiniestroSchema.parse(req.body))
+    await tiempoReal.revisarSala(id)
     res.status(204).end()
   })
   router.get('/:id/reasignacion', soloAdministracion, async (req, res) => {
@@ -280,13 +281,15 @@ export function crearSiniestrosRouter(deps: {
   })
   router.patch('/:id/reasignacion', soloAdministracion, async (req, res) => {
     res.set('Cache-Control', 'no-store')
-    res.json(
-      await reasignacion.reasignar(
-        usuarioDeSesion(req),
-        idSchema.parse(req.params.id),
-        reasignarSiniestroSchema.parse(req.body),
-      ),
+    const id = idSchema.parse(req.params.id)
+    const resultado = await reasignacion.reasignar(
+      usuarioDeSesion(req),
+      id,
+      reasignarSiniestroSchema.parse(req.body),
     )
+    // E7-01: el responsable anterior sale ya de la sala del chat
+    await tiempoReal.revisarSala(id)
+    res.json(resultado)
   })
   router.get('/:id', async (req, res) => {
     res.json(await servicio.obtener(usuarioDeSesion(req), idSchema.parse(req.params.id)))
