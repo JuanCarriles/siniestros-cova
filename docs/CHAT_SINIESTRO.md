@@ -17,12 +17,12 @@
 
 ### Perder el acceso con el chat abierto
 
-| Qué pasa | Cuándo se corta |
-| --- | --- |
-| Reasignación, baja o eliminación del siniestro | En el momento (la ruta llama a `revisarSala`) |
-| Cambio de rol o baja del usuario, cambio de contraseña | En el momento (`revisarUsuario`) |
-| Logout | En el momento, solo esa sesión (`cerrarSesion`) |
-| Cualquier otro caso (sesión vencida, recuperación de contraseña) | Revisión periódica, cada 30 s |
+| Qué pasa                                                         | Cuándo se corta                                 |
+| ---------------------------------------------------------------- | ----------------------------------------------- |
+| Reasignación, baja o eliminación del siniestro                   | En el momento (la ruta llama a `revisarSala`)   |
+| Cambio de rol o baja del usuario, cambio de contraseña           | En el momento (`revisarUsuario`)                |
+| Logout                                                           | En el momento, solo esa sesión (`cerrarSesion`) |
+| Cualquier otro caso (sesión vencida, recuperación de contraseña) | Revisión periódica, cada 30 s                   |
 
 Además, **antes de cada envío a una sala** (`emitirASala`) se revisa a cada conectado. Así el contenido del
 caso nunca le llega a quien ya no tiene acceso, aunque no haya pasado la revisión periódica. El que pierde la
@@ -123,8 +123,9 @@ existía) toman el nombre y el rol actuales de su usuario.
   ("Hoy", "Ayer", "Domingo, 25 de octubre de 2026").
 - Cada mensaje muestra autor, rol y hora. Los propios dicen "Vos" y van a la derecha, con otro fondo y el borde
   naranja del lado derecho: se distinguen sin depender del color.
-- El cuadro de texto usa React Hook Form con el esquema compartido. Enter agrega una línea; se envía con el botón
-  o con Ctrl+Enter.
+- El cuadro de texto usa React Hook Form con el esquema compartido. Enter envía y Shift+Enter baja
+  de línea; mientras se compone un carácter (acentos, otros idiomas) Enter no envía. En pantallas táctiles sin
+  teclado (no hay Shift) Enter baja de línea y se envía con el botón.
 - Al enviar, el mensaje aparece como "Enviando…" y el cuadro queda libre para el siguiente. Si falla, queda
   "No se envió", con el motivo y los botones Reintentar (usa la misma clave, así que no duplica) y Descartar.
 - Los mensajes de otros se anuncian al lector de pantalla ("Mensaje nuevo de …").

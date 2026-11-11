@@ -294,6 +294,12 @@ function Redactar({
     defaultValues: { texto: '', claveEnvio: crypto.randomUUID() },
   })
   const quedan = MAXIMO_MENSAJE_CHAT - (useWatch({ control, name: 'texto' }) ?? '').length
+  // Celular o tablet sin teclado: no hay Shift, así que Enter baja de línea y se envía con el botón
+  const [tactil] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(hover: none) and (pointer: coarse)').matches,
+  )
 
   // El mensaje pasa a la conversación como "Enviando…" y el cuadro queda libre para el siguiente
   const enviar = handleSubmit((datos) => {
@@ -314,14 +320,27 @@ function Redactar({
         label="Mensaje"
         rows={3}
         maxLength={MAXIMO_MENSAJE_CHAT}
-        hint="Enter agrega una línea. Para enviar, usá el botón o Ctrl + Enter. Los mensajes no se pueden modificar ni borrar."
+        hint={
+          tactil
+            ? 'Para enviar, usá el botón. Los mensajes no se pueden modificar ni borrar.'
+            : 'Enter envía el mensaje; Shift + Enter baja de línea. Los mensajes no se pueden modificar ni borrar.'
+        }
         error={errors.texto?.message}
         className="min-h-24 text-lg"
         onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault()
-            void enviar()
-          }
+          // Shift + Enter deja que el cuadro baje de línea. Mientras se compone una letra con
+          // acento o un carácter de otro idioma, Enter confirma la letra: no envía.
+          if (
+            e.key !== 'Enter' ||
+            e.shiftKey ||
+            e.altKey ||
+            e.nativeEvent.isComposing ||
+            (tactil && !e.ctrlKey && !e.metaKey)
+          )
+            return
+          e.preventDefault()
+          // Un Enter sin nada escrito no hace nada (no muestra el error de mensaje vacío)
+          if (e.currentTarget.value.trim()) void enviar()
         }}
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
