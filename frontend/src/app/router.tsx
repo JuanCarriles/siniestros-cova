@@ -1,4 +1,3 @@
-import { NotificacionesPage } from '@/features/notificaciones/notificaciones-page'
 import type { ComponentType } from 'react'
 import { createBrowserRouter, type LoaderFunction, type RouteObject } from 'react-router'
 import type { PanelSection } from '@/components/layout/panel-navigation'
@@ -22,6 +21,7 @@ import { PestanaVehiculos } from '@/features/siniestros/ficha/pages/pestana-vehi
 import { ErrorPestana } from '@/features/siniestros/ficha/components/pestana-ficha'
 import { SiniestrosPage } from '@/features/siniestros/pages/siniestros-page'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
+import { NotificacionesPage } from '@/features/notificaciones/notificaciones-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { RecuperarContrasenaPage } from '@/features/auth/pages/recuperar-contrasena-page'
 import {

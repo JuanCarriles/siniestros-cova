@@ -1,40 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowRight, Bell, BellRing, RefreshCw } from 'lucide-react'
+import { ArrowRight, Bell, BellRing } from 'lucide-react'
 import { consultaNotificacionesSchema } from '@cova/shared/schemas/bandeja-notificaciones'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { suscribirActualizacionNotificaciones } from './actualizar-notificaciones'
+import { useResumenNotificaciones } from './use-resumen-notificaciones'
 import { ListaNotificaciones } from './lista-notificaciones'
 import { useNotificaciones } from './use-notificaciones'
 
 export function NotificacionesPanel({ basePath }: { basePath: string }) {
   const [abierto, setAbierto] = useState(false)
-  const resumen = useNotificaciones(consultaNotificacionesSchema.parse({}))
+  const resumen = useResumenNotificaciones()
   const panel = useNotificaciones(
     consultaNotificacionesSchema.parse({ lectura: 'sin-leer' }),
     'visibles',
     abierto,
   )
-  const actualizarResumen = resumen.actualizar
-  useEffect(() => {
-    const actualizar = () => {
-      if (!document.hidden) actualizarResumen()
-    }
-    const intervalo = window.setInterval(actualizar, 60000)
-    const desuscribir = suscribirActualizacionNotificaciones(actualizar)
-    window.addEventListener('focus', actualizar)
-    document.addEventListener('visibilitychange', actualizar)
-    return () => {
-      clearInterval(intervalo)
-      desuscribir()
-      window.removeEventListener('focus', actualizar)
-      document.removeEventListener('visibilitychange', actualizar)
-    }
-  }, [actualizarResumen])
-  // Mantener el último contador durante un refresco para que no parpadee ni se anuncie repetidamente.
-  const sinLeer = resumen.ultimo?.sinLeer
+  const sinLeer = resumen?.sinLeer
+  const datosPanel = panel.actualizando || panel.error ? null : panel.datos
   return (
     <Popover
       open={abierto}
@@ -68,31 +52,28 @@ export function NotificacionesPanel({ basePath }: { basePath: string }) {
               <BellRing className="size-6" aria-hidden="true" />
               Notificaciones nuevas
             </h2>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Actualizar notificaciones nuevas"
-              onClick={panel.actualizar}
-            >
-              <RefreshCw aria-hidden="true" />
-            </Button>
           </div>
           <p className="mt-2 text-muted-foreground">
             Avisos sin leer al abrir este panel. Se marcan leídos al mostrarse.
           </p>
         </header>
         <div className="max-h-[min(27rem,55dvh)] overflow-y-auto overscroll-contain">
+          {panel.avisoLectura && (
+            <Aviso tipo="info" className="m-4">
+              {panel.avisoLectura}
+            </Aviso>
+          )}
           {panel.error && (
             <Aviso tipo="error" className="m-4">
               {panel.error}
             </Aviso>
           )}
-          {!panel.datos && !panel.error && (
+          {!datosPanel && !panel.error && (
             <p role="status" className="p-5">
               Consultando avisos…
             </p>
           )}
-          {panel.datos?.items.length === 0 && (
+          {datosPanel?.items.length === 0 && (
             <div className="grid justify-items-center gap-3 px-6 py-9 text-center">
               <span className="grid size-14 place-items-center rounded-full bg-ok-bg text-ok-ink">
                 <Bell aria-hidden="true" className="size-7" />
@@ -104,9 +85,9 @@ export function NotificacionesPanel({ basePath }: { basePath: string }) {
               </p>
             </div>
           )}
-          {panel.datos && (
+          {datosPanel && (
             <ListaNotificaciones
-              items={panel.datos.items}
+              items={datosPanel.items}
               basePath={basePath}
               compacta
               onCambio={panel.aplicar}

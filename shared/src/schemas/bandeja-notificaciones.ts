@@ -29,6 +29,12 @@ export const notificacionBandejaSchema = z.strictObject({
   motivoSinAcceso: z.string().nullable(),
   siniestro: z.strictObject({ id: z.int().positive(), numeroSiniestro: z.string() }),
 })
+export const resumenNotificacionesSchema = z.strictObject({
+  sinLeer: z.int().nonnegative(),
+  sinRevisar: z.int().nonnegative(),
+})
+export type ResumenNotificaciones = z.output<typeof resumenNotificacionesSchema>
+
 export const bandejaNotificacionesSchema = z.strictObject({
   total: z.int().nonnegative(),
   totalGeneral: z.int().nonnegative(),

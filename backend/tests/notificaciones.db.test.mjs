@@ -110,7 +110,7 @@ test(
       await aviso(gestor.id, propio.id, { eliminado: true, fechaBaja: new Date() })
       await aviso(gestor.id, eliminando.id)
       const servicio = crearServicioNotificaciones({
-        transaccion: (trabajo) => db.$transaction(trabajo, { isolationLevel: 'RepeatableRead' }),
+        transaccion: (trabajo, opciones) => db.$transaction(trabajo, opciones),
       })
       const actores = { gestor, otro, admin, superadmin }
       const app = express()
@@ -290,6 +290,48 @@ test(
             pagina: 2,
             lectura: 'todas',
             revision: 'todas',
+          })
+        },
+      )
+      await t.test(
+        'marcados simultáneos: todos los PATCH terminan sin conflictos ni errores 500',
+        async () => {
+          for (let ronda = 0; ronda < 3; ronda++) {
+            for (let i = 0; i < 30; i++) await aviso(gestor.id, propio.id)
+            const resultados = await Promise.all(
+              Array.from({ length: 15 }, () => pedir('gestor', '/lecturas', { todas: true })),
+            )
+            for (const r of resultados) assert.equal(r.status, 204, await r.text())
+            assert.equal((await listar('gestor')).sinLeer, 0)
+          }
+          const simultaneo = await aviso(gestor.id, propio.id)
+          const marcados = await Promise.all(
+            Array.from({ length: 16 }, (_, i) =>
+              i % 2
+                ? pedir('gestor', `/${simultaneo.id}/lectura`, { leida: i % 4 === 1 })
+                : pedir('gestor', `/${simultaneo.id}/revision`, { revisada: i % 4 === 0 }),
+            ),
+          )
+          for (const r of marcados) assert.equal(r.status, 204, await r.text())
+          assert.equal(await db.notificacion.count({ where: { id: simultaneo.id } }), 1)
+        },
+      )
+      await t.test(
+        'resumen liviano: privado, sin efectos secundarios, conteos coherentes y sin mensajes',
+        async () => {
+          const listado = await listar('gestor')
+          const r = await pedir('gestor', '/resumen')
+          assert.equal(r.status, 200)
+          assert.equal(r.headers.get('cache-control'), 'no-store')
+          assert.deepEqual(await r.json(), {
+            sinLeer: listado.sinLeer,
+            sinRevisar: listado.sinRevisar,
+          })
+          assert.equal((await pedir(null, '/resumen')).status, 401)
+          assert.equal((await pedir('superadmin', '/resumen')).status, 401)
+          assert.deepEqual(await (await pedir('otro', '/resumen')).json(), {
+            sinLeer: (await listar('otro')).sinLeer,
+            sinRevisar: (await listar('otro')).sinRevisar,
           })
         },
       )

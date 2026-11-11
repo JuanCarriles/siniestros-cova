@@ -8,16 +8,19 @@ import {
 import { ApiError } from '@/lib/api'
 import { actualizarNotificaciones } from './actualizar-notificaciones'
 import { consultarNotificaciones, leerNotificaciones } from './api'
+import { cargarBandeja, type LecturaAutomatica } from './operaciones-bandeja'
 
 export function useNotificaciones(
   consulta: ConsultaNotificaciones,
-  lectura: 'ninguna' | 'visibles' | 'todas' = 'ninguna',
+  lectura: LecturaAutomatica = 'ninguna',
   activa = true,
 ) {
   const [revision, setRevision] = useState(0)
   const [resultado, setResultado] = useState<{
     clave: string
+    query: string
     datos: BandejaNotificaciones
+    avisoLectura: string | null
   } | null>(null)
   const [error, setError] = useState<{ clave: string; mensaje: string } | null>(null)
   const entradaPendiente = useRef(true)
@@ -26,44 +29,42 @@ export function useNotificaciones(
   useEffect(() => {
     if (!activa) return
     const controlador = new AbortController()
-    void (async () => {
-      // CU-08: entrar a la pantalla completa marca todas las propias como leídas una sola vez.
-      // Refrescar o cambiar filtros no revierte un marcado manual posterior como no leída.
-      if (lectura === 'todas' && entradaPendiente.current) {
-        await leerNotificaciones({ todas: true }, controlador.signal)
-        if (controlador.signal.aborted) return
-        entradaPendiente.current = false
-        actualizarNotificaciones()
-      }
-      const datos = await consultarNotificaciones(query, controlador.signal)
-      if (lectura === 'visibles' && datos.items.length) {
-        // No marcar avisos que no se mostraron: la página siguiente conserva sus no leídos.
-        await leerNotificaciones({ ids: datos.items.map((a) => a.id) }, controlador.signal)
-        datos.items = datos.items.map((a) => ({ ...a, leida: true }))
-        if (!controlador.signal.aborted) actualizarNotificaciones()
-      }
-      if (!controlador.signal.aborted) {
-        setResultado({ clave, datos })
-        setError(null)
-      }
-    })().catch((err) => {
-      if (!controlador.signal.aborted)
-        setError({
-          clave,
-          mensaje:
-            err instanceof ApiError
-              ? err.message
-              : 'No se pudieron consultar las notificaciones. Probá actualizar.',
-        })
+    void cargarBandeja(query, lectura, entradaPendiente.current, controlador.signal, {
+      consultar: consultarNotificaciones,
+      leer: leerNotificaciones,
     })
+      .then(({ datos, avisoLectura, entradaLeida, marcoLectura }) => {
+        if (controlador.signal.aborted) return
+        if (entradaLeida) entradaPendiente.current = false
+        setResultado({ clave, query, datos, avisoLectura })
+        setError(null)
+        if (marcoLectura) actualizarNotificaciones()
+      })
+      .catch((err) => {
+        if (!controlador.signal.aborted)
+          setError({
+            clave,
+            mensaje:
+              err instanceof ApiError
+                ? err.message
+                : 'No se pudieron consultar las notificaciones. Probá actualizar.',
+          })
+      })
     return () => controlador.abort()
   }, [query, clave, activa, lectura])
   const actualizar = useCallback(() => setRevision((r) => r + 1), [])
+  const confirmarEntradaLeida = useCallback(() => {
+    entradaPendiente.current = false
+  }, [])
+  const datos = resultado?.query === query ? resultado.datos : null
   return {
-    ultimo: resultado?.datos ?? null,
-    datos: resultado?.clave === clave ? resultado.datos : null,
+    datos,
     error: error?.clave === clave ? error.mensaje : null,
+    avisoLectura: resultado?.query === query ? resultado.avisoLectura : null,
+    // Conservar el DOM durante el refresco mantiene el botón y la posición del usuario.
+    actualizando: activa && resultado?.clave !== clave && error?.clave !== clave,
     actualizar,
+    confirmarEntradaLeida,
     aplicar: (id: number, cambios: Partial<Pick<NotificacionBandeja, 'leida' | 'revisada'>>) =>
       setResultado((actual) =>
         actual

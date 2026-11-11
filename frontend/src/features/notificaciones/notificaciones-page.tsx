@@ -24,15 +24,8 @@ export function NotificacionesPage() {
   const consulta = parametrosNotificaciones(params)
   const lista = useNotificaciones(consulta, 'todas')
   const resumen = useRef<HTMLDivElement>(null)
-  const enfocarResumen = useRef(false)
   const actualizarLista = lista.actualizar
   useEffect(() => suscribirActualizacionNotificaciones(actualizarLista), [actualizarLista])
-  useEffect(() => {
-    if (lista.datos && enfocarResumen.current) {
-      enfocarResumen.current = false
-      resumen.current?.focus()
-    }
-  }, [lista.datos])
   const [marcando, setMarcando] = useState(false)
   const [mensaje, setMensaje] = useState('')
   const [error, setError] = useState('')
@@ -55,6 +48,7 @@ export function NotificacionesPage() {
     setMensaje('')
     try {
       await leerNotificaciones({ todas: true })
+      lista.confirmarEntradaLeida()
       lista.actualizar()
       actualizarNotificaciones()
       setMensaje(
@@ -91,6 +85,11 @@ export function NotificacionesPage() {
       {mensaje && (
         <Aviso tipo="exito" className="mb-4">
           {mensaje}
+        </Aviso>
+      )}
+      {lista.avisoLectura && (
+        <Aviso tipo="info" className="mb-4">
+          {lista.avisoLectura}
         </Aviso>
       )}
       {(error || lista.error) && (
@@ -183,7 +182,7 @@ export function NotificacionesPage() {
             </h2>
             <p className="max-w-xl text-muted-foreground">
               {filtroActivo
-                ? 'Probá otro tipo o mostrálas todas para encontrar lo que buscás.'
+                ? 'Probá otro tipo o mostralas todas para encontrar lo que buscás.'
                 : 'Cuando haya novedades en tus casos, vas a encontrarlas acá.'}
             </p>
             {filtroActivo && (
@@ -197,8 +196,10 @@ export function NotificacionesPage() {
           <ListaNotificaciones
             items={lista.datos.items}
             basePath={basePath}
-            onCambio={() => {
-              enfocarResumen.current = true
+            actualizando={lista.actualizando}
+            onListaVacia={() => resumen.current?.focus()}
+            onCambio={(id, cambios) => {
+              lista.aplicar(id, cambios)
               setMensaje('')
               lista.actualizar()
             }}
