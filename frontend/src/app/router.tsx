@@ -1,3 +1,4 @@
+import { NotificacionesPage } from '@/features/notificaciones/notificaciones-page'
 import type { ComponentType } from 'react'
 import { createBrowserRouter, type LoaderFunction, type RouteObject } from 'react-router'
 import type { PanelSection } from '@/components/layout/panel-navigation'
@@ -69,6 +70,7 @@ const secciones: Record<PanelSection, ComponentType> = {
   usuarios: UsuariosPage,
   informes: () => <SeccionPendiente section="informes" />,
   perfil: PerfilPage,
+  notificaciones: NotificacionesPage,
 }
 
 // Loader propio de las secciones que traen datos. Valida sesión y rol antes de pedirlos.
