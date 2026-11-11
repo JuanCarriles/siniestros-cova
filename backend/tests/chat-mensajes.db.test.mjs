@@ -309,7 +309,7 @@ test(
           })
           assert.equal(r.status, 404, `${method} no existe`)
         }
-        assert.deepEqual(Object.keys(chat).sort(), ['enviar', 'listar'])
+        assert.deepEqual(Object.keys(chat).sort(), ['enviar', 'leer', 'listar'])
         assert.equal(
           (await prisma.mensajeChat.findUniqueOrThrow({ where: { id: idMensaje } }))
             .contenidoMensaje,

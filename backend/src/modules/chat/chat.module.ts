@@ -19,6 +19,8 @@ export const chat = crearServicioChat({
   transaccion: (trabajo) => getPrisma().$transaction(trabajo, { timeout: 15_000 }),
   presentes: (idSiniestro) => tiempoReal.presentes(idSiniestro),
   repartir: (mensaje) => tiempoReal.emitirASala(mensaje.idSiniestro, 'chat:mensaje', mensaje),
+  repartirLecturas: (lecturas) =>
+    tiempoReal.emitirASala(lecturas.idSiniestro, 'chat:leido', lecturas),
 })
 
 export const chatRouter = crearChatRouter({ requerirSesion, chat })

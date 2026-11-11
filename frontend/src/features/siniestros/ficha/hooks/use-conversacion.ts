@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { MensajeChat } from '@cova/shared/schemas/chat'
 import { ApiError } from '@/lib/api'
 import { escuchar, useSalaSiniestro } from '@/lib/tiempo-real'
-import { enviarMensajeChat, obtenerChat } from '../api/ficha.api'
-import { unirMensajes } from '../chat'
+import { actualizarNotificaciones } from '@/features/notificaciones/actualizar-notificaciones'
+import { enviarMensajeChat, marcarChatLeido, obtenerChat } from '../api/ficha.api'
+import { aplicarLecturas, hayPorLeer, unirMensajes } from '../chat'
 
 /** Un envío propio que todavía no confirmó el servidor */
 export type MensajePendiente = {
@@ -13,21 +14,33 @@ export type MensajePendiente = {
   error?: string
 }
 
+/** La pestaña del navegador está a la vista */
+function useVisible() {
+  return useSyncExternalStore(
+    (o) => {
+      document.addEventListener('visibilitychange', o)
+      return () => document.removeEventListener('visibilitychange', o)
+    },
+    () => document.visibilityState === 'visible',
+    () => true,
+  )
+}
+
 /**
  * La conversación del chat (E7-02): lo que trajo la pestaña, más lo que llega en tiempo real, más los envíos propios
  * en curso. Cada vez que se (re)une a la sala pide lo posterior al último mensaje: lo que llegó mientras se abría la
- * pestaña o mientras la conexión estuvo cortada (CU-10 1.h.2).
+ * pestaña o mientras la conexión estuvo cortada (CU-10 1.h.2). Recarga la conversación entera, no solo lo nuevo:
+ * también pudieron leerse mensajes viejos mientras tanto (E7-03).
+ *
+ * E7-03: al entrar, y cada vez que llega algo de otro mientras se mira la conversación (pestaña visible), marca lo
+ * pendiente como leído; el servidor retira el aviso de la bandeja e informa la lectura a los demás.
  */
-export function useConversacion(idSiniestro: number, inicial: MensajeChat[]) {
+export function useConversacion(idSiniestro: number, idUsuario: number, inicial: MensajeChat[]) {
   const [mensajes, setMensajes] = useState(inicial)
   const [pendientes, setPendientes] = useState<MensajePendiente[]>([])
   /** Mensajes de otros que llegaron en tiempo real: los anuncia el lector de pantalla */
   const [ultimoAjeno, setUltimoAjeno] = useState<MensajeChat | null>(null)
   const { conexion, sala } = useSalaSiniestro(idSiniestro)
-  const ultimoId = useRef(0)
-  useEffect(() => {
-    ultimoId.current = mensajes.reduce((max, m) => Math.max(max, m.id), 0)
-  }, [mensajes])
   const clavesPropias = useRef(new Set<string>())
 
   const agregar = useCallback((nuevos: MensajeChat[]) => {
@@ -50,12 +63,21 @@ export function useConversacion(idSiniestro: number, inicial: MensajeChat[]) {
     [idSiniestro, agregar],
   )
 
+  useEffect(
+    () =>
+      escuchar('chat:leido', (lecturas) => {
+        if (lecturas.idSiniestro === idSiniestro)
+          setMensajes((actuales) => aplicarLecturas(actuales, lecturas))
+      }),
+    [idSiniestro],
+  )
+
   // Al quedar unida a la sala (al entrar y después de cada reconexión): lo que se haya perdido
   const unida = sala.tipo === 'unida'
   useEffect(() => {
     if (!unida) return
     let vigente = true
-    obtenerChat(idSiniestro, ultimoId.current || undefined)
+    obtenerChat(idSiniestro)
       .then((c) => {
         if (vigente) agregar(c.mensajes)
       })
@@ -66,6 +88,27 @@ export function useConversacion(idSiniestro: number, inicial: MensajeChat[]) {
       vigente = false
     }
   }, [unida, idSiniestro, agregar])
+
+  // E7-03: marcar como leído al entrar (aunque no haya nada pendiente: retira un aviso que haya quedado) y cada vez
+  // que aparece algo sin leer mientras se mira la conversación
+  const visible = useVisible()
+  const porLeer = hayPorLeer(mensajes, idUsuario)
+  const entro = useRef(false)
+  useEffect(() => {
+    if (!unida || !visible || (entro.current && !porLeer)) return
+    const espera = setTimeout(() => {
+      entro.current = true
+      marcarChatLeido(idSiniestro)
+        .then((r) => {
+          setMensajes((actuales) => aplicarLecturas(actuales, r.lecturas))
+          if (r.avisosRetirados) actualizarNotificaciones()
+        })
+        .catch(() => {
+          // Se reintenta con el próximo mensaje, al volver a la pestaña o al reconectar
+        })
+    }, 400)
+    return () => clearTimeout(espera)
+  }, [unida, visible, porLeer, idSiniestro])
 
   const enviar = useCallback(
     async (texto: string, claveEnvio: string) => {

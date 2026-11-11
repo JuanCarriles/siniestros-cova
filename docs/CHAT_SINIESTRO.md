@@ -1,4 +1,4 @@
-# Chat del siniestro (E7-01 y E7-02, CU-10 1.h)
+# Chat del siniestro (E7-01, E7-02 y E7-03, CU-10 1.h)
 
 ## E7-01: conexión en tiempo real
 
@@ -83,8 +83,9 @@ activos (RF-25).
 
 - `GET /api/siniestros/:id/chat`: la conversación, del mensaje más viejo al más nuevo. Devuelve
   `{ mensajes, soloLectura }`.
-- `GET /api/siniestros/:id/chat?despues=<id>`: solo lo posterior a ese mensaje. Lo usa el navegador cada vez que
-  se une a la sala (al entrar y al reconectar) para recuperar lo que llegó mientras tanto (CU-10 1.h.2).
+- `GET /api/siniestros/:id/chat?despues=<id>`: solo lo posterior a ese mensaje. Desde E7-03 el navegador recarga
+  la conversación entera cada vez que se une a la sala (al entrar y al reconectar), porque mientras tanto también
+  pudieron leerse mensajes viejos (CU-10 1.h.2).
 - `POST /api/siniestros/:id/chat` con `{ texto, claveEnvio }`: envía un mensaje y responde con el mensaje guardado.
   - El texto va de 1 a 2000 caracteres; se valida con el mismo esquema en el formulario y en el servidor.
   - El autor, la fecha y el siniestro no vienen del navegador.
@@ -146,3 +147,35 @@ existía) toman el nombre y el rol actuales de su usuario.
   - cerrado y dado de baja en solo lectura;
   - que no existen rutas para editar ni borrar.
 - `npm run test:design -w frontend` incluye `chat.test.mjs`: la conversación sin repetidos y en orden.
+
+## E7-03: indicador de mensaje leído (RF-26, CU-10 1.h.3)
+
+- `POST /api/siniestros/:id/chat/leidos`: marca como leídos los mensajes de otros que el usuario todavía no leyó.
+  - Guarda una fila en `LecturaMensajeChat` por mensaje, con el usuario y la hora del servidor. El índice único
+    (mensaje, usuario) y `skipDuplicates` dejan la primera lectura si dos pestañas marcan a la vez.
+  - En la misma transacción retira de la bandeja el aviso de mensajes nuevos de ese siniestro (baja lógica:
+    `eliminado` y `fechaBaja`). El próximo mensaje vuelve a generar un aviso.
+  - Responde `{ leidos, avisosRetirados, lecturas }`. Si marcó algo, después del commit avisa a la sala con
+    `chat:leido` (`{ idSiniestro, idsMensajes, lector, fechaLeido }`).
+  - Se puede leer también en un caso cerrado o dado de baja. El autor no "lee" sus propios mensajes.
+- Cada mensaje trae `leidoPor`: quién lo leyó y cuándo, en orden, sin contar al autor.
+- **Cuándo se marca:** al entrar a la conversación (aunque no haya nada pendiente: así se retira un aviso que
+  haya quedado) y cada vez que aparece algo sin leer mientras la conversación está a la vista, con la pestaña
+  del navegador visible. Si la pestaña está oculta, se marca al volver.
+- **Pantalla:** debajo de cada mensaje propio, "Leído por María Rearte a las 14:31" (con la fecha si no fue hoy, y
+  todos los lectores si leyó más de uno) o "Enviado. Todavía no lo leyó nadie". Siempre en texto, con un ícono
+  de apoyo. Se actualiza en tiempo real y la campana de notificaciones se refresca al retirar el aviso.
+
+### Pruebas
+
+- `npm run test:chat:leidos:db -w backend`: base temporal y Socket.IO real. Cubre:
+  - la marca con usuario y hora del servidor;
+  - el aviso retirado solo para quien lee;
+  - la lectura informada en vivo a los demás, sin repetirse al volver a entrar;
+  - varias lecturas en orden;
+  - que el autor no se cuenta;
+  - que el mensaje de quien mira no genera aviso, pero queda sin leer hasta marcarlo;
+  - que un aviso retirado no impide el próximo;
+  - dos pestañas marcando a la vez;
+  - permisos (403) y caso cerrado (se lee).
+- `chat.test.mjs` (frontend): lecturas sin repetir y sin el autor, y la versión más completa al recargar.

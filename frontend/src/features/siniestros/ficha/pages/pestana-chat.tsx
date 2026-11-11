@@ -1,12 +1,13 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowDown, MessagesSquare, RotateCcw, Send, X } from 'lucide-react'
+import { ArrowDown, Check, CheckCheck, MessagesSquare, RotateCcw, Send, X } from 'lucide-react'
 import {
   MAXIMO_MENSAJE_CHAT,
   enviarMensajeChatSchema,
   type EnviarMensajeChatData,
   type EnviarMensajeChatInput,
+  type LecturaChat,
   type MensajeChat,
 } from '@cova/shared/schemas/chat'
 import { Aviso } from '@/components/aviso'
@@ -37,6 +38,14 @@ const diaLargo = new Intl.DateTimeFormat('es-AR', {
   year: 'numeric',
 })
 const claveDia = (iso: string) => new Date(iso).toDateString()
+const diaCorto = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit' })
+
+/** "a las 14:20" si fue hoy; si no, "el 09/11 a las 14:20" */
+function cuando(iso: string) {
+  const fecha = new Date(iso)
+  const hoy = fecha.toDateString() === new Date().toDateString()
+  return `${hoy ? '' : `el ${diaCorto.format(fecha)} `}a las ${hora.format(fecha)}`
+}
 
 /** "Hoy", "Ayer" o "lunes, 9 de noviembre de 2026" */
 function etiquetaDia(iso: string) {
@@ -61,6 +70,7 @@ export function PestanaChat() {
   const inicial = usePestana<'chat'>()
   const { mensajes, pendientes, ultimoAjeno, conexion, sala, enviar, descartar } = useConversacion(
     ficha.id,
+    usuario.id,
     inicial.mensajes,
   )
   const soloLectura = inicial.soloLectura
@@ -86,7 +96,6 @@ export function PestanaChat() {
     if (nuevos === 0 || cercaDelFinal.current || ultimoEsPropio) irAlFinal()
     else setSinVer((n) => n + nuevos)
     // irAlFinal solo usa refs y el setter
-     
   }, [cantidad, ultimoEsPropio])
 
   return (
@@ -200,7 +209,28 @@ function Mensaje({ mensaje: m, propio }: { mensaje: MensajeChat; propio: boolean
         </time>
       </p>
       <p className="text-lg leading-relaxed break-words whitespace-pre-wrap">{m.texto}</p>
+      {propio && <EstadoLectura lecturas={m.leidoPor} />}
     </article>
+  )
+}
+
+// E7-03 (RF-26): en los mensajes propios, quién los leyó y cuándo. Con texto, no solo con tildes.
+function EstadoLectura({ lecturas }: { lecturas: LecturaChat[] }) {
+  if (!lecturas.length)
+    return (
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Check className="size-4 shrink-0" aria-hidden="true" />
+        Enviado. Todavía no lo leyó nadie.
+      </p>
+    )
+  const partes = lecturas.map((l) => `${l.lector.nombre} ${cuando(l.fechaLeido)}`)
+  const lista =
+    partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(', ')} y ${partes.at(-1)}`
+  return (
+    <p className="flex items-start gap-1.5 text-sm font-semibold text-ok-ink">
+      <CheckCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>Leído por {lista}.</span>
+    </p>
   )
 }
 

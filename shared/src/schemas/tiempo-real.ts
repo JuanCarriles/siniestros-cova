@@ -1,7 +1,7 @@
 // Contrato del canal en tiempo real (E7-01, CU-10 1.h): Socket.IO sobre el mismo origen que la API.
 // El backend y el frontend tipan sus eventos con estas interfaces, así un nombre o un dato distinto no compila.
 
-import type { MensajeChat } from './chat.ts'
+import type { LecturasNuevasChat, MensajeChat } from './chat.ts'
 
 /** Ruta del handshake. Nginx y el proxy de Vite la derivan al backend con Upgrade y Connection. */
 export const RUTA_TIEMPO_REAL = '/socket.io'
@@ -24,6 +24,8 @@ export interface EventosServidor {
   'sesion:vencida': () => void
   /** E7-02: un mensaje nuevo del chat, después de guardarlo */
   'chat:mensaje': (mensaje: MensajeChat) => void
+  /** E7-03: alguien leyó mensajes de la conversación */
+  'chat:leido': (lecturas: LecturasNuevasChat) => void
 }
 
 /** Eventos que manda el navegador. */

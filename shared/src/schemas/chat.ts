@@ -27,6 +27,30 @@ export const consultaChatSchema = z.strictObject({
   despues: z.coerce.number().int().nonnegative().optional(),
 })
 
+/** Quién es, en una lectura (E7-03): nombre y rol actuales */
+export type LectorChat = { id: number; nombre: string; tipoUsuario: TipoUsuario }
+
+/** E7-03: un participante leyó el mensaje, y cuándo (RF-26) */
+export type LecturaChat = { lector: LectorChat; fechaLeido: string }
+
+/** E7-03 (chat:leido): un participante leyó estos mensajes al entrar o mientras miraba la conversación */
+export type LecturasNuevasChat = {
+  idSiniestro: number
+  idsMensajes: number[]
+  lector: LectorChat
+  fechaLeido: string
+}
+
+/** POST /api/siniestros/:id/chat/leidos */
+export type ResultadoLecturaChat = {
+  /** Mensajes que quedaron marcados ahora (0 si no había nada sin leer) */
+  leidos: number
+  /** Avisos de mensajes nuevos del siniestro que se retiraron de la bandeja */
+  avisosRetirados: number
+  /** Lo que se marcó, para mostrarlo sin esperar el aviso del tiempo real */
+  lecturas: LecturasNuevasChat
+}
+
 /** Un mensaje, tal como lo muestra la conversación y como llega en tiempo real (chat:mensaje) */
 export type MensajeChat = {
   id: number
@@ -43,6 +67,8 @@ export type MensajeChat = {
     /** Rol al enviarlo */
     tipoUsuario: TipoUsuario | null
   }
+  /** E7-03: quiénes lo leyeron (sin el autor), del primero al último */
+  leidoPor: LecturaChat[]
 }
 
 export type ConversacionChat = {
