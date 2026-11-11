@@ -102,7 +102,7 @@ activos (RF-25).
 3. Se registra una línea `MENSAJE` en el historial.
 4. Se avisa con `notificarMensajeNuevo` (de E8-02) a los participantes activos, menos el autor y menos **quienes
    tienen la conversación a la vista**: están en la sala y con la pestaña del navegador visible
-   (`sala:atencion`). Si ya tenían un aviso de mensajes nuevos sin leer en ese siniestro, se actualiza su fecha
+   (`sala:atencion`: el navegador lo informa al unirse y cada vez que la pestaña se oculta o vuelve a la vista). Si ya tenían un aviso de mensajes nuevos sin leer en ese siniestro, se actualiza su fecha
    en lugar de crear otro (CU-10 1.h.1.1). El aviso no incluye el texto del mensaje.
 
 Después del commit, el mensaje se reparte a la sala (`chat:mensaje`), revisando antes el acceso de cada

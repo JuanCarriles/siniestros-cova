@@ -63,6 +63,9 @@ function sesionVencida() {
   window.location.assign(rutaLoginSesionVencida())
 }
 
+/** La pestaña del navegador está a la vista (no minimizada ni detrás de otra pestaña) */
+const visible = () => typeof document === 'undefined' || document.visibilityState === 'visible'
+
 function unirse(id: number) {
   if (!socket?.connected) return
   cambiarSala(id, { tipo: 'uniendo' })
@@ -72,8 +75,11 @@ function unirse(id: number) {
       if (!salas.has(id)) return
       // Sin respuesta a tiempo: se reintenta con la próxima reconexión
       if (error || !respuesta) return
-      if (respuesta.ok) cambiarSala(id, { tipo: 'unida' })
-      else if (respuesta.status === 401) sesionVencida()
+      if (respuesta.ok) {
+        // El servidor asume "a la vista" al unir: si la pestaña está oculta, que lo sepa (avisos de la bandeja)
+        if (!visible()) socket?.emit('sala:atencion', id, false)
+        cambiarSala(id, { tipo: 'unida' })
+      } else if (respuesta.status === 401) sesionVencida()
       else if (respuesta.status === 503) return
       else cambiarSala(id, { tipo: 'sin-acceso', motivo: respuesta.error })
     })
@@ -115,6 +121,12 @@ function conectar(): SocketCova {
 if (typeof window !== 'undefined') {
   window.addEventListener('offline', () => {
     if (salas.size && estado !== 'inactiva') cambiarEstado('reconectando')
+  })
+  // E7-02: quien tiene el chat abierto pero en una pestaña oculta no lo está mirando: tiene que recibir el aviso
+  document.addEventListener('visibilitychange', () => {
+    if (!socket?.connected) return
+    for (const [id, sala] of salas)
+      if (sala.estado.tipo === 'unida') socket.emit('sala:atencion', id, visible())
   })
   window.addEventListener('online', () => {
     if (salas.size && socket && !socket.connected) {
