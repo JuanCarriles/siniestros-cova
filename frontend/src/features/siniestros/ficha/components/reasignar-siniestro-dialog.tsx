@@ -162,7 +162,8 @@ export function ReasignarSiniestroDialog({
               </div>
               <Aviso tipo="info">
                 Se registrarán tu nombre y la fecha en el historial. El responsable anterior y el
-                nuevo recibirán un aviso en el sistema y por mail.
+                nuevo recibirán un aviso en el sistema. Solo el nuevo responsable recibirá también
+                un mail.
               </Aviso>
             </section>
           ) : (

@@ -113,5 +113,5 @@ test('correo Resend: destinatario correcto, texto alternativo y HTML escapado', 
   assert.ok(!mensajes[0].html.includes('<script>persona</script>'))
   assert.ok(mensajes[0].html.includes('Ana &amp; Luis'))
   assert.ok(mensajes[0].text.includes('Ahora sos responsable'))
-  assert.ok(mensajes[1].text.includes('dejó de estar asignado'))
+  assert.equal(mensajes.length, 1, 'El responsable anterior solo recibe el aviso interno')
 })

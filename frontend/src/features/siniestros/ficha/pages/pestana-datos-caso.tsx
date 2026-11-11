@@ -83,9 +83,9 @@ export function PestanaDatosCaso() {
       )}
       {falloCorreo && (
         <Aviso tipo="info" className="mb-5">
-          La reasignación quedó guardada y se enviaron los avisos internos, pero no se pudieron
-          enviar todos los mails. No hace falta repetir la operación; consultá la configuración de
-          correo con la administración.
+          La reasignación quedó guardada y se enviaron los avisos internos, pero no se pudo enviar
+          el mail al nuevo responsable. No hace falta repetir la operación; consultá la
+          configuración de correo con la administración.
         </Aviso>
       )}
       {reasignando && (
