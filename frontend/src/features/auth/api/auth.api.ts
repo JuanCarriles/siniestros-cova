@@ -1,5 +1,6 @@
 import type { LoginData, SesionUsuario } from '@cova/shared/schemas/auth'
 import { api, ApiError } from '@/lib/api'
+import { cerrarTiempoReal } from '@/lib/tiempo-real'
 
 export async function iniciarSesion(datos: LoginData): Promise<SesionUsuario> {
   const { usuario } = await api<{ usuario: SesionUsuario }>('/auth/login', {
@@ -11,6 +12,8 @@ export async function iniciarSesion(datos: LoginData): Promise<SesionUsuario> {
 }
 
 export async function cerrarSesion(): Promise<void> {
+  // Primero el chat: si no, el aviso de sesión cerrada del servidor se tomaría como una sesión vencida
+  cerrarTiempoReal()
   await api('/auth/logout', { method: 'POST', sesion: 'opcional' })
 }
 

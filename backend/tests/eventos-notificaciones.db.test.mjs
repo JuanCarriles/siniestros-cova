@@ -284,6 +284,7 @@ test(
                 data: {
                   idSiniestro: c.id,
                   idUsuario: autor.id,
+                  autor: 'Autor Prueba',
                   contenidoMensaje: 'Texto privado del chat',
                 },
               })
@@ -315,7 +316,12 @@ test(
           await assert.rejects(
             base.transaccion(async (tx) => {
               const m = await tx.mensajeChat.create({
-                data: { idSiniestro: c.id, idUsuario: gestor.id, contenidoMensaje: 'No persistir' },
+                data: {
+                  idSiniestro: c.id,
+                  idUsuario: gestor.id,
+                  autor: 'Gestor Prueba',
+                  contenidoMensaje: 'No persistir',
+                },
               })
               await notificarMensajeNuevo(tx, m.id)
               throw rollback
@@ -335,6 +341,8 @@ test(
               data: {
                 idSiniestro: c.id,
                 idUsuario: gestor.id,
+                autor: 'Gestor Prueba',
+                tipoUsuarioAutor: gestor.tipoUsuario,
                 contenidoMensaje: 'Prueba de concurrencia',
               },
             })

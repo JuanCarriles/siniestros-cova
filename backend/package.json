@@ -19,6 +19,10 @@
     "test:recuperacion": "node --experimental-strip-types --test tests/recuperacion.test.mjs",
     "test:siniestros:edicion": "node --experimental-strip-types --test tests/siniestros-edicion.test.mjs",
     "test:siniestros:edicion:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-edicion.db.test.mjs",
+    "test:chat": "node --experimental-strip-types --test tests/chat-tiempo-real.test.mjs",
+    "test:chat:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-tiempo-real.db.test.mjs",
+    "test:chat:mensajes:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-mensajes.db.test.mjs",
+    "test:chat:leidos:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-leidos.db.test.mjs",
     "test:siniestros:estado": "node --experimental-strip-types --test tests/siniestros-estado.test.mjs",
     "test:siniestros:estado:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-estado.db.test.mjs",
     "test:dashboard": "node --experimental-strip-types --test tests/dashboard.test.mjs tests/dashboard-administrador.test.mjs",
@@ -73,6 +77,7 @@
     "helmet": "^8.3.0",
     "multer": "^2.5.0",
     "sharp": "^0.35.5",
+    "socket.io": "^4.8.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -81,6 +86,7 @@
     "@types/multer": "^2.3.0",
     "@types/node": "^22.20.5",
     "prisma": "7.10.0",
+    "socket.io-client": "^4.8.4",
     "tsdown": "^0.21.10",
     "tsx": "^4.23.15",
     "typescript": "~6.0.2"

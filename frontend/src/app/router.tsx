@@ -148,7 +148,7 @@ export const router = createBrowserRouter([
                         loader: cargarPestana('documentos'),
                         Component: PestanaDocumentos,
                       },
-                      { path: 'chat', Component: PestanaChat },
+                      { path: 'chat', loader: cargarPestana('chat'), Component: PestanaChat },
                       {
                         path: 'historial',
                         loader: cargarPestana('historial'),

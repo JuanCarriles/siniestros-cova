@@ -303,7 +303,12 @@ test('PostgreSQL CU-09: baja trazable y borrado completo, recuperable ante fallo
           const d2 = await documento(objetivo, 'b.pdf', { eliminado: true, fechaBaja: ahora })
           const docAjeno = await documento(ajeno, 'ajeno.pdf')
           const mensaje = await tx.mensajeChat.create({
-            data: { contenidoMensaje: 'Prueba', idUsuario: gestor.id, idSiniestro: objetivo.id },
+            data: {
+              contenidoMensaje: 'Prueba',
+              autor: 'Gestor Prueba',
+              idUsuario: gestor.id,
+              idSiniestro: objetivo.id,
+            },
           })
           await tx.lecturaMensajeChat.create({
             data: { idMensajeChat: mensaje.id, idUsuario: admin.id, fechaLeido: ahora },

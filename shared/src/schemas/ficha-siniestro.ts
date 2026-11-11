@@ -52,6 +52,8 @@ export type FichaSiniestro = {
     peritos: number
     novedades: number
     documentos: number
+    /** Mensajes del chat de otros que el usuario todavía no leyó (E7-03) */
+    chatSinLeer: number
   }
 }
 

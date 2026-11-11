@@ -4,6 +4,7 @@ import { borrarCookieSesion, enviarCookieSesion } from '../../config/cookies.ts'
 import { tokenDeSesion, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import { DemasiadosIntentosError, type crearServicioAuth } from './auth.service.ts'
 import type { ServicioSesiones } from './sesiones.service.ts'
+import { tiempoReal } from '../chat/tiempo-real.ts'
 
 // POST /api/auth/login   — CU-01: valida credenciales y crea la sesión (cookie httpOnly)
 // POST /api/auth/logout  — cierra la sesión actual
@@ -39,7 +40,11 @@ export function crearAuthRouter(deps: {
 
   router.post('/logout', async (req, res) => {
     const token = tokenDeSesion(req)
-    if (token) await sesiones.revocar(token)
+    if (token) {
+      await sesiones.revocar(token)
+      // E7-01: el chat abierto con esta sesión se corta en el momento
+      tiempoReal.cerrarSesion(token)
+    }
     borrarCookieSesion(res)
     res.status(204).end()
   })

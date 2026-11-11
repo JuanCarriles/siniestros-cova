@@ -53,8 +53,12 @@ export function crearServicioSesiones(deps: {
       return token
     },
 
-    /** Devuelve el usuario si el token corresponde a una sesión vigente de un usuario activo. */
-    async validar(token: string): Promise<SesionValida | null> {
+    /**
+     * Devuelve el usuario si el token corresponde a una sesión vigente de un usuario activo.
+     * renovar: false solo consulta (la usa el tiempo real para revisar conexiones abiertas): tener el chat abierto
+     * sin hacer nada no es actividad y no debe estirar el vencimiento por inactividad (RNF-08).
+     */
+    async validar(token: string, { renovar = true } = {}): Promise<SesionValida | null> {
       const t = ahora()
       const sesion = await prisma.sesion.findUnique({
         where: { tokenHash: hashToken(token) },
@@ -79,7 +83,7 @@ export function crearServicioSesiones(deps: {
         await prisma.sesion.deleteMany({ where: { id: sesion.id } })
         return null
       }
-      const renovada = t.getTime() - sesion.ultimaActividad.getTime() >= RENOVAR_CADA_MS
+      const renovada = renovar && t.getTime() - sesion.ultimaActividad.getTime() >= RENOVAR_CADA_MS
       if (renovada) {
         await prisma.sesion.update({
           where: { id: sesion.id },
