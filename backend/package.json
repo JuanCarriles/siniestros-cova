@@ -21,6 +21,7 @@
     "test:siniestros:edicion:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-edicion.db.test.mjs",
     "test:chat": "node --experimental-strip-types --test tests/chat-tiempo-real.test.mjs",
     "test:chat:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-tiempo-real.db.test.mjs",
+    "test:chat:mensajes:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-mensajes.db.test.mjs",
     "test:siniestros:estado": "node --experimental-strip-types --test tests/siniestros-estado.test.mjs",
     "test:siniestros:estado:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-estado.db.test.mjs",
     "test:dashboard": "node --experimental-strip-types --test tests/dashboard.test.mjs tests/dashboard-administrador.test.mjs",

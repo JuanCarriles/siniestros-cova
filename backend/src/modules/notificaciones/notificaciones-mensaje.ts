@@ -3,12 +3,16 @@ import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { notificarEventoCaso } from './eventos-notificaciones.ts'
 
-/** Integración preparada para la futura operación de chat.
+/** Aviso de mensajes nuevos del chat (CU-10 1.h.1 y 1.h.1.1).
  * Llamar después de persistir el mensaje, dentro de su misma transacción; nunca desde el navegador.
  * Los destinatarios, autor, caso y fecha salen de la base, no de un pedido del cliente.
- * La presencia en tiempo real y la lectura de la conversación pertenecen a la historia de chat.
+ * presentes: quienes tienen la conversación abierta en ese momento (E7-02). Ya lo ven llegar: no reciben aviso.
  */
-export async function notificarMensajeNuevo(tx: Prisma.TransactionClient, idMensaje: number) {
+export async function notificarMensajeNuevo(
+  tx: Prisma.TransactionClient,
+  idMensaje: number,
+  { presentes = [] }: { presentes?: Iterable<number> } = {},
+) {
   const mensaje = await tx.mensajeChat.findFirst({
     where: { id: idMensaje, eliminado: false },
     select: {
@@ -37,5 +41,6 @@ export async function notificarMensajeNuevo(tx: Prisma.TransactionClient, idMens
     tipo: 'MENSAJE_NUEVO',
     mensaje: `${nombreCompleto(mensaje.usuario)} envió mensajes nuevos en el siniestro ${caso.numeroSiniestro}.`,
     fecha: mensaje.fechaEnvio,
+    excluir: [...presentes],
   })
 }

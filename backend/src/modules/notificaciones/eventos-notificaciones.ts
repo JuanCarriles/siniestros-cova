@@ -7,6 +7,8 @@ type EventoCaso = {
   tipo: Extract<TipoNotificacion, 'CAMBIO_ESTADO' | 'NOVEDAD_CARGADA' | 'MENSAJE_NUEVO'>
   mensaje: string
   fecha: Date
+  /** Además del autor, quienes no reciben el aviso: en el chat, los que tienen la conversación abierta (E7-02) */
+  excluir?: number[]
 }
 
 /** Se ejecuta en la misma transacción que el evento, después de bloquear el siniestro.
@@ -17,7 +19,7 @@ export async function notificarEventoCaso(tx: Prisma.TransactionClient, evento: 
   const destinatarios = await tx.usuario.findMany({
     where: {
       eliminado: false,
-      id: { not: evento.idAutor },
+      id: { notIn: [evento.idAutor, ...(evento.excluir ?? [])] },
       OR: [
         { id: evento.idUsuarioAsignado },
         { tipoUsuario: { in: ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'] } },

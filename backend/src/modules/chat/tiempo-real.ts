@@ -32,7 +32,12 @@ const REVISAR_CADA_MS = 30_000
 const PREFIJO_USUARIO = 'usuario:'
 const PREFIJO_SINIESTRO = salaSiniestro(0).replace(/0$/, '')
 
-type DatosSocket = { usuario: SesionUsuario; token: string }
+type DatosSocket = {
+  usuario: SesionUsuario
+  token: string
+  /** Salas con la conversación a la vista (sala:atencion) */
+  atentas: Set<number>
+}
 export type SocketCova = Socket<EventosCliente, EventosServidor, Record<string, never>, DatosSocket>
 export type BaseTiempoReal = Pick<Prisma.TransactionClient, 'usuario' | 'siniestro'>
 
@@ -117,6 +122,7 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
       const motivo = await sinAcceso(valida.usuario.id, idSiniestro)
       if (motivo) {
         await socket.leave(salaSiniestro(idSiniestro))
+        socket.data.atentas.delete(idSiniestro)
         socket.emit('sala:expulsado', { idSiniestro, motivo: motivo.error })
       }
     }
@@ -149,7 +155,7 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
         error.data = { codigo: CODIGO_SESION_VENCIDA }
         return next(error)
       }
-      socket.data = { usuario: valida.usuario, token }
+      socket.data = { usuario: valida.usuario, token, atentas: new Set() }
       next()
     } catch (error) {
       console.error('No se pudo validar la sesión del tiempo real:', error)
@@ -178,6 +184,7 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
         const motivo = await sinAcceso(valida.usuario.id, id.data)
         if (motivo) return responderSeguro({ ok: false, ...motivo } satisfies RespuestaSala)
         await socket.join(salaSiniestro(id.data))
+        socket.data.atentas.add(id.data)
         responderSeguro({ ok: true })
       } catch (error) {
         console.error('No se pudo unir a la sala del siniestro:', error)
@@ -191,7 +198,16 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
 
     socket.on('sala:salir', (idCrudo) => {
       const id = idSchema.safeParse(idCrudo)
-      if (id.success) void socket.leave(salaSiniestro(id.data))
+      if (!id.success) return
+      socket.data.atentas.delete(id.data)
+      void socket.leave(salaSiniestro(id.data))
+    })
+
+    socket.on('sala:atencion', (idCrudo, visible) => {
+      const id = idSchema.safeParse(idCrudo)
+      if (!id.success || !socket.rooms.has(salaSiniestro(id.data))) return
+      if (visible === true) socket.data.atentas.add(id.data)
+      else socket.data.atentas.delete(id.data)
     })
   })
 
@@ -204,9 +220,18 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
   return {
     io,
 
-    /** Usuarios conectados a la sala del siniestro (para no avisarles por la bandeja lo que ya están viendo). */
+    /** Usuarios conectados a la sala del siniestro. */
     conectados(idSiniestro: number): Set<number> {
       return new Set(socketsEn(salaSiniestro(idSiniestro)).map((s) => s.data.usuario.id))
+    },
+
+    /** Usuarios con la conversación a la vista: ya ven llegar los mensajes y no reciben el aviso en la bandeja. */
+    presentes(idSiniestro: number): Set<number> {
+      return new Set(
+        socketsEn(salaSiniestro(idSiniestro))
+          .filter((s) => s.data.atentas.has(idSiniestro))
+          .map((s) => s.data.usuario.id),
+      )
     },
 
     /**
@@ -265,6 +290,9 @@ export const tiempoReal = {
   },
   conectados(idSiniestro: number) {
     return actual?.conectados(idSiniestro) ?? new Set<number>()
+  },
+  presentes(idSiniestro: number) {
+    return actual?.presentes(idSiniestro) ?? new Set<number>()
   },
   async emitirASala<E extends keyof EventosServidor>(
     idSiniestro: number,

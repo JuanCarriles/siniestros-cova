@@ -224,14 +224,22 @@ model HistorialSiniestro {
   @@index([idUsuario])
 }
 
+/// Mensajes del chat del siniestro (CU-10 1.h, E7-02). No se editan ni se borran desde el sistema: solo se van
+/// con el borrado físico del siniestro (RF-27). eliminado y fechaBaja quedan sin uso.
 model MensajeChat {
-  id               Int       @id @default(autoincrement())
-  fechaEnvio       DateTime  @default(now()) @db.Timestamptz(3)
+  id               Int          @id @default(autoincrement())
+  fechaEnvio       DateTime     @default(now()) @db.Timestamptz(3)
   contenidoMensaje String
+  /// Nombre y apellido de quien lo envió, tal como era en ese momento
+  autor            String
+  /// Su tipo de usuario en ese momento
+  tipoUsuarioAutor TipoUsuario?
+  /// Identificador de cada envío del formulario: si se reintenta después de perder la respuesta, no se duplica
+  claveEnvio       String?      @unique
   idUsuario        Int
   idSiniestro      Int
-  eliminado        Boolean   @default(false)
-  fechaBaja        DateTime? @db.Timestamptz(3)
+  eliminado        Boolean      @default(false)
+  fechaBaja        DateTime?    @db.Timestamptz(3)
 
   usuario   Usuario              @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro Siniestro            @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
