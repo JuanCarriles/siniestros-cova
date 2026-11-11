@@ -9,6 +9,7 @@ export type PanelSection =
   | 'usuarios'
   | 'informes'
   | 'perfil'
+  | 'notificaciones'
 
 export type PanelUser = { nombre: string; tipo: TipoUsuario }
 
@@ -35,6 +36,10 @@ export const sections: Record<PanelSection, { label: string; description: string
   ajustadores: { label: 'Ajustadores', description: 'Los profesionales que acompañan cada caso.' },
   usuarios: { label: 'Usuarios', description: 'Las personas que forman parte del equipo.' },
   informes: { label: 'Informes', description: 'Información para seguir la actividad del estudio.' },
+  notificaciones: {
+    label: 'Notificaciones',
+    description: 'Todo lo que pasó en tus siniestros, en un solo lugar.',
+  },
   perfil: { label: 'Mi perfil', description: 'Tu identidad y tu espacio dentro del estudio.' },
 }
 
@@ -69,7 +74,11 @@ export function navigationFor(role: TipoUsuario): readonly PanelSection[] {
 
 export function canOpenSection(role: TipoUsuario, section: string): section is PanelSection {
   if (!Object.hasOwn(navigation, role)) return false
-  return section === 'perfil' || navigationFor(role).some((item) => item === section)
+  return (
+    section === 'perfil' ||
+    section === 'notificaciones' ||
+    navigationFor(role).some((item) => item === section)
+  )
 }
 
 export function initialSection(role: TipoUsuario): PanelSection | null {

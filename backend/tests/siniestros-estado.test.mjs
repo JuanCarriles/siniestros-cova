@@ -94,7 +94,11 @@ test('HTTP: cambio de estado para los tres roles autenticados y avisos ligados a
   assert.equal(llamadas.length, 0)
   assert.equal((await pedir(null, '/notificaciones')).status, 401)
   assert.equal((await pedir('GESTOR', '/notificaciones?pagina=2')).status, 200)
-  assert.deepEqual(llamadas.pop(), ['listar', actores.GESTOR, 2])
+  assert.deepEqual(llamadas.pop(), [
+    'listar',
+    actores.GESTOR,
+    { pagina: 2, lectura: 'todas', revision: 'todas' },
+  ])
   assert.equal((await pedir('GESTOR', '/notificaciones?idUsuario=2')).status, 400)
   assert.equal((await pedir('GESTOR', '/notificaciones?pagina=0')).status, 400)
   assert.equal(
@@ -102,5 +106,5 @@ test('HTTP: cambio de estado para los tres roles autenticados y avisos ligados a
     400,
   )
   assert.equal((await pedir('GESTOR', '/notificaciones/3/lectura', 'PATCH')).status, 204)
-  assert.deepEqual(llamadas.pop(), ['leer', actores.GESTOR, 3])
+  assert.deepEqual(llamadas.pop(), ['leer', actores.GESTOR, 3, true])
 })

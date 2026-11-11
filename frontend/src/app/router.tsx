@@ -21,6 +21,7 @@ import { PestanaVehiculos } from '@/features/siniestros/ficha/pages/pestana-vehi
 import { ErrorPestana } from '@/features/siniestros/ficha/components/pestana-ficha'
 import { SiniestrosPage } from '@/features/siniestros/pages/siniestros-page'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
+import { NotificacionesPage } from '@/features/notificaciones/notificaciones-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { RecuperarContrasenaPage } from '@/features/auth/pages/recuperar-contrasena-page'
 import {
@@ -69,6 +70,7 @@ const secciones: Record<PanelSection, ComponentType> = {
   usuarios: UsuariosPage,
   informes: () => <SeccionPendiente section="informes" />,
   perfil: PerfilPage,
+  notificaciones: NotificacionesPage,
 }
 
 // Loader propio de las secciones que traen datos. Valida sesión y rol antes de pedirlos.
