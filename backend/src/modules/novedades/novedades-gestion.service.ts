@@ -1,10 +1,10 @@
-import { notificarEventoCaso } from '../notificaciones/eventos-notificaciones.ts'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import type { NovedadData } from '@cova/shared/schemas/novedades'
 import type { ParteCreada } from '@cova/shared/schemas/partes-siniestro'
 import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
+import { notificarEventoCaso } from '../notificaciones/eventos-notificaciones.ts'
 import {
   prepararEdicion,
   registrarMovimiento,

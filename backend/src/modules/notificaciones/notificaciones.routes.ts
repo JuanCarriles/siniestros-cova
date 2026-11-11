@@ -30,6 +30,9 @@ export function crearNotificacionesRouter(deps: {
       ),
     )
   })
+  router.get('/resumen', async (req, res) => {
+    res.json(await deps.servicio.resumen(usuarioDeSesion(req)))
+  })
   router.patch('/lecturas', async (req, res) => {
     await deps.servicio.leerVarias(
       usuarioDeSesion(req),

@@ -43,7 +43,10 @@ test(
         { env: process.env },
       )
       const db = getPrisma()
-      const base = { transaccion: (trabajo) => db.$transaction(trabajo, { timeout: 15000 }) }
+      const base = {
+        transaccion: (trabajo, opciones) =>
+          db.$transaction(trabajo, { timeout: 15000, ...opciones }),
+      }
       const bandeja = crearServicioNotificaciones(base)
       const usuario = (nombres, tipoUsuario, eliminado = false) =>
         db.usuario.create({
@@ -165,8 +168,9 @@ test(
             [otro.email],
           )
           assert.equal(
-            (await bandeja.listar(gestor, 1)).items.find((n) => n.siniestro.id === c.id)
-              .puedeAbrirSiniestro,
+            (
+              await bandeja.listar(gestor, { pagina: 1, lectura: 'todas', revision: 'todas' })
+            ).items.find((n) => n.siniestro.id === c.id).puedeAbrirSiniestro,
             false,
           )
           await assert.rejects(servicio.reasignar(admin, c.id, pedido), { status: 409 })
@@ -320,6 +324,81 @@ test(
           )
           assert.equal((await avisos(c.id)).length, 3)
           assert.equal(await db.mensajeChat.count({ where: { idSiniestro: c.id } }), 3)
+        },
+      )
+      await t.test(
+        'agrupado de mensajes y marcados de bandeja simultáneos esperan la fila sin error',
+        async () => {
+          const c = await caso()
+          const crearMensaje = async (tx) => {
+            const m = await tx.mensajeChat.create({
+              data: {
+                idSiniestro: c.id,
+                idUsuario: gestor.id,
+                contenidoMensaje: 'Prueba de concurrencia',
+              },
+            })
+            await notificarMensajeNuevo(tx, m.id)
+          }
+          await base.transaccion(crearMensaje)
+          const avisoAdmin = (await avisos(c.id)).find((n) => n.idUsuario === admin.id)
+          assert.ok(avisoAdmin)
+          let liberarAgrupado, avisarAgrupado, avisarLectores
+          const continuar = new Promise((r) => {
+            liberarAgrupado = r
+          })
+          const agrupadoListo = new Promise((r) => {
+            avisarAgrupado = r
+          })
+          const lectoresListos = new Promise((r) => {
+            avisarLectores = r
+          })
+          let lectores = 0
+          const agrupando = base.transaccion(async (tx) => {
+            await crearMensaje(tx)
+            avisarAgrupado()
+            await continuar
+          })
+          const lecturaConcurrente = crearServicioNotificaciones({
+            transaccion: (trabajo, opciones) =>
+              db.$transaction(
+                (tx) =>
+                  trabajo(
+                    new Proxy(tx, {
+                      get(target, key) {
+                        if (key !== 'notificacion') return Reflect.get(target, key)
+                        return new Proxy(target.notificacion, {
+                          get(delegado, metodo) {
+                            if (metodo !== 'updateMany') return Reflect.get(delegado, metodo)
+                            return (args) => {
+                              if (++lectores === 3) avisarLectores()
+                              return delegado.updateMany(args)
+                            }
+                          },
+                        })
+                      },
+                    }),
+                  ),
+                { timeout: 15000, ...opciones },
+              ),
+          })
+          const marcados = []
+          try {
+            await Promise.race([agrupadoListo, agrupando])
+            for (let i = 0; i < 3; i++)
+              marcados.push(lecturaConcurrente.leerVarias(admin, { todas: true }))
+            // Cada lector ya comprobó el actor dentro de su transacción y llegó al UPDATE del aviso bloqueado.
+            await Promise.race([lectoresListos, Promise.all(marcados)])
+          } finally {
+            liberarAgrupado()
+          }
+          await Promise.all([agrupando, ...marcados])
+          assert.equal(lectores, 3, 'se ejercitó la concurrencia real')
+          const persistidos = await avisos(c.id)
+          assert.equal(persistidos.length, 2)
+          assert.equal(persistidos.find((n) => n.idUsuario === admin.id).id, avisoAdmin.id)
+          assert.equal(persistidos.find((n) => n.idUsuario === admin.id).leida, true)
+          assert.equal(persistidos.find((n) => n.idUsuario === superadmin.id).leida, false)
         },
       )
     } finally {

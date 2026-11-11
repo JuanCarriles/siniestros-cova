@@ -1,9 +1,13 @@
 import {
   bandejaNotificacionesSchema,
+  resumenNotificacionesSchema,
   type LecturasNotificaciones,
 } from '@cova/shared/schemas/bandeja-notificaciones'
 import { api } from '@/lib/api'
 
+export async function consultarResumenNotificaciones(signal: AbortSignal) {
+  return resumenNotificacionesSchema.parse(await api('/notificaciones/resumen', { signal }))
+}
 export async function consultarNotificaciones(query: string, signal: AbortSignal) {
   return bandejaNotificacionesSchema.parse(
     await api(`/notificaciones${query ? `?${query}` : ''}`, { signal }),

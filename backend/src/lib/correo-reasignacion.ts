@@ -8,7 +8,6 @@ export type AvisoReasignacion = {
   nuevo: string
   autor: string
   enlace: string
-  esNuevoResponsable: boolean
 }
 const escapar = (texto: string) =>
   texto.replace(
@@ -18,8 +17,6 @@ const escapar = (texto: string) =>
 
 export function crearCorreoReasignacion(config: ConfigCorreo) {
   return (a: AvisoReasignacion): Promise<void> => {
-    // E8: no enviar correo al responsable anterior, aun si un consumidor conserva el contrato viejo.
-    if (!a.esNuevoResponsable) return Promise.resolve()
     const aviso = 'Ahora sos responsable de este siniestro.'
     const texto = `Hola, ${a.nombre}. ${aviso}\n${a.autor} reasignó el siniestro ${a.numeroSiniestro}.\nResponsable anterior: ${a.anterior}\nNuevo responsable: ${a.nuevo}\n\nVer en el sistema: ${a.enlace}`
     return enviarCorreoResend(config, {

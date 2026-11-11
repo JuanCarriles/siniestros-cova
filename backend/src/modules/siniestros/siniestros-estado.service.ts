@@ -1,4 +1,3 @@
-import { notificarEventoCaso } from '../notificaciones/eventos-notificaciones.ts'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import {
   cambiarEstadoSiniestroSchema,
@@ -9,6 +8,7 @@ import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
+import { notificarEventoCaso } from '../notificaciones/eventos-notificaciones.ts'
 import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 
 type Base = { transaccion<T>(trabajo: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> }

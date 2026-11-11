@@ -25,14 +25,22 @@ El responsable anterior conserva la notificación de reasignación sin recibir a
 Por decisión del equipo no se implementa el chat ni un flujo de activación en esta historia.
 
 - `notificarMensajeNuevo(tx, idMensaje)` está preparado y probado. El futuro servicio de chat debe llamarlo en la misma transacción que guarda el mensaje, después de validar los permisos del envío. Obtiene el autor, fecha, caso y destinatarios de la base; excluye al autor y usuarios inactivos. Agrupa los mensajes nuevos en un aviso no leído por usuario y siniestro, actualizando su fecha y devolviéndolo a sin revisar. Si el aviso anterior ya fue leído, conserva ese aviso y crea uno nuevo. No envía mail ni incluye el contenido privado del mensaje en la notificación. La presencia en tiempo real, no avisar a participantes que están dentro de la conversación y retirar el aviso al leer el chat quedan a cargo de la futura historia de chat. No hay endpoint nuevo ni envío de mensajes disponible en esta rama.
-- `crearCorreoActivacion(config)` está preparado y probado para cuando exista la activación. No se conecta automáticamente al alta o la reactivación administrativa de usuarios; no inventa tokens ni envía contraseñas. Recibe el destinatario y enlace desde la futura operación del servidor, y se debe invocar después de su commit.
 
-Por lo tanto, el criterio de mensaje nuevo está preparado técnicamente, pero todavía no se puede verificar desde la aplicación; lo mismo sucede con el correo de activación. La excepción del correo de seguridad fue confirmada por el equipo.
+El criterio de mensaje nuevo está preparado técnicamente, pero todavía no se puede verificar desde la aplicación en esta rama. El correo de activación se agregará cuando exista esa historia; se quitó la implementación sin uso. La excepción del correo de seguridad fue confirmada por el equipo.
 
 ## Verificación
 
-- `npm run test:eventos -w backend`: correo de activación preparado y bloqueo del mail al responsable anterior. Resend simulado.
 - `npm run test:eventos:db -w backend`: base temporal separada, migraciones, asignación, reasignación, estados, novedades, privacidad, deduplicación, rollback y agrupación concurrente del hook de chat. Sin correos ni archivos reales.
 - Mantener las pruebas de estado, reasignación, recuperación, perfil y bandeja.
 
-Prueba manual: dos cuentas, una administrativa y otra asignada al caso. Crear un caso verifica asignación; reasignarlo verifica aviso interno para ambos y correo solo para el nuevo. Cambiar estado o cargar una novedad debe avisar en la bandeja al asignado y administración activa, excluyendo autor, sin mail. La campana se actualiza al recuperar el foco, actualizar o en su consulta periódica; esta historia no agrega entrega en tiempo real.
+Prueba manual: dos cuentas, una administrativa y otra asignada al caso. Crear un caso verifica asignación; reasignarlo verifica aviso interno para ambos y correo solo para el nuevo. Cambiar estado o cargar una novedad debe avisar en la bandeja al asignado y administración activa, excluyendo autor, sin mail. La campana consulta su resumen al volver a la pestaña, al marcar avisos o en su consulta periódica; esta historia no agrega entrega en tiempo real.
+
+
+## Correcciones de revisión E8-02
+
+- Incorporadas las correcciones de E8-01 (af4f997): escrituras con ReadCommitted, consultas coherentes, lista disponible si falla el marcado y mejoras de accesibilidad. No se configura RepeatableRead para los marcados.
+- El servicio conserva el filtro de destinatario del mail por nuevo.id. El contrato AvisoReasignacion ya no tiene esNuevoResponsable; el enlace es siempre /siniestros/:id. La prueba del servicio asegura que el anterior no recibe correo y ambos mantienen su aviso interno.
+- Eliminados el mailer de activación sin consumidores, sus pruebas y el comando test:eventos que solo ejecutaba esas pruebas retiradas. Se conservan test:eventos:db y las pruebas del correo de reasignación, recuperación y cambio de contraseña.
+- Ordenados los imports internos. Se mantienen sin cambios eventos-notificaciones.ts y notificaciones-mensaje.ts para conservar la integración con las ramas del chat; el procesamiento por destinatario sigue siendo adecuado para el equipo actual.
+- Abrir la campana marca los avisos mostrados como leídos. Si luego llega otro mensaje, genera un nuevo aviso cuando ya no hay uno sin leer; es la agrupación indicada por CU-10 1.h.1.1, no un duplicado accidental.
+- Orden de integración: E8-01, E8-02 y luego feat/chat-tiempo-real, feat/chat-mensajes y feat/chat-leidos. Esta corrección no modifica ni integra esas ramas del chat.
