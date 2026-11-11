@@ -5,6 +5,7 @@ import type {
   LecturasNuevasChat,
   MensajeChat,
   ResultadoLecturaChat,
+  SinLeerChat,
 } from '@cova/shared/schemas/chat'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
@@ -13,6 +14,7 @@ import { eventoHistorial } from '../historial/historial.textos.ts'
 import { notificarMensajeNuevo } from '../notificaciones/notificaciones-mensaje.ts'
 import { prepararEdicion, type Transaccion } from '../siniestros/partes-edicion.ts'
 import { exigirAccesoSiniestro } from '../siniestros/siniestros-acceso.ts'
+import { mensajesSinLeerPor } from './sin-leer.ts'
 
 // CU-10 1.h y 1.h.1 (E7-02): el chat del siniestro, entre el gestor asignado y la administración (RF-25).
 //
@@ -183,17 +185,24 @@ export function crearServicioChat({
      * mensajes nuevos de este siniestro de la bandeja, y después del commit informa la lectura a la sala.
      * Leer también se puede en un caso cerrado o dado de baja: la conversación se sigue consultando.
      */
+    /** Cuántos mensajes de otros no leyó todavía: el número de la pestaña del chat, al día en tiempo real */
+    sinLeer(usuario: SesionUsuario, idSiniestro: number): Promise<SinLeerChat> {
+      return transaccion(async (tx) => {
+        const actor = await lector(tx, usuario, idSiniestro)
+        return {
+          sinLeer: await tx.mensajeChat.count({
+            where: { idSiniestro, ...mensajesSinLeerPor(actor.id) },
+          }),
+        }
+      })
+    },
+
     async leer(usuario: SesionUsuario, idSiniestro: number): Promise<ResultadoLecturaChat> {
       const resultado = await transaccion(async (tx) => {
         const actor = await lector(tx, usuario, idSiniestro)
         const ahora = reloj()
         const pendientes = await tx.mensajeChat.findMany({
-          where: {
-            idSiniestro,
-            eliminado: false,
-            idUsuario: { not: actor.id },
-            lecturas: { none: { idUsuario: actor.id } },
-          },
+          where: { idSiniestro, ...mensajesSinLeerPor(actor.id) },
           select: { id: true },
           orderBy: { id: 'asc' },
         })

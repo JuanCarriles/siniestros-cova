@@ -12,6 +12,7 @@ import { HttpError } from '../../utils/httpError.ts'
 import { aDireccion, dia, hora, nombreDe, selectDireccion } from './ficha.ts'
 import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 import { sinMovimiento } from './demora.ts'
+import { mensajesSinLeerPor } from '../chat/sin-leer.ts'
 
 type BaseSiniestros = Pick<
   Prisma.TransactionClient,
@@ -295,6 +296,7 @@ export function crearServicioSiniestros(
               peritos: activo,
               novedades: activo,
               documentos: activo,
+              mensajes: { where: mensajesSinLeerPor(usuario.id) },
             },
           },
         },
@@ -329,6 +331,7 @@ export function crearServicioSiniestros(
           peritos: fila._count.peritos,
           novedades: fila._count.novedades,
           documentos: fila._count.documentos,
+          chatSinLeer: fila._count.mensajes,
         },
       }
     },

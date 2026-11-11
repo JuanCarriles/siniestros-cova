@@ -51,6 +51,9 @@ export type ResultadoLecturaChat = {
   lecturas: LecturasNuevasChat
 }
 
+/** GET /api/siniestros/:id/chat/sin-leer: mensajes de otros que el usuario todavía no leyó */
+export type SinLeerChat = { sinLeer: number }
+
 /** Un mensaje, tal como lo muestra la conversación y como llega en tiempo real (chat:mensaje) */
 export type MensajeChat = {
   id: number

@@ -275,6 +275,7 @@ test('PostgreSQL: ficha del siniestro y sus pestañas (CU-10, E5-01) dentro de u
             peritos: 2,
             novedades: 2,
             documentos: 2,
+            chatSinLeer: 0,
           })
 
           // Vehículos y partes: el asegurado primero; el tercero, sin titular ni ocupantes

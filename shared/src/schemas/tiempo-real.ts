@@ -35,7 +35,8 @@ export interface EventosCliente {
   'sala:salir': (idSiniestro: number) => void
   /**
    * E7-02: si la conversación está a la vista (pestaña del navegador visible). Quien la está mirando no recibe el
-   * aviso de mensajes nuevos en la bandeja: ya los ve llegar. Al unirse, se asume que sí.
+   * aviso de mensajes nuevos en la bandeja: ya los ve llegar. Al unirse, se asume que no: estar en la sala (por
+   * ejemplo, por el número de no leídos de la pestaña) no es estar mirando la conversación.
    */
   'sala:atencion': (idSiniestro: number, visible: boolean) => void
 }

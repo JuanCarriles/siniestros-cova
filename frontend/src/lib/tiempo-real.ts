@@ -31,7 +31,12 @@ export type EstadoSala =
   | { tipo: 'sin-acceso'; motivo: string }
 
 type SocketCova = Socket<EventosServidor, EventosCliente>
-type Sala = { abiertas: number; estado: EstadoSala }
+type Sala = {
+  abiertas: number
+  /** Cuántas pantallas muestran la conversación (la barra de pestañas está en la sala, pero no la muestra) */
+  mirando: number
+  estado: EstadoSala
+}
 
 const CORTAR_SIN_SALAS_MS = 10_000
 
@@ -66,6 +71,13 @@ function sesionVencida() {
 /** La pestaña del navegador está a la vista (no minimizada ni detrás de otra pestaña) */
 const visible = () => typeof document === 'undefined' || document.visibilityState === 'visible'
 
+/** E7-02: la conversación está a la vista. Quien la mira no recibe el aviso en la bandeja: ya ve llegar los mensajes. */
+function informarAtencion(id: number) {
+  const sala = salas.get(id)
+  if (!socket?.connected || sala?.estado.tipo !== 'unida') return
+  socket.emit('sala:atencion', id, sala.mirando > 0 && visible())
+}
+
 function unirse(id: number) {
   if (!socket?.connected) return
   cambiarSala(id, { tipo: 'uniendo' })
@@ -76,9 +88,9 @@ function unirse(id: number) {
       // Sin respuesta a tiempo: se reintenta con la próxima reconexión
       if (error || !respuesta) return
       if (respuesta.ok) {
-        // El servidor asume "a la vista" al unir: si la pestaña está oculta, que lo sepa (avisos de la bandeja)
-        if (!visible()) socket?.emit('sala:atencion', id, false)
         cambiarSala(id, { tipo: 'unida' })
+        // El servidor asume que no la está mirando: si la conversación está a la vista, que lo sepa
+        if (salas.get(id)?.mirando) informarAtencion(id)
       } else if (respuesta.status === 401) sesionVencida()
       else if (respuesta.status === 503) return
       else cambiarSala(id, { tipo: 'sin-acceso', motivo: respuesta.error })
@@ -125,8 +137,7 @@ if (typeof window !== 'undefined') {
   // E7-02: quien tiene el chat abierto pero en una pestaña oculta no lo está mirando: tiene que recibir el aviso
   document.addEventListener('visibilitychange', () => {
     if (!socket?.connected) return
-    for (const [id, sala] of salas)
-      if (sala.estado.tipo === 'unida') socket.emit('sala:atencion', id, visible())
+    for (const [id, sala] of salas) if (sala.mirando) informarAtencion(id)
   })
   window.addEventListener('online', () => {
     if (salas.size && socket && !socket.connected) {
@@ -136,21 +147,27 @@ if (typeof window !== 'undefined') {
   })
 }
 
-/** Entra a la sala del siniestro. Devuelve la función para salir (las pantallas la llaman al desmontarse). */
-export function abrirSala(id: number): () => void {
+/**
+ * Entra a la sala del siniestro. Devuelve la función para salir (las pantallas la llaman al desmontarse).
+ * `mirando`: la pantalla muestra la conversación (el chat), no solo escucha lo que pasa en ella (la barra de
+ * pestañas, para el número de no leídos).
+ */
+export function abrirSala(id: number, { mirando = false }: { mirando?: boolean } = {}): () => void {
   clearTimeout(corte)
   let sala = salas.get(id)
   if (!sala) {
-    sala = { abiertas: 0, estado: UNIENDO }
+    sala = { abiertas: 0, mirando: 0, estado: UNIENDO }
     salas.set(id, sala)
   }
   sala.abiertas++
+  if (mirando && ++sala.mirando === 1) informarAtencion(id)
   const s = conectar()
   if (sala.abiertas === 1 && s.connected) unirse(id)
   return () => {
     const actual = salas.get(id)
     if (!actual) return
     actual.abiertas--
+    if (mirando && --actual.mirando === 0) informarAtencion(id)
     if (actual.abiertas > 0) return
     salas.delete(id)
     socket?.emit('sala:salir', id)
@@ -209,8 +226,11 @@ export function useEstadoConexion(): EstadoConexion {
 }
 
 /** Abre la sala mientras el componente está montado y devuelve el estado de la conexión y de la sala. */
-export function useSalaSiniestro(idSiniestro: number) {
-  useEffect(() => abrirSala(idSiniestro), [idSiniestro])
+export function useSalaSiniestro(
+  idSiniestro: number,
+  { mirando = false }: { mirando?: boolean } = {},
+) {
+  useEffect(() => abrirSala(idSiniestro, { mirando }), [idSiniestro, mirando])
   const sala = useSyncExternalStore(
     (o) => {
       const oyentes = oyentesSala.get(idSiniestro) ?? new Set()

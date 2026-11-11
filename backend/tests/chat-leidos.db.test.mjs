@@ -12,6 +12,7 @@ import { errorHandler } from '../src/middlewares/errorHandler.ts'
 import { crearServicioSesiones } from '../src/modules/auth/sesiones.service.ts'
 import { crearChatRouter } from '../src/modules/chat/chat.routes.ts'
 import { crearServicioChat } from '../src/modules/chat/chat.service.ts'
+import { crearServicioSiniestros } from '../src/modules/siniestros/siniestros.service.ts'
 import { crearTiempoReal } from '../src/modules/chat/tiempo-real.ts'
 import { conBaseTemporal } from './fixtures/base-temporal.mjs'
 
@@ -124,12 +125,21 @@ test('E7-03: indicador de mensaje leído', { timeout: 120_000 }, () =>
       clientes.push(gestorC)
       await once(gestorC, 'connect')
       assert.deepEqual(await gestorC.emitWithAck('sala:unirse', siniestro.id), { ok: true })
+      // Estar en la sala (la barra de pestañas, por el número de no leídos) no es mirar la conversación
+      assert.deepEqual([...tiempoReal.presentes(siniestro.id)], [])
+      gestorC.emit('sala:atencion', siniestro.id, true)
+      await esperar(50)
+      assert.deepEqual([...tiempoReal.presentes(siniestro.id)], [gestor.id])
       const lecturasEnVivo = []
       gestorC.on('chat:leido', (l) => lecturasEnVivo.push(l))
 
       const m1 = await enviar('gestor', 'Primero')
       const m2 = await enviar('gestor', 'Segundo')
       assert.deepEqual(m1.leidoPor, [], 'recién enviado, nadie lo leyó')
+      // El número de la pestaña: los de otros sin leer, para cada uno
+      const sinLeer = async (quien) => (await pedir(quien, '/sin-leer')).cuerpo.sinLeer
+      assert.equal(await sinLeer('admin'), 2)
+      assert.equal(await sinLeer('gestor'), 0, 'los propios no cuentan')
       assert.equal(await avisoVisible(admin.id), 1)
 
       // --- El administrador entra a la conversación: se marca con su usuario y la hora del servidor
@@ -158,6 +168,12 @@ test('E7-03: indicador de mensaje leído', { timeout: 120_000 }, () =>
       // 1.h.3: el aviso de mensajes nuevos del siniestro se retira de la bandeja (queda como baja lógica)
       assert.equal(await avisoVisible(admin.id), 0)
       assert.equal(await avisoVisible(superadmin.id), 1, 'el de los demás sigue')
+      assert.equal(await sinLeer('admin'), 0)
+      assert.equal(await sinLeer('superadmin'), 2)
+      // La ficha trae el mismo número, para mostrarlo en la pestaña sin esperar el tiempo real
+      const ficha = (u) => crearServicioSiniestros(prisma).obtener(u, siniestro.id)
+      assert.equal((await ficha(superadmin)).cantidades.chatSinLeer, 2)
+      assert.equal((await ficha(admin)).cantidades.chatSinLeer, 0)
 
       // --- Se informa en tiempo real a los demás participantes
       await esperar(100)
@@ -211,6 +227,7 @@ test('E7-03: indicador de mensaje leído', { timeout: 120_000 }, () =>
 
       // --- Permisos: solo los participantes; en un caso cerrado se sigue leyendo
       assert.equal((await leer('otroGestor')).status, 403)
+      assert.equal((await pedir('otroGestor', '/sin-leer')).status, 403)
       await prisma.siniestro.update({
         where: { id: siniestro.id },
         data: { idEstadoSiniestro: cierre.id },

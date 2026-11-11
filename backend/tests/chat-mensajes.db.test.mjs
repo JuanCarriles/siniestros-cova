@@ -162,6 +162,7 @@ test(
         const adminC = await socket('admin')
         const enVivoAdmin = recibidos(adminC)
         assert.deepEqual(await adminC.emitWithAck('sala:unirse', siniestro.id), { ok: true })
+        adminC.emit('sala:atencion', siniestro.id, true)
         const otroC = await socket('otroGestor')
         const enVivoOtro = recibidos(otroC)
 
@@ -309,7 +310,7 @@ test(
           })
           assert.equal(r.status, 404, `${method} no existe`)
         }
-        assert.deepEqual(Object.keys(chat).sort(), ['enviar', 'leer', 'listar'])
+        assert.deepEqual(Object.keys(chat).sort(), ['enviar', 'leer', 'listar', 'sinLeer'])
         assert.equal(
           (await prisma.mensajeChat.findUniqueOrThrow({ where: { id: idMensaje } }))
             .contenidoMensaje,

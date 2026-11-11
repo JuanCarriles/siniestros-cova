@@ -74,6 +74,7 @@ export function FichaSiniestroPage() {
       />
       <PestanasFicha
         ficha={ficha}
+        idUsuario={panel.usuario.id}
         esGestor={panel.usuario.tipo === 'GESTOR'}
         estado={{ pasosAlListado: pasosAlListado && pasosAlListado + 1 } satisfies EstadoFicha}
       />

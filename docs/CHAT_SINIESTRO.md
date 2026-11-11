@@ -102,7 +102,7 @@ activos (RF-25).
    fecha y hora del servidor.
 3. Se registra una línea `MENSAJE` en el historial.
 4. Se avisa con `notificarMensajeNuevo` (de E8-02) a los participantes activos, menos el autor y menos **quienes
-   tienen la conversación a la vista**: están en la sala y con la pestaña del navegador visible
+   tienen la conversación a la vista**: tienen abierta la pestaña Chat de la ficha, con la pestaña del navegador visible
    (`sala:atencion`: el navegador lo informa al unirse y cada vez que la pestaña se oculta o vuelve a la vista). Si ya tenían un aviso de mensajes nuevos sin leer en ese siniestro, se actualiza su fecha
    en lugar de crear otro (CU-10 1.h.1.1). El aviso no incluye el texto del mensaje.
 
@@ -166,6 +166,19 @@ existía) toman el nombre y el rol actuales de su usuario.
   todos los lectores si leyó más de uno) o "Enviado. Todavía no lo leyó nadie". Siempre en texto, con un ícono
   de apoyo. Se actualiza en tiempo real y la campana de notificaciones se refresca al retirar el aviso.
 
+### Mensajes sin leer en la barra de pestañas
+
+- La pestaña del chat muestra cuántos mensajes de otros no leyó el usuario. Con 1 o más, el número se destaca (como
+  el de la campana); el lector de pantalla dice "Chat (2 sin leer)".
+- `GET /api/siniestros/:id/chat/sin-leer` responde `{ sinLeer }`; la ficha trae el mismo número en
+  `cantidades.chatSinLeer`, para mostrarlo sin esperar la conexión.
+- La barra se une a la sala del siniestro mientras la ficha está abierta. Cuando llega un mensaje de otro, cuando el
+  usuario lee (en esta u otra pestaña del navegador) o al reconectar, vuelve a pedir el número al servidor. Con el
+  chat abierto no suma en el momento: el mensaje se marca leído enseguida y el número no salta.
+- **Estar en la sala no es mirar la conversación.** Al unirse, el servidor asume que no la está mirando; el chat
+  avisa con `sala:atencion` cuando está a la vista. Así, quien está en otra pestaña de la ficha recibe el aviso en
+  la bandeja aunque su navegador esté en la sala.
+
 ### Pruebas
 
 - `npm run test:chat:leidos:db -w backend`: base temporal y Socket.IO real. Cubre:
@@ -177,5 +190,6 @@ existía) toman el nombre y el rol actuales de su usuario.
   - que el mensaje de quien mira no genera aviso, pero queda sin leer hasta marcarlo;
   - que un aviso retirado no impide el próximo;
   - dos pestañas marcando a la vez;
-  - permisos (403) y caso cerrado (se lee).
+  - permisos (403) y caso cerrado (se lee);
+  - la cantidad sin leer de cada uno (endpoint y ficha), y que unirse a la sala no cuenta como mirar.
 - `chat.test.mjs` (frontend): lecturas sin repetir y sin el autor, y la versión más completa al recargar.

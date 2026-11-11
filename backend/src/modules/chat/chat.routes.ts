@@ -7,6 +7,7 @@ import type { crearServicioChat } from './chat.service.ts'
 // CU-10 1.h (E7-02). Se monta en /api/siniestros/:id/chat. El servicio limita al gestor a sus casos.
 // GET  /api/siniestros/:id/chat?despues=  conversación (o lo posterior a ese mensaje, al reconectar)
 // POST /api/siniestros/:id/chat           { texto, claveEnvio } envía un mensaje; responde el mensaje guardado
+// GET  /api/siniestros/:id/chat/sin-leer  cuántos mensajes de otros no leyó (el número de la pestaña)
 // POST /api/siniestros/:id/chat/leidos    E7-03: marca como leído lo pendiente y retira el aviso de la bandeja
 // No hay rutas para editar ni borrar mensajes (RF-27).
 export function crearChatRouter(deps: {
@@ -43,6 +44,9 @@ export function crearChatRouter(deps: {
           enviarMensajeChatSchema.parse(req.body),
         ),
       )
+  })
+  router.get('/sin-leer', async (req, res) => {
+    res.json(await deps.chat.sinLeer(usuarioDeSesion(req), idDe(req.params)))
   })
   router.post('/leidos', async (req, res) => {
     res.json(await deps.chat.leer(usuarioDeSesion(req), idDe(req.params)))

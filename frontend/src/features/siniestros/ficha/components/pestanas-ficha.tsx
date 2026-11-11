@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import type { FichaSiniestro } from '@cova/shared/schemas/ficha-siniestro'
 import { cn } from '@/lib/utils'
+import { useChatSinLeer } from '../hooks/use-chat-sin-leer'
 
 type Pestana = {
   /** Cada pestaña es una dirección propia dentro de la ficha (/siniestros/12/vehiculos) */
@@ -21,6 +22,8 @@ type Pestana = {
   icono: LucideIcon
   cantidad?: keyof FichaSiniestro['cantidades']
 }
+
+const CHAT = 'chat'
 
 // Dos grupos: lo que es el caso y lo que va pasando con él
 const GRUPOS: { titulo: string; pestanas: Pestana[] }[] = [
@@ -38,7 +41,8 @@ const GRUPOS: { titulo: string; pestanas: Pestana[] }[] = [
     pestanas: [
       { ruta: 'novedades', titulo: 'Novedades', icono: Megaphone, cantidad: 'novedades' },
       { ruta: 'documentos', titulo: 'Documentos', icono: FileStack, cantidad: 'documentos' },
-      { ruta: 'chat', titulo: 'Chat con el gestor', icono: MessagesSquare },
+      // Cuenta los mensajes sin leer, al día en tiempo real
+      { ruta: CHAT, titulo: 'Chat con el gestor', icono: MessagesSquare, cantidad: 'chatSinLeer' },
       { ruta: 'historial', titulo: 'Historial', icono: History },
     ],
   },
@@ -50,10 +54,12 @@ const GRUPOS: { titulo: string; pestanas: Pestana[] }[] = [
 // todas a la vista: nada queda escondido en un desplazamiento lateral.
 export function PestanasFicha({
   ficha,
+  idUsuario,
   esGestor,
   estado,
 }: {
   ficha: FichaSiniestro
+  idUsuario: number
   esGestor: boolean
   /** Viaja con cada pestaña (para "Volver al listado") */
   estado: unknown
@@ -62,6 +68,13 @@ export function PestanasFicha({
   const location = useLocation()
   const base = useResolvedPath('.').pathname.replace(/\/$/, '')
   const actual = location.pathname.replace(/\/$/, '')
+  const chatSinLeer = useChatSinLeer(
+    ficha.id,
+    idUsuario,
+    ficha.cantidades.chatSinLeer,
+    actual === `${base}/${CHAT}`,
+  )
+  const cantidades = { ...ficha.cantidades, chatSinLeer }
 
   return (
     <nav
@@ -90,7 +103,9 @@ export function PestanasFicha({
           >
             {grupo.pestanas.map((p) => {
               const Icono = p.icono
-              const cantidad = p.cantidad ? ficha.cantidades[p.cantidad] : null
+              const cantidad = p.cantidad ? cantidades[p.cantidad] : null
+              // Mensajes sin leer: se destacan (como el número de la campana) y el lector de pantalla lo dice
+              const sinLeer = p.cantidad === 'chatSinLeer'
               const destino = p.ruta ? `${base}/${p.ruta}` : base
               return (
                 <li key={p.ruta} className="flex">
@@ -125,18 +140,22 @@ export function PestanasFicha({
                           aria-hidden="true"
                         />
                         <span className="col-span-2 row-start-2 min-w-0 @2xl:col-span-1 @2xl:col-start-2 @2xl:row-start-1">
-                          {p.ruta === 'chat' && esGestor ? 'Chat' : p.titulo}
+                          {p.ruta === CHAT && esGestor ? 'Chat' : p.titulo}
                         </span>
                         {cantidad !== null && (
                           <span
                             className={cn(
                               'col-start-2 row-start-1 min-w-7 shrink-0 justify-self-end rounded-md px-1.5 text-center dato text-sm font-bold @2xl:col-start-3',
-                              isActive ? 'bg-on-navy text-navy' : 'bg-neutral-bg text-neutral-ink',
+                              isActive
+                                ? 'bg-on-navy text-navy'
+                                : sinLeer && cantidad > 0
+                                  ? 'rounded-full bg-primary px-2 text-primary-foreground'
+                                  : 'bg-neutral-bg text-neutral-ink',
                             )}
                           >
                             <span className="sr-only">(</span>
-                            {cantidad}
-                            <span className="sr-only">)</span>
+                            {sinLeer && cantidad > 99 ? '99+' : cantidad}
+                            <span className="sr-only">{sinLeer ? ' sin leer)' : ')'}</span>
                           </span>
                         )}
                       </>

@@ -40,7 +40,7 @@ export function useConversacion(idSiniestro: number, idUsuario: number, inicial:
   const [pendientes, setPendientes] = useState<MensajePendiente[]>([])
   /** Mensajes de otros que llegaron en tiempo real: los anuncia el lector de pantalla */
   const [ultimoAjeno, setUltimoAjeno] = useState<MensajeChat | null>(null)
-  const { conexion, sala } = useSalaSiniestro(idSiniestro)
+  const { conexion, sala } = useSalaSiniestro(idSiniestro, { mirando: true })
   const clavesPropias = useRef(new Set<string>())
 
   const agregar = useCallback((nuevos: MensajeChat[]) => {

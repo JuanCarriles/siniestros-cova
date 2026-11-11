@@ -183,8 +183,9 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
         socket.data.usuario = valida.usuario
         const motivo = await sinAcceso(valida.usuario.id, id.data)
         if (motivo) return responderSeguro({ ok: false, ...motivo } satisfies RespuestaSala)
+        // Estar en la sala no es mirar la conversación (la barra de pestañas también se une, por el número de no
+        // leídos): el navegador avisa con sala:atencion cuando el chat está a la vista
         await socket.join(salaSiniestro(id.data))
-        socket.data.atentas.add(id.data)
         responderSeguro({ ok: true })
       } catch (error) {
         console.error('No se pudo unir a la sala del siniestro:', error)

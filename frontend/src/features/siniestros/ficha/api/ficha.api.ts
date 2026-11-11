@@ -26,6 +26,7 @@ import type {
   EnviarMensajeChatData,
   MensajeChat,
   ResultadoLecturaChat,
+  SinLeerChat,
 } from '@cova/shared/schemas/chat'
 import { api } from '@/lib/api'
 
@@ -142,6 +143,10 @@ export const obtenerChat = (id: number, despues?: number): Promise<ConversacionC
 /** E7-02: envía un mensaje; responde el mensaje guardado (el mismo si se reintenta con la misma clave) */
 export const enviarMensajeChat = (id: number, datos: EnviarMensajeChatData): Promise<MensajeChat> =>
   api(`/siniestros/${id}/chat`, { method: 'POST', body: datos })
+
+/** Cuántos mensajes de otros no leyó todavía (el número de la pestaña del chat) */
+export const obtenerChatSinLeer = (id: number): Promise<SinLeerChat> =>
+  api(`/siniestros/${id}/chat/sin-leer`)
 
 /** E7-03: marca como leído lo pendiente de la conversación y retira el aviso de mensajes nuevos de la bandeja */
 export const marcarChatLeido = (id: number): Promise<ResultadoLecturaChat> =>
