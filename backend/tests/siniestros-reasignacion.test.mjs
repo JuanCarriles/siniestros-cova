@@ -100,18 +100,12 @@ test('correo Resend: destinatario correcto, texto alternativo y HTML escapado', 
     nuevo: 'María',
     autor: 'Administración',
     enlace: 'https://example.invalid/siniestros/1',
-    esNuevoResponsable: true,
   }
   await correo(datos)
-  await correo({
-    ...datos,
-    esNuevoResponsable: false,
-    enlace: 'https://example.invalid/siniestros',
-  })
   assert.deepEqual(mensajes[0].to, [datos.email])
   assert.ok(mensajes[0].html.includes('&lt;script&gt;persona&lt;/script&gt;'))
   assert.ok(!mensajes[0].html.includes('<script>persona</script>'))
   assert.ok(mensajes[0].html.includes('Ana &amp; Luis'))
   assert.ok(mensajes[0].text.includes('Ahora sos responsable'))
-  assert.equal(mensajes.length, 1, 'El responsable anterior solo recibe el aviso interno')
+  assert.equal(mensajes.length, 1)
 })

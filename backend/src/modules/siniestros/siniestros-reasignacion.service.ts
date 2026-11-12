@@ -184,8 +184,7 @@ export function crearServicioReasignacion(deps: Deps, reloj = () => new Date()) 
             anterior: nombreAnterior,
             nuevo: nombreNuevo,
             autor,
-            enlace: `${deps.urlSistema.replace(/\/$/, '')}/siniestros${u.id === nuevo.id || u.tipoUsuario !== 'GESTOR' ? `/${id}` : ''}`,
-            esNuevoResponsable: u.id === nuevo.id,
+            enlace: `${deps.urlSistema.replace(/\/$/, '')}/siniestros/${id}`,
           }))
       })
       // El proveedor se invoca después del commit: un mail fallido nunca duplica ni revierte la reasignación.

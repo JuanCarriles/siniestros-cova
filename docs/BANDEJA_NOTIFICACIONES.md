@@ -41,4 +41,4 @@ Para ejecutar lo nuevo en Docker después de cambiar de rama: `docker compose up
 - Se conserva el filtro de lectura porque el desplegable necesita consultar los no leídos. listar acepta solamente el objeto de consulta; se actualizaron sus pruebas consumidoras.
 - Pruebas: 45 marcados masivos HTTP simultáneos en tres rondas, 16 marcados individuales combinados, privacidad del resumen, fallos de marcado con lista disponible, reintento, cancelación y destinos por tipo. Verificación visual adicional del foco en filas que permanecen/desaparecen y del panel en celular.
 
-Los cambios se realizan solo en feat/bandeja-notificaciones. La rama dependiente feat/generar-notificaciones-evento debe integrarlos posteriormente; no se actualiza ni se publica automáticamente desde esta corrección.
+Las correcciones se implementaron en feat/bandeja-notificaciones (af4f997) y se incorporaron en feat/generar-notificaciones-evento durante su revisión. Las ramas del chat se actualizan después, siguiendo ese orden de integración.
