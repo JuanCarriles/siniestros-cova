@@ -47,6 +47,10 @@ const tiposMime = {
 } as const
 
 // altas/{idUsuario}: documentos subidos durante el alta, antes de que exista el siniestro (CU-09 34)
+const claveInformeSchema = z
+  .string()
+  .regex(/^informes mensuales\/(?:pruebas\/)?\d{4}\/(0[1-9]|1[0-2])\/[a-f0-9-]+\.pdf$/)
+const clavePrivadaSchema = z.union([claveArchivoSchema, claveInformeSchema])
 const carpetaSchema = z
   .string()
   .regex(/^(plantillas|pruebas|siniestros\/[1-9]\d*|altas\/[1-9]\d*)$/)
@@ -118,6 +122,41 @@ export function crearAlmacenamientoR2(
     })
 
   return {
+    // Informes generados por el servidor: únicamente PDF, en un prefijo independiente.
+    async subirInforme(clave: string, contenido: Buffer) {
+      const key = claveInformeSchema.parse(clave)
+      if (contenido.length > 10 * 1024 * 1024 || contenido.subarray(0, 5).toString() !== '%PDF-')
+        throw new HttpError(413, 'El informe PDF no es válido o supera los 10 MB.')
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: config.R2_BUCKET,
+          Key: key,
+          Body: contenido,
+          ContentType: 'application/pdf',
+          ContentDisposition: disposicionDescarga('informe-mensual.pdf'),
+          CacheControl: 'private, no-store',
+        }),
+      )
+    },
+    async leerInforme(clave: string) {
+      const key = claveInformeSchema.parse(clave)
+      const objeto = await s3.send(new GetObjectCommand({ Bucket: config.R2_BUCKET, Key: key }), {
+        abortSignal: AbortSignal.timeout(30000),
+      })
+      if (!objeto.Body) throw new HttpError(404, 'El PDF no está disponible.')
+      const chunks: Buffer[] = []
+      let bytes = 0
+      for await (const chunk of objeto.Body as AsyncIterable<Uint8Array>) {
+        bytes += chunk.length
+        if (bytes > 10 * 1024 * 1024) {
+          if ('destroy' in objeto.Body && typeof objeto.Body.destroy === 'function')
+            objeto.Body.destroy()
+          throw new HttpError(413, 'El informe supera el tamaño permitido.')
+        }
+        chunks.push(Buffer.from(chunk))
+      }
+      return Buffer.concat(chunks)
+    },
     async subir(entrada: ArchivoEntrada, carpeta: string, metadata?: Record<string, string>) {
       const archivo = archivoSchema.parse(entrada)
       const prefijo = carpetaSchema.parse(carpeta)
@@ -276,7 +315,7 @@ export function crearAlmacenamientoR2(
 
     // Sólo llamar después de autorizar al usuario y obtener la clave de la base.
     async firmarDescarga(clave: string, nombreOriginal: string, mimeType: string) {
-      const key = claveArchivoSchema.parse(clave)
+      const key = clavePrivadaSchema.parse(clave)
       const formato = Object.entries(tiposMime).find(([, mime]) => mime === mimeType)?.[0]
       if (!formato)
         throw new HttpError(
@@ -332,7 +371,7 @@ export function crearAlmacenamientoR2(
 
     // Borrado físico de plantillas autorizadas, compensación de altas y pruebas; no usar para bajas lógicas.
     async eliminar(clave: string) {
-      const key = claveArchivoSchema.parse(clave)
+      const key = clavePrivadaSchema.parse(clave)
       try {
         await s3.send(new DeleteObjectCommand({ Bucket: config.R2_BUCKET, Key: key }))
       } catch (error) {

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { importeOpcionalSchema, monedaSchema } from './informes.ts'
 import {
   booleanoSchema,
   claveArchivoSchema,
@@ -52,6 +53,8 @@ export const datosCasoSchema = z
   .strictObject({
     numeroSiniestro: obligatorio('Ingresá el número de siniestro', 60),
     numeroPoliza: obligatorio('Ingresá el número de póliza', 60),
+    montoReclamado: importeOpcionalSchema,
+    moneda: monedaSchema.default('ARS'),
     inicioVigencia: libre(60),
     idAseguradora: elegido('Elegí la aseguradora'),
     sucursal: obligatorio('Ingresá la sucursal de emisión', 100),

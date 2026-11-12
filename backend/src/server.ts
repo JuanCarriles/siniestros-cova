@@ -1,3 +1,4 @@
+import { servicioInformes } from './modules/informes/informes.module.ts'
 import { createServer } from 'node:http'
 import { app } from './app.ts'
 import { env } from './config/env.ts'
@@ -28,10 +29,18 @@ const detenerDemoras = env.DEMORAS_CADA_MINUTOS
     )
   : () => {}
 
+const detenerInformes = env.INFORMES_AUTOMATICOS
+  ? programarTarea('informes mensuales', () => servicioInformes.revisarPendientes(), {
+      cadaMs: 15 * 60_000,
+      primeraEnMs: 30_000,
+    })
+  : () => {}
+
 // Docker manda SIGTERM al detener el contenedor: se cierran las conexiones (HTTP y base) antes de salir.
 function shutdown(signal: string) {
   console.log(`${signal} recibido, cerrando servidor…`)
   detenerDemoras()
+  detenerInformes()
   cerrarTiempoReal()
   server.close(() => {
     void disconnectPrisma().finally(() => process.exit(0))

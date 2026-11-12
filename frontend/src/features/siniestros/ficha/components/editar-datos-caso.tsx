@@ -123,6 +123,8 @@ function FormularioCaso({
       poliza: {
         numeroSiniestro: datos.poliza.numeroSiniestro,
         numeroPoliza: datos.poliza.numeroPoliza,
+        montoReclamado: datos.poliza.montoReclamado ?? '',
+        moneda: datos.poliza.moneda,
         inicioVigencia: datos.poliza.inicioVigencia ?? '',
         idAseguradora: String(datos.poliza.idAseguradora),
         sucursal: datos.poliza.sucursal,
@@ -286,6 +288,31 @@ function FormularioCaso({
                 ) : (
                   <TextField label="Aseguradora" value={ficha.aseguradora.nombre} readOnly />
                 )}
+                <TextField
+                  label="Monto reclamado"
+                  inputMode="decimal"
+                  readOnly={!administra}
+                  hint="Vacío significa sin información."
+                  error={errorCampo('poliza.montoReclamado')}
+                  {...register('poliza.montoReclamado')}
+                />
+                <Controller
+                  control={control}
+                  name="poliza.moneda"
+                  render={({ field }) => (
+                    <SelectField
+                      label="Moneda"
+                      placeholder="Elegir moneda"
+                      disabled={!administra}
+                      value={field.value ?? 'ARS'}
+                      onChange={field.onChange}
+                      opciones={[
+                        { valor: 'ARS', etiqueta: 'Pesos argentinos (ARS)' },
+                        { valor: 'USD', etiqueta: 'Dólares estadounidenses (USD)' },
+                      ]}
+                    />
+                  )}
+                />
                 <TextField
                   label="Sucursal de emisión"
                   required

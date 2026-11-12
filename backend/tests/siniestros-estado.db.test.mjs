@@ -109,7 +109,11 @@ async function conBaseDeEstados(comprobar) {
       },
     })
     const cambiar = (actor, casoId, desde, hacia) =>
-      servicio.cambiar(actor, casoId, { idEstadoAnterior: desde.id, idEstadoSiniestro: hacia.id })
+      servicio.cambiar(actor, casoId, {
+        idEstadoAnterior: desde.id,
+        idEstadoSiniestro: hacia.id,
+        ...(hacia.esCierre ? { cierre: { resultadoCierre: 'RECHAZO' } } : {}),
+      })
 
     await comprobar({
       prisma,
@@ -284,6 +288,7 @@ test(
           falla.cambiar(admin, siniestro.id, {
             idEstadoAnterior: nuevo.id,
             idEstadoSiniestro: cierre.id,
+            cierre: { resultadoCierre: 'RECHAZO' },
           }),
           /Fallo simulado/,
         )
@@ -498,6 +503,7 @@ test(
         const cuerpo = (desde, hacia) => ({
           idEstadoAnterior: desde.id,
           idEstadoSiniestro: hacia.id,
+          ...(hacia.esCierre ? { cierre: { resultadoCierre: 'RECHAZO' } } : {}),
         })
         const propioHTTP = await caso()
         const previoHTTP = await prisma.siniestro.findUniqueOrThrow({

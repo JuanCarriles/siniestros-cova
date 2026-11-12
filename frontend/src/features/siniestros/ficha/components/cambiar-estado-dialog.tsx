@@ -5,6 +5,9 @@ import {
   type OpcionesCambioEstado,
 } from '@cova/shared/schemas/cambio-estado-siniestro'
 import { ArrowRight, RefreshCw } from 'lucide-react'
+import { RESULTADOS_CIERRE, cierreInformeSchema } from '@cova/shared/schemas/informes'
+import { SelectField } from '@/components/select-field'
+import { TextField } from '@/components/text-field'
 import { Aviso } from '@/components/aviso'
 import { EstadoChip } from '@/components/estado-chip'
 import { Button } from '@/components/ui/button'
@@ -40,6 +43,8 @@ export function CambiarEstadoDialog({
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState('')
+  const [monto, setMonto] = useState('')
   useEffect(() => {
     const controlador = new AbortController()
     void api(`/siniestros/${ficha.id}/estados`, { signal: controlador.signal })
@@ -60,6 +65,13 @@ export function CambiarEstadoDialog({
   async function confirmar(event: FormEvent) {
     event.preventDefault()
     if (!datos || !nuevo || enviando) return
+    const cierre = nuevo.esCierre
+      ? cierreInformeSchema.safeParse({ resultadoCierre: resultado, montoAcordado: monto })
+      : null
+    if (cierre && !cierre.success) {
+      setError(cierre.error.issues[0]?.message ?? 'Completá el resultado del cierre.')
+      return
+    }
     setEnviando(true)
     setError(null)
     try {
@@ -68,6 +80,7 @@ export function CambiarEstadoDialog({
         body: {
           idEstadoAnterior: datos.estadoActual.id,
           idEstadoSiniestro: nuevo.id,
+          ...(cierre?.success ? { cierre: cierre.data } : {}),
         },
       })
       onHecho(
@@ -193,7 +206,34 @@ export function CambiarEstadoDialog({
                 </p>
               )}
               {nuevo?.esCierre && (
-                <Aviso tipo="info">Este estado cierra el caso y registra la fecha de cierre.</Aviso>
+                <fieldset
+                  disabled={enviando}
+                  className="grid gap-4 rounded-lg border bg-surface-subtle p-4"
+                >
+                  <legend className="px-1 font-bold">Resultado del cierre</legend>
+                  <SelectField
+                    label="Resultado"
+                    required
+                    placeholder="Elegí el resultado"
+                    value={resultado}
+                    onChange={setResultado}
+                    opciones={Object.entries(RESULTADOS_CIERRE).map(([valor, etiqueta]) => ({
+                      valor,
+                      etiqueta,
+                    }))}
+                  />
+                  <TextField
+                    label={`Monto acordado (${ficha.moneda ?? 'ARS'})`}
+                    required={resultado === 'ACUERDO_PAGO'}
+                    inputMode="decimal"
+                    value={monto}
+                    onChange={(e) => setMonto(e.target.value)}
+                    hint="Si hubo acuerdo, indicá el importe. Si fue sin monto, ingresá 0. No se registra como pago efectivo."
+                  />
+                  <p className="text-base text-muted-foreground">
+                    Se guardarán el resultado y la fecha de cierre para el informe mensual.
+                  </p>
+                </fieldset>
               )}
               <p className="text-sm text-muted-foreground">
                 Se avisará al usuario asignado y a los administradores activos, excepto a quien

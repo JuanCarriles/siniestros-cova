@@ -1,5 +1,12 @@
 export type ConfigCorreo = { apiKey?: string; remitente: string }
-type MensajeCorreo = { email: string; asunto: string; html: string; texto: string }
+type MensajeCorreo = {
+  email: string
+  asunto: string
+  html: string
+  texto: string
+  adjuntos?: { filename: string; content: string }[]
+  claveEnvio?: string
+}
 
 export class ErrorCorreoResend extends Error {
   constructor(tipo: 'configuracion' | 'rechazo' | 'tiempo' | 'red', estado?: number) {
@@ -31,13 +38,18 @@ export async function enviarCorreoResend(
     respuesta = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       signal: AbortSignal.timeout(10_000),
-      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+        ...(mensaje.claveEnvio ? { 'Idempotency-Key': mensaje.claveEnvio } : {}),
+      },
       body: JSON.stringify({
         from: config.remitente,
         to: [mensaje.email],
         subject: mensaje.asunto,
         html: mensaje.html,
         text: mensaje.texto,
+        ...(mensaje.adjuntos ? { attachments: mensaje.adjuntos } : {}),
       }),
     })
   } catch (error) {

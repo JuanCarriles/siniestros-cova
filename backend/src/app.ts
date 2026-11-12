@@ -1,3 +1,4 @@
+import { informesRouter } from './modules/informes/informes.module.ts'
 import cookieParser from 'cookie-parser'
 import express, { Router } from 'express'
 import helmet from 'helmet'
@@ -38,6 +39,7 @@ api.use('/siniestros', siniestrosRouter)
 api.use('/dashboard', dashboardRouter)
 api.use('/notificaciones', notificacionesRouter)
 api.use('/plantillas', plantillasRouter)
+api.use('/informes', informesRouter)
 
 // Los routers de cada módulo se montan acá. Las rutas protegidas usan requerirSesion y requerirRol
 // (ver modules/auth/auth.module.ts).
