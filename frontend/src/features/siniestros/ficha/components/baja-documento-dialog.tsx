@@ -100,8 +100,8 @@ export function BajaDocumentoDialog({
           <DialogDescription>Vas a dar de baja «{documento.nombreOriginal}».</DialogDescription>
         </DialogHeader>
         <p className="rounded-lg border bg-surface-subtle p-4">
-          Dejará de aparecer en la grilla. El archivo se conserva y la baja quedará registrada con
-          tu nombre, la fecha y el motivo.
+          Dejará de aparecer entre los documentos activos. Podrás consultarlo con el filtro de dados
+          de baja. La baja quedará registrada con tu nombre, la fecha y el motivo.
         </p>
         <form noValidate onSubmit={(e) => void handleSubmit(confirmar)(e)} className="grid gap-4">
           <div className="grid gap-2">

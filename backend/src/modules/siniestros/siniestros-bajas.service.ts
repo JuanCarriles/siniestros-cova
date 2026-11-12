@@ -1,3 +1,4 @@
+import { perteneceClaveSiniestroR2 } from '../../lib/rutas-r2.ts'
 import {
   confirmarSiniestroSchema,
   esCierreEnviado,
@@ -90,7 +91,11 @@ export function crearServicioBajasSiniestros(deps: {
         ),
       ),
     ]
-    if (claves.some((clave) => !clave.startsWith(`siniestros/${id}/`))) {
+    const caso = await tx.siniestro.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, carpetaR2: true },
+    })
+    if (claves.some((clave) => !perteneceClaveSiniestroR2(clave, caso))) {
       throw new HttpError(
         409,
         'Hay un archivo cuya ubicación no corresponde a este siniestro. Revisá sus documentos antes de eliminarlo.',
@@ -278,7 +283,7 @@ export function crearServicioBajasSiniestros(deps: {
       // Una sola pasada de R2 fuera de las transacciones; los fallos se reintentan desde el listado.
       await borrarArchivos(inicial)
       await base.transaccion(async (tx) => {
-        await autorizar(tx, usuario.id)
+        const actor = await autorizar(tx, usuario.id)
         const fila = await buscar(tx, id)
         if (!fila) return
         confirmar(fila.numeroSiniestro, confirmacion)
@@ -295,6 +300,20 @@ export function crearServicioBajasSiniestros(deps: {
             'El inventario de archivos cambió. El siniestro conserva sus registros. Reintentá para completar la eliminación.',
             { codigo: 'ELIMINACION_SINIESTRO_PENDIENTE' },
           )
+        // Solo se registra cuando el borrado puede completarse; si falla, la transacción revierte el aviso.
+        await tx.actividadSiniestro.create({
+          data: {
+            idSiniestro: id,
+            idSiniestroReferencia: id,
+            numeroSiniestro: fila.numeroSiniestro,
+            tipoEvento: 'ELIMINACION_SINIESTRO',
+            descripcion: `${actor.nombres} ${actor.apellidos} eliminó definitivamente el siniestro ${fila.numeroSiniestro}.`,
+            idAutor: actor.id,
+            autorNombre: `${actor.nombres} ${actor.apellidos}`,
+            autorTipoUsuario: actor.tipoUsuario,
+            fechaEvento: reloj(),
+          },
+        })
         await borrarRegistros(tx, id, fila.idDireccion)
       })
     },

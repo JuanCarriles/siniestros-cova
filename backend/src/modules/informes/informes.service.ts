@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { conEntornoR2 } from '../../lib/rutas-r2.ts'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import type { PrismaClient } from '../../generated/prisma/client.ts'
 import type { AlmacenamientoR2 } from '../../lib/r2.ts'
@@ -151,7 +152,10 @@ export function crearServicioInformes(deps: Deps) {
             : null
         // PDF en memoria; no se escribe HTML, JSON, imágenes ni archivos auxiliares en el bucket.
         const pdf = await generarPdfInforme(datos, prueba)
-        const clave = `informes mensuales/${prueba ? 'pruebas/' : ''}${periodo.replace('-', '/')}/${randomUUID()}.pdf`
+        const clave = conEntornoR2(
+          `informes mensuales/${prueba ? 'pruebas/' : ''}${periodo.replace('-', '/')}/${randomUUID()}.pdf`,
+          deps.almacenamiento().entorno,
+        )
         await deps.almacenamiento().subirInforme(clave, pdf)
         claveSubida = clave
         const guardado = await db.informeMensual.updateMany({

@@ -3,6 +3,8 @@ import {
   type DocumentoAlta,
   type SiniestroCreado,
 } from '@cova/shared/schemas/siniestros-alta'
+import { conEntornoR2 } from '../../lib/rutas-r2.ts'
+import { asegurarCarpetaSiniestroR2 } from '../documentos/carpeta-siniestro.ts'
 import { TipoNotificacion, type Prisma } from '../../generated/prisma/client.ts'
 import type { AvisoAsignacion } from '../../lib/correo-asignacion.ts'
 import { motivoFalloCorreo } from '../../lib/correo-resend.ts'
@@ -91,7 +93,12 @@ export function crearServicioCrearSiniestro(deps: {
 
   // Un documento del alta es de quien lo subió: nadie puede asociar ni borrar los de otro
   function comprobarPropio(actor: Actor, clave: string) {
-    if (!clave.startsWith(`${carpetaDe(actor)}/`))
+    // Se admiten borradores anteriores sin prefijo; nunca de otro entorno.
+    const entorno = almacenamiento().entorno
+    if (
+      !clave.startsWith(`${carpetaDe(actor)}/`) &&
+      !clave.startsWith(`${conEntornoR2(carpetaDe(actor), entorno)}/`)
+    )
       throw new HttpError(403, 'Ese documento no pertenece a tu alta.')
   }
 
@@ -359,10 +366,16 @@ export function crearServicioCrearSiniestro(deps: {
 
         // Cada documento se copia a la carpeta del siniestro y se registra con esa clave: si R2 falla, no se crea
         // nada. Los originales de altas/ se borran después de confirmar.
+        const carpetaDocumentos = alta.documentos.length
+          ? await asegurarCarpetaSiniestroR2(tx, idSiniestro)
+          : null
         for (const d of alta.documentos) {
           let clave: string
           try {
-            clave = await almacenamiento().copiar(d.clave, `siniestros/${idSiniestro}`)
+            clave = await almacenamiento().copiar(
+              d.clave,
+              conEntornoR2(carpetaDocumentos!, almacenamiento().entorno),
+            )
           } catch {
             throw errorAlmacenamiento()
           }
@@ -376,7 +389,7 @@ export function crearServicioCrearSiniestro(deps: {
               try {
                 await almacenamiento().copiar(
                   claveDerivada(d.clave, tipo),
-                  `siniestros/${idSiniestro}`,
+                  conEntornoR2(carpetaDocumentos!, almacenamiento().entorno),
                 )
               } catch {
                 throw errorAlmacenamiento()

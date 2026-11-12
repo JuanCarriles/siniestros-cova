@@ -57,7 +57,8 @@ export const pestanasFicha = {
   },
   peritos: (id: number): Promise<PeritoFicha[]> => api(`/siniestros/${id}/peritos`),
   novedades: (id: number): Promise<NovedadFicha[]> => api(`/siniestros/${id}/novedades`),
-  documentos: (id: number): Promise<DocumentoFicha[]> => api(`/siniestros/${id}/documentos`),
+  documentos: (id: number, bajas = false): Promise<DocumentoFicha[]> =>
+    api(`/siniestros/${id}/documentos${bajas ? '?bajas=true' : ''}`),
   historial: (id: number): Promise<EventoHistorialFicha[]> => api(`/siniestros/${id}/historial`),
   // E7-02: la conversación; lo que llegue después entra por el tiempo real
   chat: (id: number): Promise<ConversacionChat> => obtenerChat(id),

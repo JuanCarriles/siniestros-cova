@@ -144,9 +144,12 @@ En el panel de Cloudflare, **R2**:
 Así, si el token de la app se filtra, no alcanza para borrar los backups. El ID de la cuenta (`R2_ACCOUNT_ID`) está en la
 página principal de R2.
 
+**Organización por entorno:** configurar `R2_ENTORNO=produccion` en el VPS y `dev` en la PC. Las nuevas rutas y el procedimiento de reorganización están en [docs/ORGANIZACION_R2.md](docs/ORGANIZACION_R2.md). Agregar expiración de 30 días a `dev/altas/` y `produccion/altas/`, manteniendo `altas/` para borradores anteriores.
+
 **Regla de limpieza de `altas/`** (en `siniestros-cova` y también en `siniestro-cova-dev`). Durante el alta de un
-siniestro los documentos se suben a `altas/{usuario}/`, porque el siniestro todavía no existe; al crearlo pasan a
-`siniestros/{id}/`. Lo que queda en `altas/` es de altas abandonadas (se cerró el navegador y nunca se retomaron) o un
+siniestro los documentos se suben a `{entorno}/altas/{usuario}/`, porque el siniestro todavía no existe; al crearlo pasan a
+`{entorno}/siniestros/{numeroSiniestro}/{numeroPoliza}/`. Los borradores anteriores pueden seguir en `altas/`.
+Lo que queda en esas carpetas temporales es de altas abandonadas (se cerró el navegador y nunca se retomaron) o un
 original que no se pudo borrar después de moverlo. En el bucket → **Settings** → **Object lifecycle rules** →
 **Add rule**:
 
@@ -220,6 +223,7 @@ R2_ACCOUNT_ID=<id de la cuenta>
 R2_ACCESS_KEY_ID=<token del backend>
 R2_SECRET_ACCESS_KEY=<token del backend>
 R2_BUCKET=siniestros-cova
+R2_ENTORNO=produccion
 RESEND_API_KEY=<clave de la API de Resend>
 ```
 

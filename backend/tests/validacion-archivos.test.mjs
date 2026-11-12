@@ -65,6 +65,8 @@ async function servidor() {
     id: 1,
     idUsuario: 1,
     numeroSiniestro: 'PRUEBA-1',
+    numeroPoliza: 'POL',
+    carpetaR2: null,
     eliminado: false,
     eliminacionEnCurso: false,
     estadoSiniestro: { esCierre: false },
@@ -72,9 +74,9 @@ async function servidor() {
   const prisma = {
     usuario: { findFirst: async () => actor, findMany: async () => [] },
     siniestro: {
-      findUnique: async () => siniestro,
+      findUnique: async ({ where }) => (where.carpetaR2 ? null : siniestro),
       findUniqueOrThrow: async () => siniestro,
-      update: async () => siniestro,
+      update: async ({ data }) => Object.assign(siniestro, data),
     },
     documentoSiniestro: {
       findUnique: async ({ where }) => documentos.find((d) => d.idCarga === where.idCarga) || null,

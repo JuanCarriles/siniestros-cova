@@ -27,7 +27,7 @@ test('Informe: solo PDF en su carpeta privada y firma real de 60 segundos con MI
   try {
     await r2.subirInforme(key, Buffer.from('%PDF-1.4\nPrueba'))
     assert.equal(comandos.length, 1)
-    assert.equal(comandos[0].input.Key, key)
+    assert.equal(comandos[0].input.Key, `dev/${key}`)
     assert.equal(comandos[0].input.ContentType, 'application/pdf')
     assert.equal(comandos[0].input.ACL, undefined)
     const firma = await r2.firmarDescarga(key, 'informe-2026-10.pdf', 'application/pdf'),

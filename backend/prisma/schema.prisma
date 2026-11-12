@@ -171,7 +171,7 @@ model DocumentoPlantilla {
   encabezado     String
   descripcion    String    @default("")
   tamanoBytes    BigInt?
-  /// Clave relativa de R2 (plantillas/uuid.ext), nunca una URL completa.
+  /// Clave relativa de R2 (entorno/plantillas/uuid.ext), nunca una URL completa.
   urlArchivo     String
   tipoExtension  String
   fechaCarga     DateTime  @default(now()) @db.Timestamptz(3)
@@ -281,7 +281,7 @@ model DocumentoSiniestro {
   altoImagen            Int?
   tamanoOptimizadoBytes BigInt?
   nombreOriginal        String
-  /// Clave relativa de R2 (siniestros/id/uuid.ext), nunca una URL firmada.
+  /// Clave relativa de R2 (entorno/siniestros/numero/poliza/uuid.ext), nunca una URL firmada.
   urlArchivoSinDominio  String
   tipoExtension         String
   mimeType              String
@@ -521,6 +521,28 @@ model InformeMensual {
   @@index([periodo, fechaCreacion])
 }
 
+// Actividad de solo lectura del dashboard: conserva instantáneas aunque se elimine el expediente.
+model ActividadSiniestro {
+  id                    Int          @id @default(autoincrement())
+  /// Referencia histórica, sin FK: sobrevive al borrado del historial particular.
+  idHistorial           Int?         @unique
+  idSiniestroReferencia Int
+  numeroSiniestro       String
+  tipoEvento            String
+  descripcion           String
+  fechaEvento           DateTime     @default(now()) @db.Timestamptz(3)
+  idAutor               Int?
+  autorNombre           String
+  autorTipoUsuario      TipoUsuario?
+  /// Solo para abrir la ficha mientras exista. El borrado la deja en null, conserva la instantánea.
+  idSiniestro           Int?
+  siniestro             Siniestro?   @relation(fields: [idSiniestro], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@index([fechaEvento, id])
+  @@index([idSiniestroReferencia])
+  @@index([idSiniestro])
+}
+
 // Registro estadístico mínimo e independiente del expediente: sobrevive al borrado físico.
 // Los triggers lo escriben en la misma transacción de cada operación. No contiene documentos ni mensajes.
 model RegistroEstadisticoSiniestro {
@@ -537,6 +559,9 @@ model RegistroEstadisticoSiniestro {
 }
 
 model Siniestro {
+  /// Carpeta lógica reservada para documentos; el adaptador antepone dev/ o produccion/.
+  /// Se conserva al modificar los números para no perder ni dispersar archivos.
+  carpetaR2             String?          @unique
   id                    Int              @id @default(autoincrement())
   /// Control de cambios simultáneos de los datos del caso; no cuenta como movimiento.
   revision              Int              @default(0)
@@ -574,6 +599,7 @@ model Siniestro {
   direccion            Direccion?           @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
   notificaciones       Notificacion[]
   eventosHistorial     HistorialSiniestro[]
+  actividadDashboard   ActividadSiniestro[]
   mensajes             MensajeChat[]
   documentos           DocumentoSiniestro[]
   vehiculos            Vehiculo[]

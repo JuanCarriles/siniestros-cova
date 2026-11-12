@@ -128,7 +128,7 @@ test(
       const almacenamiento = {
         subirInforme: async (k, pdf) => {
           subidas++
-          assert.match(k, /^informes mensuales\/(?:pruebas\/)?\d{4}\/\d{2}\//)
+          assert.match(k, /^dev\/informes mensuales\/(?:pruebas\/)?\d{4}\/\d{2}\//)
           assert.equal(pdf.subarray(0, 5).toString(), '%PDF-')
           objetos.set(k, pdf)
         },

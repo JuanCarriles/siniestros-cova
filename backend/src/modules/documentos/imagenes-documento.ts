@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { conEntornoR2 } from '../../lib/rutas-r2.ts'
 import sharp from 'sharp'
 import { z } from 'zod'
 import { rechazoArchivo } from '@cova/shared/schemas/archivos'
@@ -149,6 +150,7 @@ export async function subirDocumentoProcesado(
   archivo: ArchivoEntrada,
   carpeta: string,
 ) {
+  carpeta = conEntornoR2(carpeta, r2.entorno)
   const detectado = await validarArchivo(archivo)
   const imagen = await prepararImagen({
     ...archivo,
