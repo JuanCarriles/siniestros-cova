@@ -9,6 +9,7 @@ import {
 } from '@cova/shared/schemas/bandeja-notificaciones'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
+import { mensajesSinLeerPor, textoMensajesSinLeer } from '../chat/sin-leer.ts'
 
 type Base = {
   transaccion<T>(
@@ -45,10 +46,54 @@ export function crearServicioNotificaciones(base: Base) {
     data: Prisma.NotificacionUpdateManyMutationInput,
   ) {
     await base.transaccion(async (tx) => {
-      const actor = await actorActual(tx, usuario)
+      let actor = await actorActual(tx, usuario)
+      let cambios = data
+      if (data.leida === false) {
+        const aviso = await tx.notificacion.findFirst({
+          where: { AND: [filtro(actor), { id }] },
+          select: { idSiniestro: true, tipoNotificacion: true },
+        })
+        if (!aviso) throw new HttpError(404, 'La notificación no está disponible.')
+        if (aviso.tipoNotificacion === 'MENSAJE_NUEVO') {
+          // Mismo orden que envío y lectura de chat. Marcar un aviso viejo sin leer también debe agruparse.
+          await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${aviso.idSiniestro} FOR NO KEY UPDATE`
+          actor = await actorActual(tx, usuario)
+          const actual = await tx.notificacion.findFirst({
+            where: { AND: [filtro(actor), { id }] },
+            select: { fechaCreacion: true, siniestro: { select: { numeroSiniestro: true } } },
+          })
+          if (!actual) throw new HttpError(404, 'La notificación no está disponible.')
+          const otros = {
+            idUsuario: actor.id,
+            idSiniestro: aviso.idSiniestro,
+            tipoNotificacion: 'MENSAJE_NUEVO' as const,
+            eliminado: false,
+            leida: false,
+            id: { not: id },
+          }
+          const ultimo = await tx.notificacion.aggregate({
+            where: otros,
+            _max: { fechaCreacion: true },
+          })
+          await tx.notificacion.updateMany({
+            where: otros,
+            data: { eliminado: true, fechaBaja: new Date() },
+          })
+          const cantidad = await tx.mensajeChat.count({
+            where: { idSiniestro: aviso.idSiniestro, ...mensajesSinLeerPor(actor.id) },
+          })
+          cambios = {
+            ...data,
+            mensaje: textoMensajesSinLeer(cantidad, actual.siniestro.numeroSiniestro),
+            fechaCreacion: new Date(
+              Math.max(actual.fechaCreacion.getTime(), ultimo._max.fechaCreacion?.getTime() ?? 0),
+            ),
+          }
+        }
+      }
       const resultado = await tx.notificacion.updateMany({
         where: { AND: [filtro(actor), { id }] },
-        data,
+        data: cambios,
       })
       if (!resultado.count) throw new HttpError(404, 'La notificación no está disponible.')
     })
