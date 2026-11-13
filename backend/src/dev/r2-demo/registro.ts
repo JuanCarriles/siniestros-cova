@@ -9,7 +9,8 @@ const archivoSchema = z.strictObject({
   id: z.uuid(),
   clave: z
     .string()
-    .regex(/^(?:(dev|produccion)\/)?pruebas\/[0-9a-f-]{36}\.(pdf|jpg|jpeg|png|docx|xlsx)$/),
+    // Nombre UUID (anteriores) o legible + código (nombreLegibleR2)
+    .regex(/^(?:(dev|produccion)\/)?pruebas\/[0-9a-z-]+\.(pdf|jpg|jpeg|png|docx|xlsx)$/),
   nombreOriginal: z.string().min(1).max(255),
   tamanoBytes: z.string().regex(/^\d+$/),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),

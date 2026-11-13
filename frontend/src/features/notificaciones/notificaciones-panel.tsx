@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { ArrowRight, Bell, BellRing } from 'lucide-react'
 import { consultaNotificacionesSchema } from '@cova/shared/schemas/bandeja-notificaciones'
+import { cn } from '@/lib/utils'
 import { Aviso } from '@/components/aviso'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -18,33 +19,45 @@ export function NotificacionesPanel({ basePath }: { basePath: string }) {
     abierto,
   )
   const sinLeer = resumen?.sinLeer
-  const datosPanel = panel.actualizando || panel.error ? null : panel.datos
+  const haySinLeer = (sinLeer ?? 0) > 0
+  const datosPanel = panel.error ? null : panel.datos
   return (
     <Popover
       open={abierto}
       onOpenChange={(valor) => {
-        if (valor) panel.actualizar()
+        if (valor) panel.reiniciarPanel()
         setAbierto(valor)
       }}
     >
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
-          className="shrink-0 gap-2 border-primary/40 bg-surface font-semibold text-primary"
+          variant={haySinLeer ? 'default' : 'outline'}
+          className={cn(
+            'shrink-0 gap-2 font-semibold',
+            haySinLeer
+              ? 'bg-info-ink text-primary-foreground hover:bg-info-ink/90'
+              : 'border-primary/40 bg-surface text-primary',
+          )}
           aria-label={`Notificaciones${sinLeer !== undefined ? `: ${sinLeer} sin leer` : ''}`}
         >
-          <Bell aria-hidden="true" />
+          {haySinLeer ? <BellRing aria-hidden="true" /> : <Bell aria-hidden="true" />}
           <span className="hidden sm:inline">Notificaciones</span>
           {sinLeer !== undefined && sinLeer > 0 && (
             <span
               aria-hidden="true"
-              className="grid min-w-7 place-items-center rounded-full bg-primary px-2 py-0.5 dato text-sm text-primary-foreground"
+              className="grid min-w-7 place-items-center rounded-full bg-primary-foreground px-2 py-0.5 dato text-sm text-info-ink"
             >
               {sinLeer > 99 ? '99+' : sinLeer}
             </span>
           )}
         </Button>
       </PopoverTrigger>
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {sinLeer !== undefined &&
+          (sinLeer === 0
+            ? 'No tenés notificaciones sin leer.'
+            : `Tenés ${sinLeer} ${sinLeer === 1 ? 'notificación sin leer' : 'notificaciones sin leer'}.`)}
+      </span>
       <PopoverContent aria-label="Notificaciones nuevas" className="sm:w-[32rem]">
         <header className="border-b-2 border-line bg-surface-subtle p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">

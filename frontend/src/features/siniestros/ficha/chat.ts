@@ -78,3 +78,75 @@ export function idsPorLeer(mensajes: MensajeChat[], idUsuario: number) {
 export function hayPorLeer(mensajes: MensajeChat[], idUsuario: number) {
   return idsPorLeer(mensajes, idUsuario) !== ''
 }
+
+/** Lo mínimo de un envío propio sin confirmar para ubicarlo en la conversación */
+type Anclado = { despuesDe: number | null }
+
+export type ElementoConversacion<P extends Anclado> =
+  { tipo: 'mensaje'; mensaje: MensajeChat } | { tipo: 'pendiente'; pendiente: P }
+
+/**
+ * La conversación tal como se muestra: los mensajes confirmados y, entre ellos, los envíos propios que todavía no
+ * se confirmaron. Cada pendiente va justo después del mensaje que era el último cuando se escribió (`despuesDe`),
+ * así lo que llega después (por ejemplo, de otros mientras no había conexión) aparece debajo y a la vista, en
+ * lugar de quedar tapado. No depende del reloj del equipo. Si se escribió con la conversación vacía, va primero;
+ * si su mensaje de referencia no está, al final.
+ */
+export function lineaDeTiempo<P extends Anclado>(
+  mensajes: MensajeChat[],
+  pendientes: P[],
+): ElementoConversacion<P>[] {
+  const ids = new Set(mensajes.map((m) => m.id))
+  const anclados = new Map<number | null, P[]>()
+  const sueltos: P[] = []
+  for (const p of pendientes) {
+    if (p.despuesDe !== null && !ids.has(p.despuesDe)) {
+      sueltos.push(p)
+      continue
+    }
+    anclados.set(p.despuesDe, [...(anclados.get(p.despuesDe) ?? []), p])
+  }
+  const pendiente = (p: P): ElementoConversacion<P> => ({ tipo: 'pendiente', pendiente: p })
+  const resultado: ElementoConversacion<P>[] = (anclados.get(null) ?? []).map(pendiente)
+  for (const m of mensajes) {
+    resultado.push({ tipo: 'mensaje', mensaje: m })
+    for (const p of anclados.get(m.id) ?? []) resultado.push(pendiente(p))
+  }
+  return [...resultado, ...sueltos.map(pendiente)]
+}
+
+/**
+ * Si un envío que falló se puede reenviar solo al volver la conexión: sin respuesta del servidor (status 0 o
+ * ausente), demora o un error del servidor (5xx). Un rechazo (por ejemplo, el caso se cerró: 409; sin permiso:
+ * 403) no se reenvía solo: se muestra el motivo y la persona decide.
+ */
+export function esFallaDeConexion(status: number | undefined) {
+  return status === undefined || status === 0 || status === 408 || status === 429 || status >= 500
+}
+
+/** Cuántos colores hay para los participantes (tokens --color-persona-1 … 6) */
+export const COLORES_PARTICIPANTES = 6
+
+/**
+ * Un color por participante de la conversación (sin contar al usuario, que tiene el suyo), para distinguir quién
+ * escribió cada mensaje sin leer el nombre. Devuelve el índice (0 a COLORES_PARTICIPANTES - 1) de cada autor.
+ *
+ * - En una misma conversación no se repiten mientras haya hasta COLORES_PARTICIPANTES personas.
+ * - Cada persona arranca del color que le toca por su id, así suele tener el mismo color en todos los siniestros;
+ *   si ya lo tiene otro de esta conversación, toma el siguiente libre. Se asignan en el orden en que aparecen en la
+ *   conversación, para que un mensaje nuevo no le cambie el color a nadie.
+ */
+export function coloresParticipantes(mensajes: MensajeChat[], idUsuario: number) {
+  const colores = new Map<number, number>()
+  const usados = new Set<number>()
+  for (const m of mensajes) {
+    const id = m.autor.id
+    if (id === idUsuario || colores.has(id)) continue
+    let color = Math.abs(id) % COLORES_PARTICIPANTES
+    if (usados.size < COLORES_PARTICIPANTES)
+      while (usados.has(color)) color = (color + 1) % COLORES_PARTICIPANTES
+    colores.set(id, color)
+    usados.add(color)
+  }
+  return colores
+}

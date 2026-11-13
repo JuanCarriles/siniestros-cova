@@ -19,6 +19,8 @@ export type ExpulsionSala = { idSiniestro: number; motivo: string }
 
 /** Eventos que manda el servidor. */
 export interface EventosServidor {
+  /** La bandeja personal cambió. No contiene datos del caso; consultar la API autorizada. */
+  'notificaciones:actualizadas': (datos: { nueva: boolean }) => void
   'sala:expulsado': (datos: ExpulsionSala) => void
   /** La sesión venció o se cerró (logout, baja del usuario, cambio de contraseña). Volver a ingresar. */
   'sesion:vencida': () => void

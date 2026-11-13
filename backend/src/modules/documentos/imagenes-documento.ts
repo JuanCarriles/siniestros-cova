@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto'
-import { conEntornoR2 } from '../../lib/rutas-r2.ts'
+import { conEntornoR2, nombreLegibleR2 } from '../../lib/rutas-r2.ts'
 import sharp from 'sharp'
 import { z } from 'zod'
 import { rechazoArchivo } from '@cova/shared/schemas/archivos'
@@ -162,7 +161,7 @@ export async function subirDocumentoProcesado(
   if (comprimida) nombreDescargaArchivo(archivo.nombreOriginal, 'webp')
   const objeto = comprimida
     ? {
-        clave: `${carpeta}/${randomUUID()}.webp`,
+        clave: `${carpeta}/${nombreLegibleR2(archivo.nombreOriginal, 'webp')}`,
         nombreOriginal: archivo.nombreOriginal,
         tipoExtension: 'webp' as const,
         mimeType: 'image/webp',

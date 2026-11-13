@@ -49,11 +49,12 @@ test('configuración: credenciales obligatorias, endpoint de la cuenta y vencimi
   }
 })
 
-test('subida: clave UUID, tamaño real, contenido privado y ninguna URL en los metadatos', async () => {
+test('subida: clave con nombre legible, tamaño real, contenido privado y ninguna URL en los metadatos', async () => {
   const { almacenamiento, comandos } = almacenamientoPrueba()
   const a = await almacenamiento.subir(archivo, 'siniestros/12')
   const b = await almacenamiento.subir(archivo, 'siniestros/12')
-  assert.match(a.clave, /^dev\/siniestros\/12\/[0-9a-f-]{36}\.pdf$/)
+  // Nombre original limpio + código (nombreLegibleR2): se reconoce al mirar el bucket
+  assert.match(a.clave, /^dev\/siniestros\/12\/informe-[0-9a-f]{8}\.pdf$/)
   assert.notEqual(a.clave, b.clave)
   assert.equal(a.tamanoBytes, BigInt(archivo.contenido.byteLength))
   assert.equal(a.url, undefined)
@@ -169,7 +170,7 @@ test('servicio: guarda sólo la clave y firma usando el registro consultado', as
     destino: { tipo: 'siniestro', idSiniestro: 2 },
     archivo,
   })
-  assert.equal(documento.urlArchivoSinDominio, 'dev/siniestros/CASO/POL/uuid.pdf')
+  assert.equal(documento.urlArchivoSinDominio, 'dev/siniestros/CASO-POL/uuid.pdf')
   assert.equal(documento.tamanoBytes, '10')
   assert.equal(documento.url, undefined)
   await servicio.descargar({ idUsuario: 1, tipo: 'siniestro', idDocumento: 3 })
@@ -179,7 +180,7 @@ test('servicio: guarda sólo la clave y firma usando el registro consultado', as
     'autorizar',
     'guardar',
     'autorizar',
-    'firmar:dev/siniestros/CASO/POL/uuid.pdf',
+    'firmar:dev/siniestros/CASO-POL/uuid.pdf',
   ])
 })
 
@@ -212,7 +213,7 @@ test('servicio: si Prisma falla después de subir, compensa eliminando sólo la 
     'subir',
     'autorizar',
     'guardar',
-    'eliminar:dev/siniestros/CASO/POL/uuid.pdf',
+    'eliminar:dev/siniestros/CASO-POL/uuid.pdf',
   ])
 })
 

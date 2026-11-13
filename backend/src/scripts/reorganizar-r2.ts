@@ -6,7 +6,11 @@ import { getPrisma, disconnectPrisma } from '../lib/prisma.ts'
 import { reorganizarArchivosR2 } from '../modules/documentos/reorganizar-r2.service.ts'
 
 const { values } = parseArgs({
-  options: { entorno: { type: 'string' }, aplicar: { type: 'boolean', default: false } },
+  options: {
+    entorno: { type: 'string' },
+    aplicar: { type: 'boolean', default: false },
+    'listar-sobrantes': { type: 'boolean', default: false },
+  },
   strict: true,
   allowPositionals: false,
 })
@@ -28,14 +32,35 @@ try {
     aplicar: values.aplicar,
     progreso: (c) => console.log(JSON.stringify(c)),
   })
-  console.log(JSON.stringify(resultado))
+  const { sobrantes, ...resumen } = resultado
+  console.log(JSON.stringify(resumen))
+  // Sobrantes: lo que ninguna referencia de la base usa. No se borra nada: se retira a mano desde Cloudflare.
+  const porCarpeta = new Map<string, { archivos: number; bytes: number }>()
+  for (const o of sobrantes) {
+    const partes = o.clave.split('/')
+    const nivel = partes[0] === 'dev' || partes[0] === 'produccion' ? 3 : 2
+    const carpeta = partes.slice(0, Math.min(nivel, partes.length - 1)).join('/') || '(raíz)'
+    const c = porCarpeta.get(carpeta) ?? { archivos: 0, bytes: 0 }
+    c.archivos++
+    c.bytes += o.bytes
+    porCarpeta.set(carpeta, c)
+  }
+  console.log(
+    sobrantes.length
+      ? `SOBRANTES: ${sobrantes.length} archivo(s) que la base no usa (no se borró ninguno):`
+      : 'SOBRANTES: ninguno.',
+  )
+  for (const [carpeta, c] of [...porCarpeta].sort())
+    console.log(`  ${carpeta}/  ${c.archivos} archivo(s), ${(c.bytes / 1024 / 1024).toFixed(2)} MB`)
+  if (values['listar-sobrantes']) for (const o of sobrantes) console.log(`sobrante: ${o.clave}`)
+  else if (sobrantes.length) console.log('  Para ver cada archivo, agregá --listar-sobrantes.')
   if (!values.aplicar)
     console.log(
       'SIMULACIÓN: no se cambió ningún dato ni archivo. Revisá el resultado antes de usar --aplicar.',
     )
   else
     console.log(
-      'Referencias actualizadas. Los originales se conservan por compatibilidad; no se borraron objetos de otro entorno.',
+      'Referencias actualizadas. Los archivos anteriores se conservan y ahora figuran como sobrantes: retiralos desde Cloudflare cuando verifiques que la app y el backup del día funcionan con la organización nueva.',
     )
 } catch (error) {
   if (error instanceof HttpError) console.error(error.message)

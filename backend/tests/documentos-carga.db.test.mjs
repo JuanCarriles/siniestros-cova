@@ -211,7 +211,7 @@ test(
       assert.equal(doc.fechaCarga.toISOString(), ahora.toISOString())
       assert.ok(
         doc.urlArchivoSinDominio.startsWith(
-          `dev/siniestros/${s.numeroSiniestro}/${s.numeroPoliza}/`,
+          `dev/siniestros/${s.numeroSiniestro}-${s.numeroPoliza}/`,
         ),
       )
       assert.ok(!doc.urlArchivoSinDominio.includes('://'))

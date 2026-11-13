@@ -120,7 +120,10 @@ export function ListaNotificaciones({
             <li
               key={aviso.id}
               className={cn(
-                'min-w-0 border-l-4 p-4 sm:p-5',
+                'group relative isolate min-w-0 border-l-4 p-4 transition-colors sm:p-5',
+                aviso.puedeAbrirSiniestro &&
+                  ocupada === null &&
+                  'focus-within:bg-row-hover hover:border-l-info-ink hover:bg-row-hover',
                 aviso.leida ? 'border-l-transparent bg-surface' : 'border-l-primary bg-info-bg/40',
               )}
             >
@@ -153,10 +156,20 @@ export function ListaNotificaciones({
                     }}
                     onClick={(e) => void actuar(aviso, 'abrir', e.currentTarget)}
                     disabled={ocupada !== null || !aviso.puedeAbrirSiniestro}
-                    className="group grid min-h-12 w-full gap-1 rounded-md text-left focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring disabled:cursor-default"
+                    aria-label={
+                      aviso.puedeAbrirSiniestro
+                        ? `Abrir siniestro ${aviso.siniestro.numeroSiniestro}: ${aviso.mensaje}`
+                        : `Siniestro ${aviso.siniestro.numeroSiniestro}: ${aviso.mensaje}`
+                    }
+                    className="grid min-h-12 w-full gap-1 rounded-md text-left after:absolute after:inset-0 after:z-0 after:cursor-pointer after:rounded-md after:content-[''] focus-visible:outline-none focus-visible:after:outline-3 focus-visible:after:-outline-offset-3 focus-visible:after:outline-ring disabled:cursor-default disabled:after:cursor-default"
                   >
                     <span className="flex items-center gap-2 font-bold text-primary">
-                      <span className="dato break-all">
+                      <span
+                        className={cn(
+                          'dato break-all decoration-2 underline-offset-4',
+                          aviso.puedeAbrirSiniestro && ocupada === null && 'group-hover:underline',
+                        )}
+                      >
                         Siniestro {aviso.siniestro.numeroSiniestro}
                       </span>
                       {aviso.puedeAbrirSiniestro && (
@@ -183,9 +196,10 @@ export function ListaNotificaciones({
                     <p className="mt-3 text-muted-foreground">{aviso.motivoSinAcceso}</p>
                   )}
                   {!compacta && (
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="pointer-events-none relative z-10 mt-3 flex flex-wrap gap-2">
                       <Button
                         size="sm"
+                        className="pointer-events-auto"
                         variant="outline"
                         disabled={ocupada !== null}
                         ref={(boton) => {
@@ -204,6 +218,7 @@ export function ListaNotificaciones({
                       </Button>
                       <Button
                         size="sm"
+                        className="pointer-events-auto"
                         variant="ghost"
                         disabled={ocupada !== null}
                         onClick={(e) => void actuar(aviso, 'revisar', e.currentTarget)}

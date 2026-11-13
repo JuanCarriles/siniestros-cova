@@ -290,7 +290,7 @@ test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno 
           // Pasó a la carpeta del siniestro y el original de altas/ se borró
           assert.equal(
             s.documentos[0].urlArchivoSinDominio,
-            `dev/siniestros/${numero}/POL-1/doc.pdf`,
+            `dev/siniestros/${numero}-POL-1/doc.pdf`,
           )
           assert.deepEqual(r2.borradas, [`altas/${admin.id}/doc.pdf`])
           // Historial (E5-09): el alta y cada parte, en el orden de la línea de tiempo, todo a nombre de quien lo
@@ -402,7 +402,7 @@ test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno 
             { status: 503 },
           )
           assert.equal(r2.borradas.length, 1)
-          assert.match(r2.borradas[0], /^dev\/siniestros\/[^/]+\/POL-1\/doc\.pdf$/)
+          assert.match(r2.borradas[0], /^dev\/siniestros\/[^/]+-POL-1\/doc\.pdf$/)
 
           throw rollback
         },

@@ -109,7 +109,7 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
   }
 
   /** Revisa la sesión (sin renovarla) y el acceso a cada sala. Devuelve false si la conexión se cerró. */
-  async function revisar(socket: SocketCova, soloSala?: number) {
+  async function revisar(socket: SocketCova, soloSala?: number | null) {
     const valida = await deps.sesiones.validar(socket.data.token, { renovar: false })
     if (!valida) {
       socket.emit('sesion:vencida')
@@ -117,6 +117,7 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
       return false
     }
     socket.data.usuario = valida.usuario
+    if (soloSala === null) return true // Avisos personales: validar sesión, sin abrir ni consultar salas de casos.
     for (const idSiniestro of salasDe(socket)) {
       if (soloSala !== undefined && idSiniestro !== soloSala) continue
       const motivo = await sinAcceso(valida.usuario.id, idSiniestro)
@@ -133,7 +134,7 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
    * Revisa varias conexiones a la vez. Devuelve los ids de las que no se pudieron revisar (por ejemplo, la base no
    * respondió): no se sabe si conservan el acceso, así que quien envía contenido del caso las tiene que dejar afuera.
    */
-  async function revisarVarios(sockets: SocketCova[], soloSala?: number) {
+  async function revisarVarios(sockets: SocketCova[], soloSala?: number | null) {
     const sinRevisar: string[] = []
     await Promise.all(
       sockets.map((s) =>
@@ -259,6 +260,18 @@ export function crearTiempoReal(servidor: ServidorHttp, deps: DependenciasTiempo
         .emit(evento, ...datos)
     },
 
+    /** Invalida solo la bandeja del destinatario. Nunca une al usuario a las salas de sus siniestros. */
+    async avisarNotificaciones(idUsuario: number, nueva: boolean) {
+      const sala = `${PREFIJO_USUARIO}${idUsuario}`
+      const sinRevisar = await revisarVarios(socketsEn(sala), null)
+      io.to(sala).except(sinRevisar).emit('notificaciones:actualizadas', { nueva })
+    },
+
+    async resincronizarNotificaciones() {
+      const usuarios = new Set([...io.sockets.sockets.values()].map((s) => s.data.usuario.id))
+      await Promise.all([...usuarios].map((id) => this.avisarNotificaciones(id, true)))
+    },
+
     /** Después de una reasignación o una baja del caso: el que perdió el acceso sale de la sala ya. */
     async revisarSala(idSiniestro: number) {
       await revisarVarios(socketsEn(salaSiniestro(idSiniestro)), idSiniestro)
@@ -311,6 +324,12 @@ export const tiempoReal = {
     ...datos: Parameters<EventosServidor[E]>
   ) {
     await actual?.emitirASala(idSiniestro, evento, ...datos)
+  },
+  async avisarNotificaciones(idUsuario: number, nueva: boolean) {
+    await actual?.avisarNotificaciones(idUsuario, nueva)
+  },
+  async resincronizarNotificaciones() {
+    await actual?.resincronizarNotificaciones()
   },
   async revisarSala(idSiniestro: number) {
     await actual?.revisarSala(idSiniestro)
