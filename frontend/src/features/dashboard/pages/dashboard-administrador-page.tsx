@@ -249,13 +249,9 @@ export function DashboardAdministradorPage({
           vacio="Todavía no hay actividad registrada en los siniestros."
         >
           <ol className="divide-y">
-            {dashboard.actividad.items.map((evento) => (
-              <li key={evento.id}>
-                <Link
-                  to={ficha(evento.siniestro.id)}
-                  className="flex min-h-16 items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-row-hover"
-                  aria-label={`Ver siniestro ${evento.siniestro.numeroSiniestro}. ${evento.descripcion}`}
-                >
+            {dashboard.actividad.items.map((evento) => {
+              const contenido = (
+                <>
                   <span
                     aria-hidden="true"
                     className="grid size-9 shrink-0 place-items-center rounded-full bg-info-bg text-sm font-bold text-primary"
@@ -275,6 +271,11 @@ export function DashboardAdministradorPage({
                       <span className="dato font-bold text-primary">
                         {evento.siniestro.numeroSiniestro}
                       </span>
+                      {!evento.siniestro.disponible && (
+                        <span className="mt-1 block font-semibold text-muted-foreground">
+                          Expediente no disponible
+                        </span>
+                      )}
                     </span>
                     <time
                       dateTime={evento.fecha}
@@ -285,13 +286,31 @@ export function DashboardAdministradorPage({
                       {tiempoDesde(evento.fecha, dashboard.actualizadoEn)}
                     </time>
                   </span>
-                  <ArrowRight
-                    className="hidden size-4 shrink-0 text-primary sm:block"
-                    aria-hidden="true"
-                  />
-                </Link>
-              </li>
-            ))}
+                  {evento.siniestro.disponible && (
+                    <ArrowRight
+                      className="hidden size-4 shrink-0 text-primary sm:block"
+                      aria-hidden="true"
+                    />
+                  )}
+                </>
+              )
+              const clases = 'flex min-h-16 items-center gap-3 px-4 py-3 text-sm'
+              return (
+                <li key={evento.id}>
+                  {evento.siniestro.disponible ? (
+                    <Link
+                      to={ficha(evento.siniestro.id)}
+                      className={cn(clases, 'transition-colors hover:bg-row-hover')}
+                      aria-label={`Ver siniestro ${evento.siniestro.numeroSiniestro}. ${evento.descripcion}`}
+                    >
+                      {contenido}
+                    </Link>
+                  ) : (
+                    <div className={clases}>{contenido}</div>
+                  )}
+                </li>
+              )
+            })}
           </ol>
         </Bloque>
       )}

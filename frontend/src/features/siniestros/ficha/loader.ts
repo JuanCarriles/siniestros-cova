@@ -38,6 +38,13 @@ export function cargarPestana(pestana: keyof typeof pestanasFicha) {
   return async (args: LoaderFunctionArgs) => {
     await requerirSeccion('siniestros')(args)
     const id = idDe(args)
+    if (pestana === 'documentos')
+      return conAcceso(() =>
+        pestanasFicha.documentos(
+          id,
+          new URL(args.request.url).searchParams.get('bajas') === 'true',
+        ),
+      )
     return conAcceso<unknown>(() => pestanasFicha[pestana](id))
   }
 }

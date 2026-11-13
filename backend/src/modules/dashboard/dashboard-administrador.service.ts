@@ -55,12 +55,7 @@ export function crearServicioDashboardAdministrador(
       exigirAdministrador(actor)
       const ahora = reloj()
       const demora = { AND: [activo, sinMovimiento(ahora)] } satisfies Prisma.SiniestroWhereInput
-      // La baja no borra la actividad: administradores pueden abrir estas fichas y su historial.
-      // Solo se excluyen las eliminaciones en curso, cuyo acceso está bloqueado.
-      const actividad = {
-        eliminado: false,
-        siniestro: { eliminacionEnCurso: false },
-      } satisfies Prisma.HistorialSiniestroWhereInput
+      // La actividad es independiente: conserva eventos de casos dados de baja, en eliminación y eliminados.
       const dias = (desde: Date) =>
         Math.max(0, Math.floor((ahora.getTime() - desde.getTime()) / DIA))
       const mapear = (s: Prisma.SiniestroGetPayload<{ select: typeof detalle }>) => ({
@@ -85,7 +80,7 @@ export function crearServicioDashboardAdministrador(
           orderBy: { id: 'asc' },
         })
         const totalDemorados = await tx.siniestro.count({ where: demora })
-        const totalActividad = await tx.historialSiniestro.count({ where: actividad })
+        const totalActividad = await tx.actividadSiniestro.count()
         const paginar = (bloque: string, total: number) => {
           const porPagina = consulta.ver === bloque ? (25 as const) : (5 as const)
           const pagina =
@@ -109,8 +104,7 @@ export function crearServicioDashboardAdministrador(
           select: detalle,
         })
         const porId = new Map(filasDemoradas.map((s) => [s.id, s]))
-        const eventos = await tx.historialSiniestro.findMany({
-          where: actividad,
+        const eventos = await tx.actividadSiniestro.findMany({
           orderBy: [{ fechaEvento: 'desc' }, { id: 'desc' }],
           take: pa.porPagina,
           skip: (pa.pagina - 1) * pa.porPagina,
@@ -118,8 +112,10 @@ export function crearServicioDashboardAdministrador(
             id: true,
             descripcion: true,
             fechaEvento: true,
-            usuario: { select: { nombres: true, apellidos: true } },
-            siniestro: { select: { id: true, numeroSiniestro: true } },
+            autorNombre: true,
+            idSiniestroReferencia: true,
+            numeroSiniestro: true,
+            siniestro: { select: { eliminacionEnCurso: true } },
           },
         })
         const cantidades = new Map(grupos.map((g) => [g.idEstadoSiniestro, g._count._all]))
@@ -134,8 +130,12 @@ export function crearServicioDashboardAdministrador(
               id: e.id,
               descripcion: e.descripcion,
               fecha: e.fechaEvento.toISOString(),
-              autor: nombre(e.usuario),
-              siniestro: e.siniestro,
+              autor: e.autorNombre,
+              siniestro: {
+                id: e.idSiniestroReferencia,
+                numeroSiniestro: e.numeroSiniestro,
+                disponible: e.siniestro !== null && !e.siniestro.eliminacionEnCurso,
+              },
             })),
           },
         }

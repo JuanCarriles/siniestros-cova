@@ -21,7 +21,7 @@ export function VistaImagenOriginal({
     ancho: documento.imagen?.ancho ?? 0,
     alto: documento.imagen?.alto ?? 0,
   })
-  const original = rutaArchivoDocumento(idSiniestro, documento.id, 'original')
+  const original = rutaArchivoDocumento(idSiniestro, documento.id, 'original', documento.eliminado)
 
   function acercar(factor: number) {
     const actual =
@@ -118,7 +118,11 @@ export function VistaImagenOriginal({
       >
         <img
           ref={imagen}
-          src={intento ? `${original}?intento=${intento}` : original}
+          src={
+            intento
+              ? `${original}${original.includes('?') ? '&' : '?'}intento=${intento}`
+              : original
+          }
           alt={`Imagen del expediente de ${documento.nombreOriginal}`}
           referrerPolicy="no-referrer"
           onLoad={(e) => {

@@ -73,7 +73,11 @@ export const dashboardAdministradorSchema = z.strictObject({
       descripcion: z.string(),
       fecha: fechaHoraSchema,
       autor: z.string(),
-      siniestro: z.strictObject({ id: idSchema, numeroSiniestro: z.string() }),
+      siniestro: z.strictObject({
+        id: idSchema,
+        numeroSiniestro: z.string(),
+        disponible: z.boolean(),
+      }),
     }),
   ),
 })

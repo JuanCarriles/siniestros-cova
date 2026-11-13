@@ -1,4 +1,8 @@
-import { permisoBajaDocumento } from '@cova/shared/schemas/documentos'
+import {
+  permisoBajaDocumento,
+  permisoReactivarDocumento,
+  type ConsultaDocumentos,
+} from '@cova/shared/schemas/documentos'
 import { HttpError } from '../../utils/httpError.ts'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import type { DocumentoFicha } from '@cova/shared/schemas/ficha-siniestro'
@@ -12,7 +16,11 @@ type Base = Pick<Prisma.TransactionClient, 'siniestro' | 'documentoSiniestro' | 
 // más viejo. Nunca devuelve la clave de R2: la descarga se pide aparte (1.g.2).
 export function crearServicioDocumentosFicha(prisma: Base, reloj = () => new Date()) {
   return {
-    async listar(usuario: SesionUsuario, idSiniestro: number): Promise<DocumentoFicha[]> {
+    async listar(
+      usuario: SesionUsuario,
+      idSiniestro: number,
+      consulta: ConsultaDocumentos = { bajas: false },
+    ): Promise<DocumentoFicha[]> {
       const actor = await prisma.usuario.findFirst({
         where: { id: usuario.id, eliminado: false },
         select: { id: true, tipoUsuario: true },
@@ -25,12 +33,15 @@ export function crearServicioDocumentosFicha(prisma: Base, reloj = () => new Dat
       })
       const ahora = reloj()
       const filas = await prisma.documentoSiniestro.findMany({
-        where: { idSiniestro, eliminado: false },
+        where: { idSiniestro, ...(consulta.bajas ? {} : { eliminado: false }) },
         orderBy: [{ fechaCarga: 'desc' }, { id: 'desc' }],
         select: {
           id: true,
           idUsuario: true,
           eliminado: true,
+          fechaBaja: true,
+          motivoBaja: true,
+          usuarioBaja: { select: { nombres: true, apellidos: true, tipoUsuario: true } },
           nombreOriginal: true,
           tipoExtension: true,
           tamanoBytes: true,
@@ -50,6 +61,9 @@ export function crearServicioDocumentosFicha(prisma: Base, reloj = () => new Dat
           usuario: autor,
           idUsuario,
           eliminado,
+          fechaBaja,
+          motivoBaja,
+          usuarioBaja,
           claveMiniatura,
           claveImagenOptimizada: _claveImagenOptimizada,
           anchoOriginal,
@@ -59,6 +73,17 @@ export function crearServicioDocumentosFicha(prisma: Base, reloj = () => new Dat
           tamanoOptimizadoBytes,
           ...d
         }) => ({
+          eliminado,
+          fechaBaja: fechaBaja?.toISOString() ?? null,
+          motivoBaja,
+          autorBaja: usuarioBaja
+            ? { nombre: nombreDe(usuarioBaja), tipoUsuario: usuarioBaja.tipoUsuario }
+            : null,
+          reactivacion: permisoReactivarDocumento(
+            actor,
+            { eliminado },
+            { eliminado: caso.eliminado, cerrado: caso.estadoSiniestro.esCierre },
+          ),
           baja: permisoBajaDocumento(
             actor,
             { idUsuario, eliminado, fechaCarga: d.fechaCarga },

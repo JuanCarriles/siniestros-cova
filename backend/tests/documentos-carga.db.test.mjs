@@ -209,7 +209,11 @@ test(
       assert.equal(doc.idSiniestro, s.id)
       assert.equal(doc.tamanoBytes, BigInt(pdf.length))
       assert.equal(doc.fechaCarga.toISOString(), ahora.toISOString())
-      assert.ok(doc.urlArchivoSinDominio.startsWith(`siniestros/${s.id}/`))
+      assert.ok(
+        doc.urlArchivoSinDominio.startsWith(
+          `dev/siniestros/${s.numeroSiniestro}/${s.numeroPoliza}/`,
+        ),
+      )
       assert.ok(!doc.urlArchivoSinDominio.includes('://'))
       assert.deepEqual(objetos.get(doc.urlArchivoSinDominio), pdf)
       const actualizado = await prisma.siniestro.findUniqueOrThrow({ where: { id: s.id } })

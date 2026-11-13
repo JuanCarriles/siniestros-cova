@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { leerEntornoR2 } from '../lib/rutas-r2.ts'
 
 const opcional = (value: unknown) => (value === '' ? undefined : value)
 
@@ -34,7 +35,9 @@ const configuracionR2Schema = z
     }
   })
 
-export type ConfiguracionR2 = z.output<typeof configuracionR2Schema>
+export type ConfiguracionR2 = z.output<typeof configuracionR2Schema> & {
+  R2_ENTORNO: ReturnType<typeof leerEntornoR2>
+}
 
 // Validación diferida: typecheck, Prisma generate y /health no necesitan credenciales.
 export function leerConfiguracionR2(variables: NodeJS.ProcessEnv = process.env): ConfiguracionR2 {
@@ -44,5 +47,5 @@ export function leerConfiguracionR2(variables: NodeJS.ProcessEnv = process.env):
     // Nunca imprimir el entorno, inputs de Zod ni valores de las credenciales.
     throw new Error(`Configuración R2 inválida. Revisá en backend/.env: ${campos.join(', ')}`)
   }
-  return resultado.data
+  return { ...resultado.data, R2_ENTORNO: leerEntornoR2(variables) }
 }

@@ -53,7 +53,7 @@ test('subida: clave UUID, tamaño real, contenido privado y ninguna URL en los m
   const { almacenamiento, comandos } = almacenamientoPrueba()
   const a = await almacenamiento.subir(archivo, 'siniestros/12')
   const b = await almacenamiento.subir(archivo, 'siniestros/12')
-  assert.match(a.clave, /^siniestros\/12\/[0-9a-f-]{36}\.pdf$/)
+  assert.match(a.clave, /^dev\/siniestros\/12\/[0-9a-f-]{36}\.pdf$/)
   assert.notEqual(a.clave, b.clave)
   assert.equal(a.tamanoBytes, BigInt(archivo.contenido.byteLength))
   assert.equal(a.url, undefined)
@@ -109,7 +109,18 @@ function servicioPrueba({ denegar = false, fallaBase = false, eliminado = false 
   let documento
   const prisma = {
     usuario: { findFirst: async () => ({ id: 1 }) },
-    siniestro: { findFirst: async () => ({ id: 2 }) },
+    $queryRaw: async () => [],
+    siniestro: {
+      findFirst: async () => ({ id: 2 }),
+      findUniqueOrThrow: async () => ({
+        id: 2,
+        numeroSiniestro: 'CASO',
+        numeroPoliza: 'POL',
+        carpetaR2: null,
+      }),
+      findUnique: async () => null,
+      update: async () => ({}),
+    },
     documentoSiniestro: {
       create: async ({ data }) => {
         llamadas.push('guardar')
@@ -158,7 +169,7 @@ test('servicio: guarda sólo la clave y firma usando el registro consultado', as
     destino: { tipo: 'siniestro', idSiniestro: 2 },
     archivo,
   })
-  assert.equal(documento.urlArchivoSinDominio, 'siniestros/2/uuid.pdf')
+  assert.equal(documento.urlArchivoSinDominio, 'dev/siniestros/CASO/POL/uuid.pdf')
   assert.equal(documento.tamanoBytes, '10')
   assert.equal(documento.url, undefined)
   await servicio.descargar({ idUsuario: 1, tipo: 'siniestro', idDocumento: 3 })
@@ -168,7 +179,7 @@ test('servicio: guarda sólo la clave y firma usando el registro consultado', as
     'autorizar',
     'guardar',
     'autorizar',
-    'firmar:siniestros/2/uuid.pdf',
+    'firmar:dev/siniestros/CASO/POL/uuid.pdf',
   ])
 })
 
@@ -201,7 +212,7 @@ test('servicio: si Prisma falla después de subir, compensa eliminando sólo la 
     'subir',
     'autorizar',
     'guardar',
-    'eliminar:siniestros/2/uuid.pdf',
+    'eliminar:dev/siniestros/CASO/POL/uuid.pdf',
   ])
 })
 
@@ -253,8 +264,17 @@ test('documentos: si empieza la eliminación del caso durante la subida, compens
   let eliminado = null
   const servicio = crearServicioDocumentos({
     prisma: {
+      $queryRaw: async () => [],
       usuario: { findFirst: async () => ({ id: 1 }) },
       siniestro: {
+        findUniqueOrThrow: async () => ({
+          id: 2,
+          numeroSiniestro: 'CASO',
+          numeroPoliza: 'POL',
+          carpetaR2: null,
+        }),
+        findUnique: async () => null,
+        update: async () => ({}),
         findFirst: async ({ where }) => {
           assert.equal(where.eliminacionEnCurso, false)
           return ++consultas === 1 ? { id: 2 } : null
@@ -285,10 +305,10 @@ test('documentos: si empieza la eliminación del caso durante la subida, compens
 test('copiar: misma clave UUID en la carpeta nueva; el original queda hasta borrarlo', async () => {
   const { almacenamiento, comandos } = almacenamientoPrueba()
   const nueva = await almacenamiento.copiar('altas/3/abc-123.pdf', 'siniestros/57')
-  assert.equal(nueva, 'siniestros/57/abc-123.pdf')
+  assert.equal(nueva, 'dev/siniestros/57/abc-123.pdf')
   assert.equal(comandos.length, 1, 'solo copia: no borra el original')
   assert.equal(comandos[0].constructor.name, 'CopyObjectCommand')
-  assert.equal(comandos[0].input.Key, 'siniestros/57/abc-123.pdf')
+  assert.equal(comandos[0].input.Key, 'dev/siniestros/57/abc-123.pdf')
   assert.equal(comandos[0].input.CopySource, 'bucket-prueba/altas/3/abc-123.pdf')
   await assert.rejects(almacenamiento.copiar('altas/3/abc.pdf', 'otra-carpeta'))
   await assert.rejects(almacenamiento.copiar('../fuera.pdf', 'siniestros/57'))

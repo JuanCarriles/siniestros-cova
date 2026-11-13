@@ -11,6 +11,7 @@ export default defineConfig({
     server: 'src/server.ts',
     'seed-base': 'prisma/seeds/seed-base.ts',
     'crear-superadmin': 'src/scripts/crear-superadmin.ts',
+    'reorganizar-r2': 'src/scripts/reorganizar-r2.ts',
   },
   platform: 'node',
   target: 'node22',

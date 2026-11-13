@@ -2,7 +2,7 @@
   "name": "siniestros-cova-backend",
   "private": true,
   "version": "0.0.0",
-  "description": "API del sistema de gestiÃ³n de siniestros â€” Estudio Cova",
+  "description": "API del sistema de gestión de siniestros — Estudio Cova",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -42,7 +42,7 @@
     "test:siniestros:reasignacion:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-reasignacion.db.test.mjs",
     "test:siniestros": "node --experimental-strip-types --test tests/siniestros.test.mjs",
     "test:siniestros:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros.db.test.mjs tests/siniestros-alta.db.test.mjs tests/siniestros-alta-crear.db.test.mjs tests/siniestros-ficha.db.test.mjs tests/siniestros-partes.db.test.mjs tests/siniestros-partes-concurrencia.db.test.mjs tests/siniestros-abogados-peritos.db.test.mjs tests/siniestros-novedades.db.test.mjs tests/siniestros-demoras.db.test.mjs",
-    "test:migraciones:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/migraciones.db.test.mjs",
+    "test:migraciones:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/migraciones.db.test.mjs tests/triggers-estadistica.db.test.mjs",
     "test:eventos:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/eventos-notificaciones.db.test.mjs",
     "test:notificaciones:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/notificaciones.db.test.mjs",
     "test:r2": "node --experimental-strip-types --test tests/r2.test.mjs",
@@ -65,7 +65,12 @@
     "test:siniestros:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-bajas.db.test.mjs",
     "test:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/bajas-siniestros.db.test.mjs",
     "test:informes": "node --experimental-strip-types --test tests/informes.test.mjs tests/informes-r2.test.mjs",
-    "test:informes:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/informes.db.test.mjs tests/informes-migracion.db.test.mjs tests/informes-correcciones.db.test.mjs"
+    "test:informes:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/informes.db.test.mjs tests/informes-migracion.db.test.mjs tests/informes-correcciones.db.test.mjs",
+    "r2:reorganizar": "tsx --env-file=.env src/scripts/reorganizar-r2.ts",
+    "test:rutas-r2": "node --experimental-strip-types --test tests/rutas-r2.test.mjs",
+    "test:rutas-r2:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/rutas-r2.db.test.mjs",
+    "test:actividad:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/actividad-dashboard.db.test.mjs",
+    "test:documentos:reactivacion:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/documentos-reactivacion.db.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1151.0",

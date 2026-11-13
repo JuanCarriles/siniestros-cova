@@ -154,7 +154,7 @@ test(
       )
       assert.equal(resumen.demorados.items[0].asegurado, 'Héctor Balbuena')
       assert.equal(resumen.demorados.items[0].gestor.id, admin.id)
-      assert.equal(resumen.actividad.total, 7)
+      assert.equal(resumen.actividad.total, 8)
       assert.equal(resumen.actividad.items.length, 5)
       assert.equal(resumen.actividad.items[0].siniestro.id, demorados[0].id)
       const todos = await servicio.obtener(superadmin, { ver: 'demorados', pagina: 1 })
@@ -169,9 +169,13 @@ test(
         31,
       )
       const historialCompleto = await servicio.obtener(admin, { ver: 'actividad', pagina: 1 })
-      assert.equal(historialCompleto.actividad.items.length, 7)
+      assert.equal(historialCompleto.actividad.items.length, 8)
       assert.ok(historialCompleto.actividad.items.some((e) => e.siniestro.id === dadoBaja.id))
-      assert.ok(!historialCompleto.actividad.items.some((e) => e.siniestro.id === borrando.id))
+      assert.equal(
+        historialCompleto.actividad.items.find((e) => e.siniestro.id === borrando.id).siniestro
+          .disponible,
+        false,
+      )
       assert.ok(!('sinAsignar' in resumen))
       const [columna] =
         await prisma.$queryRaw`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Siniestro' AND column_name = 'idUsuario'`
@@ -206,15 +210,15 @@ test(
       assert.match(eventosDelCaso[0].descripcion, /dio de baja lógica/)
       assert.equal(eventosDelCaso[0].fecha, ahora.toISOString())
       assert.equal(eventosDelCaso[0].autor, 'Admin Prueba')
-      assert.equal(eventosDelCaso[1].id, anterior.id)
+      assert.equal(eventosDelCaso[1].descripcion, anterior.descripcion)
       for (const eventoPrevio of historialCompleto.actividad.items)
         assert.ok(trasBaja.actividad.items.some((e) => e.id === eventoPrevio.id))
       for (const actor of [admin, superadmin]) {
         assert.equal((await listado.obtener(actor, antes.id)).fechaBaja, ahora.toISOString())
         const particular = await crearServicioHistorialFicha(prisma).listar(actor, antes.id)
         assert.deepEqual(
-          particular.map((e) => e.id),
-          [eventosDelCaso[0].id, anterior.id],
+          particular.map((e) => e.descripcion),
+          [eventosDelCaso[0].descripcion, anterior.descripcion],
         )
         assert.equal(particular[0].tipo, 'BAJA_SINIESTRO')
       }
