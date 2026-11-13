@@ -4,9 +4,16 @@ import { HttpError } from '../utils/httpError.ts'
 export const entornoR2Schema = z.enum(['dev', 'produccion'])
 export type EntornoR2 = z.output<typeof entornoR2Schema>
 export function leerEntornoR2(variables: NodeJS.ProcessEnv = process.env): EntornoR2 {
-  return entornoR2Schema.parse(
-    variables.R2_ENTORNO || (variables.NODE_ENV === 'production' ? 'produccion' : 'dev'),
-  )
+  if (!variables.R2_ENTORNO && variables.NODE_ENV === 'production')
+    throw new Error(
+      'Configuración R2 inválida: R2_ENTORNO es obligatorio con NODE_ENV=production. Usá dev para Docker local o produccion para el VPS en backend/.env.',
+    )
+  const resultado = entornoR2Schema.safeParse(variables.R2_ENTORNO || 'dev')
+  if (!resultado.success)
+    throw new Error(
+      'Configuración R2 inválida: R2_ENTORNO debe ser dev o produccion en backend/.env.',
+    )
+  return resultado.data
 }
 export function conEntornoR2(ruta: string, entorno: EntornoR2 = leerEntornoR2()): string {
   const primero = ruta.split('/')[0]

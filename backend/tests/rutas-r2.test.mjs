@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { spawnSync } from 'node:child_process'
 import { S3Client } from '@aws-sdk/client-s3'
 import { leerConfiguracionR2 } from '../src/config/r2.ts'
 import { crearAlmacenamientoR2 } from '../src/lib/r2.ts'
@@ -13,11 +14,58 @@ import {
 
 test('entornos: Docker local puede usar dev aunque NODE_ENV sea production; no acepta valores arbitrarios', () => {
   assert.equal(leerEntornoR2({ NODE_ENV: 'production', R2_ENTORNO: 'dev' }), 'dev')
-  assert.equal(leerEntornoR2({ NODE_ENV: 'production' }), 'produccion')
+  for (const R2_ENTORNO of [undefined, ''])
+    assert.throws(
+      () => leerEntornoR2({ NODE_ENV: 'production', R2_ENTORNO }),
+      /R2_ENTORNO es obligatorio/,
+    )
   assert.equal(leerEntornoR2({}), 'dev')
   assert.throws(() => leerEntornoR2({ R2_ENTORNO: 'prod' }))
   assert.equal(conEntornoR2('dev/siniestros/1/1', 'dev'), 'dev/siniestros/1/1')
   assert.throws(() => conEntornoR2('produccion/siniestros/1/1', 'dev'), { status: 403 })
+})
+
+test('arranque: producción exige entorno explícito antes de levantar la API, sin exponer secretos', () => {
+  const secreto = 'NO-DEBE-APARECER-EN-ERRORES'
+  const ejecutar = (NODE_ENV, R2_ENTORNO) =>
+    spawnSync(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        '--input-type=module',
+        '-e',
+        `const {env}=await import('./src/config/env.ts');console.log(env.R2_ENTORNO)`,
+      ],
+      {
+        cwd: new URL('../', import.meta.url),
+        env: {
+          ...process.env,
+          NODE_ENV,
+          R2_ENTORNO,
+          RESEND_API_KEY: secreto,
+          R2_SECRET_ACCESS_KEY: secreto,
+        },
+        encoding: 'utf8',
+        timeout: 10000,
+      },
+    )
+  for (const entorno of ['', 'invalido']) {
+    const resultado = ejecutar('production', entorno)
+    assert.equal(resultado.status, 1)
+    assert.match(resultado.stderr, /R2_ENTORNO/)
+    assert.ok(!resultado.stderr.includes(secreto))
+    assert.equal(resultado.stdout, '')
+  }
+  for (const [nodeEnv, entorno, esperado] of [
+    ['production', 'dev', 'dev'],
+    ['production', 'produccion', 'produccion'],
+    ['development', '', 'dev'],
+    ['test', '', 'dev'],
+  ]) {
+    const resultado = ejecutar(nodeEnv, entorno)
+    assert.equal(resultado.status, 0, resultado.stderr)
+    assert.equal(resultado.stdout.trim(), esperado)
+  }
 })
 
 test('números visibles y escape reversible: no mezcla slash, guiones, underscore, ceros ni caracteres especiales', () => {

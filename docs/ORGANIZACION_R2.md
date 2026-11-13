@@ -2,7 +2,7 @@
 
 ## Configuración
 
-En `backend/.env` definir `R2_ENTORNO=dev` para la PC, incluso con Docker, y `R2_ENTORNO=produccion` en el VPS. `NODE_ENV=production` también se usa en Docker local: no alcanza para distinguir entornos. Si no se define R2_ENTORNO, el fallback es produccion en NODE_ENV=production y dev en el resto. Se recomienda un bucket/token distinto por entorno además del prefijo; la separación de carpetas no sustituye los permisos del bucket.
+En `backend/.env` definir `R2_ENTORNO=dev` para la PC, incluso con Docker, y `R2_ENTORNO=produccion` en el VPS. `NODE_ENV=production` también se usa en Docker local: no alcanza para distinguir entornos. Con `NODE_ENV=production`, la API no arranca si falta `R2_ENTORNO`; el mensaje indica usar `dev` para Docker local y `produccion` para el VPS. En development/test sin valor sigue usándose `dev`. Se recomienda un bucket/token distinto por entorno además del prefijo; la separación de carpetas no sustituye los permisos del bucket.
 
 ```
 dev/
@@ -48,7 +48,7 @@ docker compose exec backend node --env-file-if-exists=.env dist/reorganizar-r2.m
 
 Primero copia los archivos, comprueba su existencia y luego actualiza las referencias. En cada siniestro, la actualización de principal/vista/miniatura es transaccional y toma el mismo bloqueo del caso que la carga y el borrado. Si una copia falla se conservan las referencias anteriores. Un reintento completa lo que falta sin crear documentos adicionales, alterar fechas, cambiar el último movimiento ni volver a notificar.
 
-Por seguridad, conserva los objetos originales sin prefijo: otra base antigua podría referenciarlos. Solo retirar esos originales después de migrar y comprobar todos los entornos y sus backups. No es posible demostrar desde una sola base que ningún otro sistema los utiliza. Las copias sobrantes de un intento fallido se pueden sobrescribir al reintentar; nunca se borran a ciegas.
+Por seguridad, conserva los objetos originales sin prefijo: otra base antigua podría referenciarlos. Solo retirar esos originales después de migrar y comprobar todos los entornos y sus backups. El responsable del despliegue debe registrar en la PR o bitácora la fecha de reorganización, los buckets y bases revisados, la verificación de descargas y la referencia al backup. La retirada se programa para una ventana posterior aprobada por el equipo, con un inventario de claves sin prefijo comprobadas y revisión cruzada; no se borra automáticamente al desplegar. No es posible demostrar desde una sola base que ningún otro sistema los utiliza. Las copias sobrantes de un intento fallido se pueden sobrescribir al reintentar; nunca se borran a ciegas.
 
 ## Regla de vida de temporales en Cloudflare
 
