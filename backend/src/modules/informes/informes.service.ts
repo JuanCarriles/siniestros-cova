@@ -3,7 +3,7 @@ import { conEntornoR2 } from '../../lib/rutas-r2.ts'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import type { PrismaClient } from '../../generated/prisma/client.ts'
 import type { AlmacenamientoR2 } from '../../lib/r2.ts'
-import { motivoFalloCorreo } from '../../lib/correo-resend.ts'
+import { crearEnvioInforme, siguienteIntentoInforme, ESPERA_INFORME_MS } from './informes.envio.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import {
   calcularInforme,
@@ -13,6 +13,7 @@ import {
   mesArgentina,
   type DatosInforme,
 } from './informes.calculos.ts'
+import { cargarRegistrosInforme } from './informes.registros.ts'
 import { generarPdfInforme } from './informes.pdf.ts'
 
 type Deps = {
@@ -36,40 +37,7 @@ export function crearServicioInformes(deps: Deps) {
         'Solo el superadministrador puede generar pruebas o enviar informes; la administración puede consultarlos.',
       )
   }
-  async function enviar(id: string) {
-    const db = deps.db(),
-      informe = await db.informeMensual.findUniqueOrThrow({ where: { id } })
-    if (informe.correoEnviado) return
-    if (!informe.clavePdf) throw new HttpError(409, 'El informe todavía no está generado.')
-    const destinatario =
-      informe.destinatario ??
-      (
-        await db.usuario.findFirst({
-          where: { tipoUsuario: 'SUPER_ADMINISTRADOR', eliminado: false },
-          select: { email: true },
-        })
-      )?.email
-    if (!destinatario)
-      throw new HttpError(409, 'No hay un superadministrador activo para recibir el informe.')
-    await db.informeMensual.update({ where: { id }, data: { destinatario } })
-    try {
-      const pdf = await deps.almacenamiento().leerInforme(informe.clavePdf)
-      await deps.enviar(destinatario, informe.periodo, pdf, `informe-${id}`)
-      await db.informeMensual.update({
-        where: { id },
-        data: { correoEnviado: reloj(), error: null },
-      })
-    } catch (error) {
-      await db.informeMensual.update({
-        where: { id },
-        data: { error: `PDF disponible; no se pudo enviar el correo. ${motivoFalloCorreo(error)}` },
-      })
-      throw new HttpError(
-        502,
-        'El PDF quedó guardado, pero no se pudo enviar el correo. Podés reintentar el envío.',
-      )
-    }
-  }
+  const enviar = crearEnvioInforme(deps, reloj)
   async function generar(periodo: string, prueba: boolean, idSolicitante?: number, correo = false) {
     const ahora = reloj(),
       db = deps.db(),
@@ -90,7 +58,7 @@ export function crearServicioInformes(deps: Deps) {
       // Una concesión persistida permite recuperarse de reinicios. La fecha actúa como token de la ejecución.
       if (
         anterior?.estado === 'GENERANDO' &&
-        ahora.getTime() - anterior.fechaActualizacion.getTime() < 15 * 60_000
+        ahora.getTime() - anterior.fechaActualizacion.getTime() < ESPERA_INFORME_MS
       )
         throw new HttpError(
           409,
@@ -114,16 +82,11 @@ export function crearServicioInformes(deps: Deps) {
     if (!reutilizado) {
       let claveSubida: string | undefined
       try {
-        const { fin } = limitesMes(periodo)
-        const registros = await db.$transaction(
-          (tx) =>
-            tx.registroEstadisticoSiniestro.findMany({
-              where: { fechaRegistro: { lt: new Date(Math.min(fin.getTime(), ahora.getTime())) } },
-              orderBy: [{ fechaRegistro: 'asc' }, { id: 'asc' }],
-            }),
-          { isolationLevel: 'RepeatableRead' },
+        const { registros, contexto } = await db.$transaction(
+          (tx) => cargarRegistrosInforme(tx, periodo, ahora),
+          { isolationLevel: 'RepeatableRead', timeout: 30000 },
         )
-        const datos: DatosInforme = calcularInforme(periodo, registros, ahora)
+        const datos: DatosInforme = calcularInforme(periodo, registros, ahora, contexto)
         const meses = mesesHasta(periodo, 6)
         const anteriores = await db.informeMensual.findMany({
           where: { prueba: false, estado: 'LISTO', periodo: { in: meses } },
@@ -170,6 +133,8 @@ export function crearServicioInformes(deps: Deps) {
             clavePdf: clave,
             tamanoBytes: pdf.length,
             error: null,
+            intentosFallidos: 0,
+            proximoIntento: null,
           },
         })
         if (guardado.count !== 1)
@@ -189,7 +154,12 @@ export function crearServicioInformes(deps: Deps) {
             estado: 'GENERANDO',
             fechaActualizacion: informe.fechaActualizacion,
           },
-          data: { estado: 'ERROR', error: 'No se pudo completar la generación. Podés reintentar.' },
+          data: {
+            estado: 'ERROR',
+            error: 'No se pudo completar la generación. Podés reintentar.',
+            intentosFallidos: informe.intentosFallidos + 1,
+            proximoIntento: siguienteIntentoInforme(reloj(), informe.intentosFallidos + 1),
+          },
         })
         throw error
       }
@@ -202,8 +172,10 @@ export function crearServicioInformes(deps: Deps) {
       await autorizar(usuario)
       const db = deps.db(),
         total = await db.informeMensual.count()
+      pagina = Math.min(pagina, Math.max(1, Math.ceil(total / 20)))
       const informes = await db.informeMensual.findMany({
-        orderBy: { fechaCreacion: 'desc' },
+        include: { envios: { orderBy: { enviadoEn: 'asc' } } },
+        orderBy: [{ fechaCreacion: 'desc' }, { id: 'desc' }],
         skip: (pagina - 1) * 20,
         take: 20,
       })
@@ -217,9 +189,15 @@ export function crearServicioInformes(deps: Deps) {
           disponible: i.estado === 'LISTO' && i.clavePdf !== null,
           correoEnviado: i.correoEnviado?.toISOString() ?? null,
           error: i.error,
+          proximoIntento: i.proximoIntento?.toISOString() ?? null,
+          destinatarios: i.envios.map((e) => ({
+            email: e.email,
+            enviadoEn: e.enviadoEn.toISOString(),
+          })),
         })),
         pruebasHabilitadas:
           deps.pruebasHabilitadas && usuario.tipoUsuario === 'SUPER_ADMINISTRADOR',
+        total,
         pagina,
         paginas: Math.max(1, Math.ceil(total / 20)),
       }
@@ -277,8 +255,44 @@ export function crearServicioInformes(deps: Deps) {
       // Un informe por vuelta evita bloquear el servidor al recuperar varios meses pendientes.
       while (p <= ultimo) {
         const i = await deps.db().informeMensual.findUnique({ where: { clavePeriodo: p } })
-        if (i?.estado !== 'LISTO' || !i.correoEnviado) {
-          await generar(p, false, undefined, true)
+        const ocupado =
+          (i?.estado === 'GENERANDO' &&
+            ahora.getTime() - i.fechaActualizacion.getTime() < ESPERA_INFORME_MS) ||
+          (i?.envioHasta && i.envioHasta > ahora)
+        if (
+          (i?.estado !== 'LISTO' || !i.correoEnviado) &&
+          !ocupado &&
+          (!i?.proximoIntento || i.proximoIntento <= ahora)
+        ) {
+          try {
+            await generar(p, false, undefined, true)
+          } catch (error) {
+            // Si un fallo se produjo antes de registrar su espera, no dejar ese período bloqueando la cola.
+            const actual = await deps.db().informeMensual.findUnique({ where: { clavePeriodo: p } })
+            if (
+              actual &&
+              !(actual.estado === 'LISTO' && actual.correoEnviado) &&
+              (!actual.proximoIntento || actual.proximoIntento <= ahora) &&
+              (!actual.envioHasta || actual.envioHasta <= ahora) &&
+              !(
+                actual.estado === 'GENERANDO' &&
+                ahora.getTime() - actual.fechaActualizacion.getTime() < ESPERA_INFORME_MS
+              )
+            ) {
+              const fallos = actual.intentosFallidos + 1
+              await deps
+                .db()
+                .informeMensual.updateMany({
+                  where: { id: actual.id, fechaActualizacion: actual.fechaActualizacion },
+                  data: {
+                    intentosFallidos: fallos,
+                    proximoIntento: siguienteIntentoInforme(ahora, fallos),
+                    error: 'No se pudo procesar este informe. Se reintentará más tarde.',
+                  },
+                })
+            }
+            throw error
+          }
           return
         }
         const f = limitesMes(p).fin

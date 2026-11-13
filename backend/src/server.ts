@@ -1,4 +1,3 @@
-import { servicioInformes } from './modules/informes/informes.module.ts'
 import { createServer } from 'node:http'
 import { app } from './app.ts'
 import { env } from './config/env.ts'
@@ -6,6 +5,7 @@ import { disconnectPrisma } from './lib/prisma.ts'
 import { programarTarea } from './lib/tarea-periodica.ts'
 import { montarTiempoReal } from './modules/chat/chat.module.ts'
 import { tareaDemoras } from './modules/siniestros/demoras.module.ts'
+import { servicioInformes } from './modules/informes/informes.module.ts'
 
 // Servidor HTTP propio (y no app.listen) para poder montar Socket.IO sobre el mismo puerto.
 const server = createServer(app)

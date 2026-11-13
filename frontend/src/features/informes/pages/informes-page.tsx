@@ -1,3 +1,9 @@
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { generarInformeSchema } from '@cova/shared/schemas/informes'
+import { Paginacion } from '@/components/paginacion'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useEffect, useState } from 'react'
 import { useLoaderData, useRevalidator, useSearchParams } from 'react-router'
 import { Download, FileChartColumn, FlaskConical, Mail, RefreshCw } from 'lucide-react'
@@ -14,20 +20,29 @@ import type { cargarInformes } from '../loader'
 
 export function InformesPage() {
   const datos = useLoaderData<typeof cargarInformes>(),
-    { usuario } = usePanel(),
+    { usuario, basePath } = usePanel(),
     revalidator = useRevalidator(),
-    [params, setParams] = useSearchParams()
-  const [periodo, setPeriodo] = useState(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Argentina/Buenos_Aires',
-      year: 'numeric',
-      month: '2-digit',
-    })
-      .format(new Date())
-      .slice(0, 7),
+    [params] = useSearchParams()
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<z.input<typeof generarInformeSchema>, unknown, z.output<typeof generarInformeSchema>>(
+    {
+      resolver: zodResolver(generarInformeSchema),
+      defaultValues: {
+        periodo: new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Argentina/Buenos_Aires',
+          year: 'numeric',
+          month: '2-digit',
+        })
+          .format(new Date())
+          .slice(0, 7),
+        enviarCorreo: false,
+      },
+    },
   )
-  const [correo, setCorreo] = useState(false),
-    [ocupado, setOcupado] = useState<string | null>(null),
+  const [ocupado, setOcupado] = useState<string | null>(null),
     [error, setError] = useState<string | null>(null),
     [mensaje, setMensaje] = useState<string | null>(null)
   const esSuper = usuario.tipo === 'SUPER_ADMINISTRADOR'
@@ -109,18 +124,45 @@ export function InformesPage() {
             )[i.estado] ?? i.estado}
           </span>
           {i.error && <p className="text-base text-danger-ink">{i.error}</p>}
+          {i.proximoIntento && (
+            <p className="text-muted-foreground">
+              Próximo reintento automático:{' '}
+              {new Date(i.proximoIntento).toLocaleString('es-AR', {
+                timeZone: 'America/Argentina/Buenos_Aires',
+              })}
+            </p>
+          )}
         </div>
       ),
     },
     {
       id: 'correo',
       encabezado: 'Correo',
-      celda: (i) =>
-        i.correoEnviado
-          ? 'Enviado al superadministrador'
-          : i.prueba
-            ? 'Sin envío confirmado'
-            : 'Pendiente de envío',
+      celda: (i) => (
+        <div className="grid gap-2">
+          <span>
+            {i.correoEnviado
+              ? 'Envío confirmado'
+              : i.destinatarios.length
+                ? 'Envío parcial'
+                : i.prueba
+                  ? 'Sin envío confirmado'
+                  : 'Pendiente de envío'}
+          </span>
+          {i.destinatarios.length > 0 && (
+            <ul
+              aria-label="Destinatarios con envío confirmado"
+              className="grid gap-1 text-muted-foreground"
+            >
+              {i.destinatarios.map((d) => (
+                <li key={d.email} className="break-all">
+                  {d.email}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ),
     },
     {
       id: 'acciones',
@@ -140,7 +182,7 @@ export function InformesPage() {
               onClick={() =>
                 void accion(i.id, async () => {
                   await api(`/informes/${i.id}/correo`, { method: 'POST' })
-                  setMensaje('El informe se envió al correo del superadministrador.')
+                  setMensaje('El informe se envió a los superadministradores activos.')
                 })
               }
             >
@@ -210,34 +252,29 @@ export function InformesPage() {
           </p>
           <form
             className="mt-5 grid items-end gap-5 md:grid-cols-[minmax(12rem,18rem)_1fr_auto]"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void accion('generar', async () => {
-                await api('/informes/pruebas', {
-                  method: 'POST',
-                  body: { periodo, enviarCorreo: correo },
-                })
-                setMensaje('La prueba quedó guardada. Ya podés descargar el PDF desde el listado.')
-              })
-            }}
+            noValidate
+            onSubmit={(event) =>
+              void handleSubmit((pedido) =>
+                accion('generar', async () => {
+                  await api('/informes/pruebas', { method: 'POST', body: pedido })
+                  setMensaje(
+                    'La prueba quedó guardada. Ya podés descargar el PDF desde el listado.',
+                  )
+                }),
+              )(event)
+            }
           >
             <TextField
               label="Mes del informe"
               type="month"
               required
-              value={periodo}
-              onChange={(e) => setPeriodo(e.target.value)}
+              {...register('periodo')}
+              error={errors.periodo?.message}
               disabled={ocupado !== null}
             />
             <label className="flex min-h-12 cursor-pointer items-center gap-3">
-              <input
-                type="checkbox"
-                className="size-5 accent-primary"
-                checked={correo}
-                onChange={(e) => setCorreo(e.target.checked)}
-                disabled={ocupado !== null}
-              />
-              Enviar también a mi correo de superadministrador
+              <Checkbox {...register('enviarCorreo')} disabled={ocupado !== null} />
+              Enviar también a los superadministradores activos
             </label>
             <Button
               type="submit"
@@ -256,8 +293,8 @@ export function InformesPage() {
         <div className="border-b bg-surface-subtle px-6 py-4">
           <h2 className="text-xl font-bold text-primary">Informes disponibles</h2>
           <p className="mt-1 text-base text-muted-foreground">
-            Generación automática el día 1 a las 07:00, hora de Argentina. Los PDF permanecen
-            privados.
+            Generación automática el día 1 a partir de las 07:00, hora de Argentina. Los PDF
+            permanecen privados.
           </p>
         </div>
         <TablaAbm
@@ -278,34 +315,15 @@ export function InformesPage() {
           }
         />
       </section>
-      {datos.paginas > 1 && (
-        <nav
-          aria-label="Páginas de informes"
-          className="mt-5 flex flex-wrap items-center justify-end gap-3"
-        >
-          <Button
-            variant="outline"
-            disabled={datos.pagina <= 1}
-            onClick={() =>
-              setParams({ ...Object.fromEntries(params), pagina: String(datos.pagina - 1) })
-            }
-          >
-            Anterior
-          </Button>
-          <span>
-            Página {datos.pagina} de {datos.paginas}
-          </span>
-          <Button
-            variant="outline"
-            disabled={datos.pagina >= datos.paginas}
-            onClick={() =>
-              setParams({ ...Object.fromEntries(params), pagina: String(datos.pagina + 1) })
-            }
-          >
-            Siguiente
-          </Button>
-        </nav>
-      )}
+      <Paginacion
+        pagina={datos.pagina}
+        porPagina={20}
+        total={datos.total}
+        nombre="informes"
+        hrefPagina={(pagina) =>
+          `${basePath}/informes?${new URLSearchParams({ ...Object.fromEntries(params), pagina: String(pagina) })}`
+        }
+      />
     </div>
   )
 }

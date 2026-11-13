@@ -49,23 +49,28 @@ export function crearServicioNotificaciones(base: Base) {
       let actor = await actorActual(tx, usuario)
       let cambios = data
       if (data.leida === false) {
-        const aviso = await tx.notificacion.findFirst({
-          where: { AND: [filtro(actor), { id }] },
-          select: { idSiniestro: true, tipoNotificacion: true },
+        // Solo se necesita el caso para tomar el bloqueo; el aviso se obtiene y autoriza después.
+        const referencia = await tx.notificacion.findFirst({
+          where: { AND: [filtro(actor), { id, tipoNotificacion: 'MENSAJE_NUEVO' }] },
+          select: { idSiniestro: true },
         })
-        if (!aviso) throw new HttpError(404, 'La notificación no está disponible.')
-        if (aviso.tipoNotificacion === 'MENSAJE_NUEVO') {
+        if (referencia) {
           // Mismo orden que envío y lectura de chat. Marcar un aviso viejo sin leer también debe agruparse.
-          await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${aviso.idSiniestro} FOR NO KEY UPDATE`
+          await tx.$queryRaw`SELECT "id" FROM "Siniestro" WHERE "id" = ${referencia.idSiniestro} FOR NO KEY UPDATE`
           actor = await actorActual(tx, usuario)
-          const actual = await tx.notificacion.findFirst({
-            where: { AND: [filtro(actor), { id }] },
+          const aviso = await tx.notificacion.findFirst({
+            where: {
+              AND: [
+                filtro(actor),
+                { id, idSiniestro: referencia.idSiniestro, tipoNotificacion: 'MENSAJE_NUEVO' },
+              ],
+            },
             select: { fechaCreacion: true, siniestro: { select: { numeroSiniestro: true } } },
           })
-          if (!actual) throw new HttpError(404, 'La notificación no está disponible.')
+          if (!aviso) throw new HttpError(404, 'La notificación no está disponible.')
           const otros = {
             idUsuario: actor.id,
-            idSiniestro: aviso.idSiniestro,
+            idSiniestro: referencia.idSiniestro,
             tipoNotificacion: 'MENSAJE_NUEVO' as const,
             eliminado: false,
             leida: false,
@@ -80,13 +85,13 @@ export function crearServicioNotificaciones(base: Base) {
             data: { eliminado: true, fechaBaja: new Date() },
           })
           const cantidad = await tx.mensajeChat.count({
-            where: { idSiniestro: aviso.idSiniestro, ...mensajesSinLeerPor(actor.id) },
+            where: { idSiniestro: referencia.idSiniestro, ...mensajesSinLeerPor(actor.id) },
           })
           cambios = {
             ...data,
-            mensaje: textoMensajesSinLeer(cantidad, actual.siniestro.numeroSiniestro),
+            mensaje: textoMensajesSinLeer(cantidad, aviso.siniestro.numeroSiniestro),
             fechaCreacion: new Date(
-              Math.max(actual.fechaCreacion.getTime(), ultimo._max.fechaCreacion?.getTime() ?? 0),
+              Math.max(aviso.fechaCreacion.getTime(), ultimo._max.fechaCreacion?.getTime() ?? 0),
             ),
           }
         }

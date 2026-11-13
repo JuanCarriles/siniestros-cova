@@ -503,18 +503,22 @@ enum ResultadoCierre {
 
 // Documento oficial único por período; los de prueba llevan su propia clave. R2 solo contiene el PDF.
 model InformeMensual {
-  id                 String    @id @default(uuid()) @db.Uuid
-  clavePeriodo       String    @unique
-  periodo            String    @db.VarChar(7)
-  prueba             Boolean   @default(false)
-  estado             String    @default("PENDIENTE")
-  fechaCreacion      DateTime  @default(now()) @db.Timestamptz(3)
-  fechaActualizacion DateTime  @updatedAt @db.Timestamptz(3)
+  id                 String                @id @default(uuid()) @db.Uuid
+  clavePeriodo       String                @unique
+  periodo            String                @db.VarChar(7)
+  prueba             Boolean               @default(false)
+  estado             String                @default("PENDIENTE")
+  fechaCreacion      DateTime              @default(now()) @db.Timestamptz(3)
+  fechaActualizacion DateTime              @updatedAt @db.Timestamptz(3)
   datos              Json?
   clavePdf           String?
   tamanoBytes        Int?
-  correoEnviado      DateTime? @db.Timestamptz(3)
+  correoEnviado      DateTime?             @db.Timestamptz(3)
   destinatario       String?
+  intentosFallidos   Int                   @default(0)
+  proximoIntento     DateTime?             @db.Timestamptz(3)
+  envioHasta         DateTime?             @db.Timestamptz(3)
+  envios             InformeMensualEnvio[]
   error              String?
   idSolicitante      Int?
 
@@ -541,6 +545,18 @@ model ActividadSiniestro {
   @@index([fechaEvento, id])
   @@index([idSiniestroReferencia])
   @@index([idSiniestro])
+}
+
+model InformeMensualEnvio {
+  id        String         @id @default(uuid()) @db.Uuid
+  idInforme String         @db.Uuid
+  /// Referencia histórica: la entrega se conserva aunque el usuario deje de estar activo.
+  idUsuario Int?
+  email     String
+  enviadoEn DateTime       @db.Timestamptz(3)
+  informe   InformeMensual @relation(fields: [idInforme], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@unique([idInforme, email])
 }
 
 // Registro estadístico mínimo e independiente del expediente: sobrevive al borrado físico.

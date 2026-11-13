@@ -52,6 +52,26 @@ test(
       assert.equal(registros.length, 2)
       assert.equal(registros.filter((r) => r.evento === 'BASELINE').length, 1)
       assert.equal(registros.find((r) => r.idSiniestro === id).datos.numero, 'NO-TOCAR')
+      // La corrección aditiva conserva las entregas anteriores aunque el receptor ya no esté activo.
+      const entregaAnterior = '11111111-1111-4111-8111-111111111111'
+      await db.query(
+        `INSERT INTO "InformeMensual" (id,"clavePeriodo",periodo,estado,"fechaActualizacion","correoEnviado",destinatario) VALUES ($1,'2026-09','2026-09','LISTO',now(),'2026-10-01T10:00:00Z','existente@example.invalid')`,
+        [entregaAnterior],
+      )
+      await db.query(
+        await readFile(
+          new URL('20261113200000_informes_entregas_reintentos/migration.sql', carpeta),
+          'utf8',
+        ),
+      )
+      const entregas = (await db.query('SELECT * FROM "InformeMensualEnvio"')).rows
+      assert.equal(entregas.length, 1)
+      assert.equal(entregas[0].idInforme, entregaAnterior)
+      assert.equal(entregas[0].email, 'existente@example.invalid')
+      assert.equal(entregas[0].enviadoEn.toISOString(), '2026-10-01T10:00:00.000Z')
+      assert.equal(entregas[0].idUsuario, u)
+      const preservado = (await db.query('SELECT * FROM "Siniestro"')).rows[0]
+      assert.deepEqual(preservado, despues)
       await db.query('BEGIN')
       await db.query(`UPDATE "Siniestro" SET "numeroPoliza"='OTRA' WHERE id=${id}`)
       await db.query('ROLLBACK')

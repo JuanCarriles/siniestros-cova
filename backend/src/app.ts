@@ -1,4 +1,3 @@
-import { informesRouter } from './modules/informes/informes.module.ts'
 import cookieParser from 'cookie-parser'
 import express, { Router } from 'express'
 import helmet from 'helmet'
@@ -14,6 +13,7 @@ import { dashboardRouter } from './modules/dashboard/dashboard.module.ts'
 import { siniestrosRouter } from './modules/siniestros/siniestros.module.ts'
 import { chatRouter } from './modules/chat/chat.module.ts'
 import { notificacionesRouter } from './modules/notificaciones/notificaciones.module.ts'
+import { informesRouter } from './modules/informes/informes.module.ts'
 
 export const app = express()
 
