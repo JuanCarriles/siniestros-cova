@@ -80,9 +80,10 @@ test(
         'reservar carpetas no inventa actividad estadística',
       )
       assert.equal(new Set(reservas).size, 2)
-      assert.ok(reservas.includes('siniestros/1/1'))
-      const duplicado = reservas[0] !== 'siniestros/1/1' ? a : b
-      assert.ok(reservas.includes(`siniestros/1/1/siniestro-${duplicado.id}`))
+      // Una sola carpeta {nºsiniestro}-{nºpóliza}; el segundo con los mismos números lleva su id
+      assert.ok(reservas.includes('siniestros/1-1'))
+      const duplicado = reservas[0] !== 'siniestros/1-1' ? a : b
+      assert.ok(reservas.includes(`siniestros/1-1-id${duplicado.id}`))
       await db.siniestro.update({
         where: { id: a.id },
         data: { numeroSiniestro: 'CAMBIADO', numeroPoliza: 'OTRA' },
@@ -97,9 +98,10 @@ test(
         comprobarExistencia: async (clave) => {
           assert.ok(objetos.has(clave), `Falta ${clave}`)
         },
-        copiar: async (origen, carpeta) => {
+        listar: async () => [...objetos].map(([clave, b]) => ({ clave, bytes: b.length })),
+        copiar: async (origen, carpeta, nombre) => {
           if (origen === fallar) throw Error('Falla controlada de copia')
-          const destino = `dev/${carpeta}/${origen.split('/').pop()}`
+          const destino = `dev/${carpeta}/${nombre ?? origen.split('/').pop()}`
           copias.push({ origen, destino })
           objetos.set(destino, objetos.get(origen))
           return destino
@@ -143,8 +145,20 @@ test(
         data: { periodo: '2026-11', clavePeriodo: '2026-11', clavePdf },
       })
       const ejecutar = (aplicar) => reorganizarArchivosR2({ db, r2, entorno: 'dev', aplicar })
+      const resumen = ({ aplicado, registros, archivos, omitidos }) => ({
+        aplicado,
+        registros,
+        archivos,
+        omitidos,
+      })
       const simulacion = await ejecutar(false)
-      assert.deepEqual(simulacion, { aplicado: false, registros: 3, archivos: 5 })
+      assert.deepEqual(resumen(simulacion), {
+        aplicado: false,
+        registros: 3,
+        archivos: 5,
+        omitidos: 0,
+      })
+      assert.deepEqual(simulacion.sobrantes, [], 'antes de reorganizar, la base usa todo')
       assert.equal(copias.length, 0)
       assert.equal(
         (await db.siniestro.findUniqueOrThrow({ where: { id: caso.id } })).carpetaR2,
@@ -164,25 +178,49 @@ test(
       )
       for (const key of keys) assert.ok(objetos.has(key), 'no borra los originales ante un fallo')
       fallar = ''
-      assert.deepEqual(await ejecutar(true), { aplicado: true, registros: 3, archivos: 5 })
+      const aplicada = await ejecutar(true)
+      assert.deepEqual(resumen(aplicada), {
+        aplicado: true,
+        registros: 3,
+        archivos: 5,
+        omitidos: 0,
+      })
+      // Lo anterior no se borra: queda como sobrante, para retirarlo a mano después de verificar
+      assert.deepEqual(
+        new Set(aplicada.sobrantes.map((o) => o.clave)),
+        new Set([...keys, 'plantillas/acta.pdf', clavePdf]),
+      )
       const actualizado = await db.documentoSiniestro.findUniqueOrThrow({
         where: { id: documento.id },
       })
       for (const field of ['urlArchivoSinDominio', 'claveImagenOptimizada', 'claveMiniatura']) {
-        assert.ok(actualizado[field].startsWith('dev/siniestros/2/1/'))
+        assert.ok(actualizado[field].startsWith('dev/siniestros/2-1/'), actualizado[field])
         assert.ok(objetos.has(actualizado[field]))
       }
+      // Nombre legible, y los derivados conservan el nombre del principal
+      assert.match(actualizado.urlArchivoSinDominio, /^dev\/siniestros\/2-1\/foto-[a-z0-9]+\.jpg$/)
+      assert.equal(
+        actualizado.claveImagenOptimizada,
+        `${actualizado.urlArchivoSinDominio}.vista.webp`,
+      )
+      assert.equal(actualizado.claveMiniatura, `${actualizado.urlArchivoSinDominio}.miniatura.webp`)
       assert.equal(actualizado.eliminado, true, 'la reorganización no reactiva documentos')
       assert.equal(actualizado.fechaCarga.toISOString(), documento.fechaCarga.toISOString())
-      assert.equal(
+      assert.match(
         (await db.documentoPlantilla.findUniqueOrThrow({ where: { id: plantilla.id } })).urlArchivo,
-        'dev/plantillas/acta.pdf',
+        /^dev\/plantillas\/acta-[a-z0-9]+\.pdf$/,
       )
       assert.equal(
         (await db.informeMensual.findUniqueOrThrow({ where: { id: informe.id } })).clavePdf,
-        `dev/${clavePdf}`,
+        'dev/informes/2026/2026-11-11111111.pdf',
+        'informes/{AAAA}/{AAAA-MM}-{código}.pdf, con el código del nombre anterior',
       )
-      assert.deepEqual(await ejecutar(true), { aplicado: true, registros: 0, archivos: 0 })
+      assert.deepEqual(resumen(await ejecutar(true)), {
+        aplicado: true,
+        registros: 0,
+        archivos: 0,
+        omitidos: 0,
+      })
       assert.equal(
         await db.documentoSiniestro.count(),
         1,
@@ -200,7 +238,9 @@ test(
         },
       })
       const antes = copias.length
-      await assert.rejects(ejecutar(true), { status: 409 })
+      // Un caso con un archivo de otro entorno no se toca: se informa y se sigue con los demás
+      const conAjena = await ejecutar(true)
+      assert.equal(conAjena.omitidos, 1)
       assert.equal(copias.length, antes, 'una referencia ajena no se copia')
       // El borrado definitivo debe reconocer también la carpeta nueva y todos sus derivados.
       await db.documentoSiniestro.update({

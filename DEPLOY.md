@@ -401,6 +401,28 @@ Aplicar este orden después del backup y antes de dar el despliegue por terminad
 
 El inventario de disparadores SQL y la comprobación del esquema estadístico están en [TRIGGERS.md](docs/TRIGGERS.md). Los pasos de Cloudflare y la retirada posterior son manuales: no los ejecuta la migración ni el script de reorganización.
 
+### Actualización con una carpeta por siniestro (`{nºsiniestro}-{nºpóliza}`) y nombres legibles
+
+Esta entrega cambia la organización de R2 (detalle en [ORGANIZACION_R2.md](docs/ORGANIZACION_R2.md)) y corrige el
+backup: desde el PR #90 los documentos nuevos se guardan en `produccion/`, pero el backup solo copiaba `siniestros/` y
+`plantillas/` de la raíz, así que **los documentos nuevos no estaban entrando en la copia diaria**. No necesita
+migraciones ni variables nuevas.
+
+1. Desplegar como siempre (`git pull` y `docker compose up -d --build --wait`). Se reconstruye también el servicio
+   `backup`.
+2. Backup en el momento, que ya incluye `produccion/`: `sh scripts/backup-ahora.sh`. Verificar con
+   `sh scripts/probar-backups.sh` que `produccion/` aparezca y dé `OK`.
+3. Reorganizar: simular, revisar los siniestros omitidos y los sobrantes, y aplicar.
+
+   ```bash
+   docker compose exec backend node dist/reorganizar-r2.mjs --entorno=produccion
+   docker compose exec backend node dist/reorganizar-r2.mjs --entorno=produccion --aplicar
+   ```
+
+4. Probar en la app documentos, imágenes, plantillas e informes de algunos casos.
+5. Al día siguiente, con el backup nuevo verificado, retirar los sobrantes desde Cloudflare
+   (`--listar-sobrantes` los muestra uno por uno). El script no borra nada.
+
 ---
 
 ## 8. Restaurar

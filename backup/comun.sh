@@ -36,7 +36,13 @@ configurar_r2() {
   BUCKET_DOCUMENTOS=${R2_BUCKET:-}
   BUCKET=${BACKUP_BUCKET:-$BUCKET_DOCUMENTOS}
   PREFIJO=${BACKUP_PREFIX:-backups}
-  CARPETAS=${BACKUP_CARPETAS_DOCUMENTOS:-siniestros plantillas}
+  # Por defecto: la carpeta del entorno (dev/ o produccion/, donde el backend guarda todo desde las carpetas por
+  # entorno) y las carpetas anteriores de la raíz, que siguen en uso hasta reorganizar los archivos.
+  case "${R2_ENTORNO:-}" in
+    '' | dev | produccion) ;;
+    *) falla "R2_ENTORNO tiene que ser dev o produccion (backend/.env)" ;;
+  esac
+  CARPETAS=${BACKUP_CARPETAS_DOCUMENTOS:-${R2_ENTORNO:+$R2_ENTORNO }siniestros plantillas}
   CLAVE=${BACKUP_CLAVE:-}
 
   [ -n "$ACCOUNT_ID" ] || [ -n "$ENDPOINT" ] || falla "falta R2_ACCOUNT_ID en backend/.env"
