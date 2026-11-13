@@ -1,3 +1,6 @@
+import { Controller, useForm, useWatch } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { FichaSiniestro } from '@cova/shared/schemas/ficha-siniestro'
 import {
@@ -43,8 +46,17 @@ export function CambiarEstadoDialog({
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
-  const [resultado, setResultado] = useState('')
-  const [monto, setMonto] = useState('')
+  const {
+    register,
+    control,
+    handleSubmit,
+    clearErrors,
+    formState: { errors },
+  } = useForm<z.input<typeof cierreInformeSchema>, unknown, z.output<typeof cierreInformeSchema>>({
+    resolver: zodResolver(cierreInformeSchema),
+    defaultValues: { montoAcordado: '' },
+  })
+  const resultado = useWatch({ control, name: 'resultadoCierre' })
   useEffect(() => {
     const controlador = new AbortController()
     void api(`/siniestros/${ficha.id}/estados`, { signal: controlador.signal })
@@ -65,13 +77,12 @@ export function CambiarEstadoDialog({
   async function confirmar(event: FormEvent) {
     event.preventDefault()
     if (!datos || !nuevo || enviando) return
-    const cierre = nuevo.esCierre
-      ? cierreInformeSchema.safeParse({ resultadoCierre: resultado, montoAcordado: monto })
-      : null
-    if (cierre && !cierre.success) {
-      setError(cierre.error.issues[0]?.message ?? 'Completá el resultado del cierre.')
-      return
-    }
+    if (nuevo.esCierre) {
+      await handleSubmit((cierre) => guardar(cierre))(event)
+    } else await guardar()
+  }
+  async function guardar(cierre?: z.output<typeof cierreInformeSchema>) {
+    if (!datos || !nuevo || enviando) return
     setEnviando(true)
     setError(null)
     try {
@@ -80,7 +91,7 @@ export function CambiarEstadoDialog({
         body: {
           idEstadoAnterior: datos.estadoActual.id,
           idEstadoSiniestro: nuevo.id,
-          ...(cierre?.success ? { cierre: cierre.data } : {}),
+          ...(cierre ? { cierre } : {}),
         },
       })
       onHecho(
@@ -133,7 +144,7 @@ export function CambiarEstadoDialog({
             {error}
           </Aviso>
         )}
-        <form onSubmit={(event) => void confirmar(event)} className="grid gap-4">
+        <form noValidate onSubmit={(event) => void confirmar(event)} className="grid gap-4">
           {!datos ? (
             <p role="status">
               {error
@@ -173,7 +184,10 @@ export function CambiarEstadoDialog({
                             name="estado"
                             value={estado.id}
                             checked={seleccion === estado.id}
-                            onChange={() => setSeleccion(estado.id)}
+                            onChange={() => {
+                              clearErrors()
+                              setSeleccion(estado.id)
+                            }}
                             aria-describedby={`explicacion-estado-${estado.id}`}
                             className="mt-1 size-5 shrink-0 accent-primary"
                           />
@@ -211,23 +225,30 @@ export function CambiarEstadoDialog({
                   className="grid gap-4 rounded-lg border bg-surface-subtle p-4"
                 >
                   <legend className="px-1 font-bold">Resultado del cierre</legend>
-                  <SelectField
-                    label="Resultado"
-                    required
-                    placeholder="Elegí el resultado"
-                    value={resultado}
-                    onChange={setResultado}
-                    opciones={Object.entries(RESULTADOS_CIERRE).map(([valor, etiqueta]) => ({
-                      valor,
-                      etiqueta,
-                    }))}
+                  <Controller
+                    control={control}
+                    name="resultadoCierre"
+                    render={({ field }) => (
+                      <SelectField
+                        {...field}
+                        label="Resultado"
+                        required
+                        placeholder="Elegí el resultado"
+                        value={field.value ?? ''}
+                        error={errors.resultadoCierre?.message}
+                        opciones={Object.entries(RESULTADOS_CIERRE).map(([valor, etiqueta]) => ({
+                          valor,
+                          etiqueta,
+                        }))}
+                      />
+                    )}
                   />
                   <TextField
+                    {...register('montoAcordado')}
                     label={`Monto acordado (${ficha.moneda ?? 'ARS'})`}
                     required={resultado === 'ACUERDO_PAGO'}
                     inputMode="decimal"
-                    value={monto}
-                    onChange={(e) => setMonto(e.target.value)}
+                    error={errors.montoAcordado?.message}
                     hint="Si hubo acuerdo, indicá el importe. Si fue sin monto, ingresá 0. No se registra como pago efectivo."
                   />
                   <p className="text-base text-muted-foreground">

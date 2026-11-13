@@ -80,7 +80,13 @@ const centavos = (v: string) => {
 const decimal = (v: bigint) =>
   `${v < 0n ? '-' : ''}${(v < 0n ? -v : v) / 100n}.${String((v < 0n ? -v : v) % 100n).padStart(2, '0')}`
 
-export function calcularInforme(periodo: string, registros: Registro[], ahora = new Date()) {
+export type ContextoInforme = { asignaciones: Map<number, { desde: string; respondida: boolean }> }
+export function calcularInforme(
+  periodo: string,
+  registros: Registro[],
+  ahora = new Date(),
+  contexto?: ContextoInforme,
+) {
   const { inicio, fin } = limitesMes(periodo),
     corte = new Date(Math.min(fin.getTime(), ahora.getTime()))
   const enMes = (f: string | Date) => new Date(f) >= inicio && new Date(f) < corte
@@ -159,7 +165,11 @@ export function calcularInforme(periodo: string, registros: Registro[], ahora = 
     ultimaFoto.set(s.id, hora)
     fotos.set(s.id, s)
     if (hora < inicio) iniciales.set(s.id, s)
-    if (!asignacion.has(s.id) || anterior?.gestor.id !== s.gestor.id)
+    const previa = !anterior ? contexto?.asignaciones.get(s.id) : undefined
+    if (previa) {
+      asignacion.set(s.id, { desde: previa.desde, gestor: s.gestor })
+      if (previa.respondida) primeraNovedad.set(`${s.id}:${previa.desde}`, 1)
+    } else if (!asignacion.has(s.id) || (anterior && anterior.gestor.id !== s.gestor.id))
       asignacion.set(s.id, { desde: anterior ? hora.toISOString() : s.ingreso, gestor: s.gestor })
     if (
       hora >= inicio &&

@@ -30,7 +30,9 @@ export const RESULTADOS_CIERRE = {
 } as const
 export const cierreInformeSchema = z
   .strictObject({
-    resultadoCierre: z.enum(['ACUERDO_PAGO', 'RECHAZO', 'DESISTIMIENTO', 'DERIVACION_JUICIO']),
+    resultadoCierre: z.enum(['ACUERDO_PAGO', 'RECHAZO', 'DESISTIMIENTO', 'DERIVACION_JUICIO'], {
+      error: 'Elegí el resultado del cierre',
+    }),
     montoAcordado: importeOpcionalSchema,
   })
   .refine((v) => v.resultadoCierre !== 'ACUERDO_PAGO' || v.montoAcordado != null, {
@@ -57,10 +59,13 @@ export const informeListadoSchema = z.strictObject({
   disponible: z.boolean(),
   correoEnviado: z.string().nullable(),
   error: z.string().nullable(),
+  proximoIntento: z.string().nullable(),
+  destinatarios: z.array(z.strictObject({ email: z.email(), enviadoEn: z.string() })),
 })
 export const listadoInformesSchema = z.strictObject({
   informes: z.array(informeListadoSchema),
   pruebasHabilitadas: z.boolean(),
+  total: z.number().int().nonnegative(),
   pagina: z.number(),
   paginas: z.number(),
 })

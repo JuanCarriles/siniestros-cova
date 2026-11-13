@@ -65,7 +65,7 @@
     "test:siniestros:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-bajas.db.test.mjs",
     "test:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/bajas-siniestros.db.test.mjs",
     "test:informes": "node --experimental-strip-types --test tests/informes.test.mjs tests/informes-r2.test.mjs",
-    "test:informes:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/informes.db.test.mjs tests/informes-migracion.db.test.mjs"
+    "test:informes:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/informes.db.test.mjs tests/informes-migracion.db.test.mjs tests/informes-correcciones.db.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1151.0",

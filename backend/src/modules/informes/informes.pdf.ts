@@ -123,15 +123,15 @@ export async function generarPdfInforme(d: DatosInforme, prueba = false): Promis
       espacio(50)
       const h = doc.font('Helvetica').fontSize(12).heightOfString(f.nombre, { width: 220 })
       texto(f.nombre, 42, y, 220, 12)
-      doc.rect(278, y + 2, (215 * f.cantidad) / max, 13).fill(C.navy)
+      if (f.cantidad > 0) doc.rect(278, y + 2, (215 * f.cantidad) / max, 13).fill(C.navy)
       texto(String(f.cantidad), 505, y, 48, 12, 'Helvetica-Bold')
       y += Math.max(34, h + 12)
     }
     y += 8
   }
   cabecera()
-  y = texto('Informe mensual', 42, y, ancho, 31, 'Times-Bold', C.text) + 2
-  y = texto(mes(d.periodo), 42, y, ancho, 27, 'Times-Bold', C.navy) + 14
+  y = texto('Informe mensual', 42, y, ancho, 31, 'Helvetica-Bold', C.text) + 2
+  y = texto(mes(d.periodo), 42, y, ancho, 27, 'Helvetica-Bold', C.navy) + 14
   parrafo(
     `Período ${d.periodo} · Corte: ${new Date(d.corte).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hourCycle: 'h23' })}`,
   )
@@ -159,7 +159,7 @@ export async function generarPdfInforme(d: DatosInforme, prueba = false): Promis
       top,
       244,
       d.sinDatos ? 22 : 34,
-      'Times-Bold',
+      'Helvetica-Bold',
       C.navy,
     )
     texto(label, x, top + 40, 244, 13, 'Helvetica-Bold')
@@ -168,7 +168,7 @@ export async function generarPdfInforme(d: DatosInforme, prueba = false): Promis
   parrafo('En mediación corresponde a los casos que todavía no fueron cerrados.')
   if (d.iniciales !== null)
     parrafo(
-      `${d.iniciales} abiertos al inicio + ${d.nuevos} nuevos - ${d.cerrados} cerrados. Saldo de entradas y cierres: ${d.saldo}.`,
+      `${d.iniciales} ${d.iniciales === 1 ? 'abierto' : 'abiertos'} al inicio + ${d.nuevos} ${d.nuevos === 1 ? 'nuevo' : 'nuevos'} - ${d.cerrados} ${d.cerrados === 1 ? 'cerrado' : 'cerrados'}. Saldo de entradas y cierres: ${d.saldo}.`,
     )
   if (d.sinDatos)
     parrafo(
@@ -183,7 +183,7 @@ export async function generarPdfInforme(d: DatosInforme, prueba = false): Promis
     `${d.demorados.cantidad} demorados: ${d.demorados.amarillos} entre 3 y 6 días; ${d.demorados.rojos} con 7 días o más sin movimiento.`,
   )
   pagina()
-  y = texto('Desempeño del período', 42, y, ancho, 27, 'Times-Bold', C.navy) + 22
+  y = texto('Desempeño del período', 42, y, ancho, 27, 'Helvetica-Bold', C.navy) + 22
   seccion('Tiempos de gestión')
   tabla(
     ['Indicador', 'Resultado'],
