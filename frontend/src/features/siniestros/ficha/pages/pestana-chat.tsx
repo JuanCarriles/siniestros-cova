@@ -16,6 +16,8 @@ import { roleLabels } from '@/components/layout/panel-navigation'
 import { TextareaField } from '@/components/textarea-field'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { lineaDeTiempo } from '../chat'
+import { BotonSonidoChat } from '../components/boton-sonido-chat'
 import { EstadoConexionChat } from '../components/estado-conexion-chat'
 import { PestanaFicha, PestanaVacia } from '../components/pestana-ficha'
 import { useConversacion, type MensajePendiente } from '../hooks/use-conversacion'
@@ -63,7 +65,9 @@ function etiquetaDia(iso: string) {
 // administración, del mensaje más viejo (arriba) al más nuevo (abajo, junto al cuadro para escribir). Cada mensaje
 // muestra su autor, su rol y su fecha y hora; los propios van a la derecha, con fondo y borde distintos y la
 // palabra "Vos". Llegan en tiempo real; si se corta la conexión se avisa y, al volver, se cargan los que faltaban.
-// Los mensajes no se editan ni se borran. Un siniestro cerrado o dado de baja solo se lee.
+// Un mensaje propio que no se pudo enviar queda en su lugar de la conversación (lo que llega después aparece
+// debajo) y se reenvía solo al volver la conexión. Los mensajes no se editan ni se borran. Un siniestro cerrado o
+// dado de baja solo se lee.
 export function PestanaChat() {
   const { usuario } = usePanel()
   const ficha = useFicha()
@@ -79,10 +83,26 @@ export function PestanaChat() {
   const lista = useRef<HTMLDivElement>(null)
   const cercaDelFinal = useRef(true)
   const [sinVer, setSinVer] = useState(0)
-  const cantidad = mensajes.length + pendientes.length
+  const elementos = lineaDeTiempo(mensajes, pendientes)
+  const cantidad = elementos.length
   const anterior = useRef(cantidad)
-  const ultimo = mensajes.at(-1)
-  const ultimoEsPropio = pendientes.length > 0 || ultimo?.autor.id === usuario.id
+  // Un separador antes del primer mensaje de cada día (los pendientes no cuentan: son de ahora)
+  const nuevoDia: boolean[] = []
+  let diaAnterior: string | null = null
+  for (const e of elementos) {
+    if (e.tipo !== 'mensaje') {
+      nuevoDia.push(false)
+      continue
+    }
+    const dia = claveDia(e.mensaje.fechaEnvio)
+    nuevoDia.push(dia !== diaAnterior)
+    diaAnterior = dia
+  }
+  const ultimo = elementos.at(-1)
+  // Lo último de la conversación es algo que acabo de escribir: la vista baja siempre
+  const ultimoEsPropio =
+    ultimo?.tipo === 'pendiente' ||
+    (ultimo?.tipo === 'mensaje' && ultimo.mensaje.autor.id === usuario.id)
 
   const irAlFinal = (suave = false) => {
     const el = lista.current
@@ -101,7 +121,12 @@ export function PestanaChat() {
   return (
     <PestanaFicha titulo={usuario.tipo === 'GESTOR' ? 'Chat' : 'Chat con el gestor'}>
       <div className="grid gap-4">
-        <EstadoConexionChat conexion={conexion} sala={sala} />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <EstadoConexionChat conexion={conexion} sala={sala} />
+          </div>
+          <BotonSonidoChat />
+        </div>
 
         {/* Lo que llega de otros, para el lector de pantalla (los propios ya se confirman en su mensaje) */}
         <p className="sr-only" role="status" aria-live="polite">
@@ -123,7 +148,7 @@ export function PestanaChat() {
             }}
             className="max-h-[60dvh] min-h-48 overflow-y-auto overscroll-contain rounded-lg border-2 border-line bg-surface-subtle px-3 py-4 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-5"
           >
-            {mensajes.length === 0 && pendientes.length === 0 ? (
+            {elementos.length === 0 ? (
               <PestanaVacia icono={MessagesSquare}>
                 {soloLectura
                   ? 'En este siniestro no hubo conversación.'
@@ -132,24 +157,28 @@ export function PestanaChat() {
               </PestanaVacia>
             ) : (
               <ol className="grid gap-3">
-                {mensajes.map((m, i) => (
-                  <li key={m.id} className="grid gap-3">
-                    {(i === 0 ||
-                      claveDia(mensajes[i - 1].fechaEnvio) !== claveDia(m.fechaEnvio)) && (
-                      <SeparadorDia iso={m.fechaEnvio} />
-                    )}
-                    <Mensaje mensaje={m} propio={m.autor.id === usuario.id} />
-                  </li>
-                ))}
-                {pendientes.map((p) => (
-                  <li key={p.claveEnvio}>
-                    <Pendiente
-                      pendiente={p}
-                      onReintentar={() => void enviar(p.texto, p.claveEnvio).catch(() => {})}
-                      onDescartar={() => descartar(p.claveEnvio)}
-                    />
-                  </li>
-                ))}
+                {elementos.map((e, i) => {
+                  if (e.tipo === 'pendiente') {
+                    const p = e.pendiente
+                    return (
+                      <li key={p.claveEnvio}>
+                        <Pendiente
+                          pendiente={p}
+                          conectado={conexion === 'conectada'}
+                          onReintentar={() => void enviar(p.texto, p.claveEnvio).catch(() => {})}
+                          onDescartar={() => descartar(p.claveEnvio)}
+                        />
+                      </li>
+                    )
+                  }
+                  const m = e.mensaje
+                  return (
+                    <li key={m.id} className="grid gap-3">
+                      {nuevoDia[i] && <SeparadorDia iso={m.fechaEnvio} />}
+                      <Mensaje mensaje={m} propio={m.autor.id === usuario.id} />
+                    </li>
+                  )
+                })}
               </ol>
             )}
           </div>
@@ -236,14 +265,18 @@ function EstadoLectura({ lecturas }: { lecturas: LecturaChat[] }) {
 
 function Pendiente({
   pendiente: p,
+  conectado,
   onReintentar,
   onDescartar,
 }: {
   pendiente: MensajePendiente
+  /** Con la conexión de vuelta, un fallo de conexión ya no se va a reenviar solo: se ofrece reintentar */
+  conectado: boolean
   onReintentar: () => void
   onDescartar: () => void
 }) {
   const error = p.estado === 'error'
+  const esperaConexion = error && p.reintentable && !conectado
   return (
     <article
       aria-label={error ? 'Tu mensaje no se envió' : 'Tu mensaje, enviándose'}
@@ -256,7 +289,7 @@ function Pendiente({
       {error ? (
         <div className="grid gap-2">
           <p role="alert" className="font-semibold text-danger-ink">
-            No se envió. {p.error}
+            No se envió. {esperaConexion || !p.reintentable ? p.error : 'Probá reintentarlo.'}
           </p>
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={onDescartar}>

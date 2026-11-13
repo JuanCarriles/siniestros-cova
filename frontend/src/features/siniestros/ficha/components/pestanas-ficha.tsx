@@ -14,6 +14,7 @@ import {
 import type { FichaSiniestro } from '@cova/shared/schemas/ficha-siniestro'
 import { cn } from '@/lib/utils'
 import { useChatSinLeer } from '../hooks/use-chat-sin-leer'
+import { useSonidoChat } from '../hooks/use-sonido-chat'
 
 type Pestana = {
   /** Cada pestaña es una dirección propia dentro de la ficha (/siniestros/12/vehiculos) */
@@ -68,12 +69,10 @@ export function PestanasFicha({
   const location = useLocation()
   const base = useResolvedPath('.').pathname.replace(/\/$/, '')
   const actual = location.pathname.replace(/\/$/, '')
-  const chatSinLeer = useChatSinLeer(
-    ficha.id,
-    idUsuario,
-    ficha.cantidades.chatSinLeer,
-    actual === `${base}/${CHAT}`,
-  )
+  const enElChat = actual === `${base}/${CHAT}`
+  const chatSinLeer = useChatSinLeer(ficha.id, idUsuario, ficha.cantidades.chatSinLeer, enElChat)
+  // Un mensaje de otro suena en cualquier pestaña de la ficha
+  useSonidoChat(ficha.id, idUsuario, enElChat)
   const cantidades = { ...ficha.cantidades, chatSinLeer }
 
   return (

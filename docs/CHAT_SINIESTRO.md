@@ -130,6 +130,13 @@ existía) toman el nombre y el rol actuales de su usuario.
   teclado (no hay Shift) Enter baja de línea y se envía con el botón.
 - Al enviar, el mensaje aparece como "Enviando…" y el cuadro queda libre para el siguiente. Si falla, queda
   "No se envió", con el motivo y los botones Reintentar (usa la misma clave, así que no duplica) y Descartar.
+- Un mensaje sin confirmar queda **en su lugar de la conversación**: justo después del mensaje que era el último
+  cuando se escribió (`lineaDeTiempo` en `chat.ts`; no depende del reloj del equipo). Lo que llega después, por
+  ejemplo de otros mientras no había conexión, aparece debajo y a la vista. Al confirmarse, toma la hora del
+  servidor y pasa al final.
+- Si falló por la conexión o por el servidor (sin respuesta, 408, 429, 5xx), dice "Se va a reenviar solo cuando
+  vuelva la conexión" y se reenvía solo al reconectar, de a uno y en orden. Un rechazo (403, 409…) no se reenvía
+  solo: muestra el motivo.
 - Los mensajes de otros se anuncian al lector de pantalla ("Mensaje nuevo de …").
 - Si estás leyendo más arriba, la vista no salta: aparece el botón "N mensajes nuevos".
 - La pérdida de conexión se avisa arriba. Mientras tanto se puede seguir enviando, porque el envío va por HTTP.
@@ -177,6 +184,17 @@ existía) toman el nombre y el rol actuales de su usuario.
   todos los lectores si leyó más de uno) o "Enviado. Todavía no lo leyó nadie". Siempre en texto, con un ícono
   de apoyo. Se actualiza en tiempo real y la campana de notificaciones se refresca al retirar el aviso.
 
+### Sonido de mensaje nuevo
+
+- Un mensaje de otro participante suena en cualquier pestaña de la ficha (la barra de pestañas mantiene la sala
+  abierta), aunque la pestaña del navegador esté en segundo plano. Con el chat abierto y a la vista suena más
+  suave. Los propios no suenan; varios seguidos suenan una vez (cada 1,5 s como mucho).
+- El sonido se genera con Web Audio (dos notas cortas): no hay archivo ni sonido de terceros. Los navegadores
+  no dejan sonar nada hasta el primer clic o tecla en la página; antes de eso no suena.
+- "Sonido de mensajes: activado / desactivado", junto al estado de la conexión del chat, lo silencia. Se recuerda
+  en ese navegador (`localStorage`, clave `cova:sonido-chat`). Al activarlo suena una vez de muestra.
+- `frontend/src/lib/sonido-mensajes.ts` y `hooks/use-sonido-chat.ts`.
+
 ### Mensajes sin leer en la barra de pestañas
 
 - La pestaña del chat muestra cuántos mensajes de otros no leyó el usuario. Con 1 o más, el número se destaca (como
@@ -206,6 +224,8 @@ existía) toman el nombre y el rol actuales de su usuario.
   - la cantidad sin leer de cada uno (endpoint y ficha), y que unirse a la sala no cuenta como mirar.
 - `chat.test.mjs` (frontend): lecturas sin repetir y sin el autor, y que se juntan los lectores de dos copias del
   mismo mensaje (socket y recarga).
+- `chat-sin-conexion.test.mjs` (frontend): el lugar de los mensajes sin confirmar, qué fallas se reenvían solas y
+  que una ráfaga de mensajes suene una sola vez.
 - `marcado-leido.test.mjs` (frontend, relojes simulados): marcar al entrar, otra pasada si llega algo durante el
   pedido, reintentos con espera creciente, nada con la pestaña oculta, sin bucle si el servidor no marcó nada.
 - `chat-tiempo-real.db.test.mjs`: si no se puede comprobar el acceso de una conexión, no recibe el envío.
