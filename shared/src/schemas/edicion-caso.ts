@@ -6,6 +6,8 @@ import { idSchema, opcional } from './comunes.ts'
 export const polizaEdicionSchema = z.strictObject({
   numeroSiniestro: datosCasoSchema.shape.numeroSiniestro,
   numeroPoliza: datosCasoSchema.shape.numeroPoliza,
+  montoReclamado: datosCasoSchema.shape.montoReclamado,
+  moneda: datosCasoSchema.shape.moneda,
   inicioVigencia: datosCasoSchema.shape.inicioVigencia,
   idAseguradora: datosCasoSchema.shape.idAseguradora,
   sucursal: datosCasoSchema.shape.sucursal,

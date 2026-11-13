@@ -133,6 +133,29 @@ export function DatosCasoForm({
             {...register('numeroPoliza')}
           />
           <TextField
+            label="Monto reclamado"
+            inputMode="decimal"
+            hint="Opcional. Hasta dos decimales; vacío significa sin información."
+            error={errors.montoReclamado?.message}
+            {...register('montoReclamado')}
+          />
+          <Controller
+            control={control}
+            name="moneda"
+            render={({ field }) => (
+              <SelectField
+                label="Moneda del reclamo"
+                placeholder="Elegir moneda"
+                value={field.value ?? 'ARS'}
+                onChange={field.onChange}
+                opciones={[
+                  { valor: 'ARS', etiqueta: 'Pesos argentinos (ARS)' },
+                  { valor: 'USD', etiqueta: 'Dólares estadounidenses (USD)' },
+                ]}
+              />
+            )}
+          />
+          <TextField
             label="Inicio de vigencia"
             autoComplete="off"
             maxLength={60}

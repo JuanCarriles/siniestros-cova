@@ -109,6 +109,13 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
             409,
             'No se puede dejar activo un siniestro con un usuario o ajustador dado de baja. Reactivá o reasigná sus responsables primero.',
           )
+        if (nuevo.esCierre && !cambio.cierre)
+          throw new HttpError(
+            400,
+            'Para cerrar el caso, indicá el resultado y el monto acordado cuando corresponda.',
+          )
+        if (!nuevo.esCierre && cambio.cierre)
+          throw new HttpError(400, 'Los datos de cierre solo se admiten en un estado de cierre.')
         const ahora = reloj()
         await tx.siniestro.update({
           where: { id },
@@ -116,6 +123,8 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
             idEstadoSiniestro: nuevo.id,
             fechaUltimoMovimiento: ahora,
             fechaCierre: nuevo.esCierre ? ahora : null,
+            resultadoCierre: nuevo.esCierre ? cambio.cierre!.resultadoCierre : null,
+            montoAcordado: nuevo.esCierre ? (cambio.cierre!.montoAcordado ?? null) : null,
           },
         })
         await tx.historialSiniestro.create({

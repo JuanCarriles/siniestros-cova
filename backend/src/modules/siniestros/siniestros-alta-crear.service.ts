@@ -243,6 +243,8 @@ export function crearServicioCrearSiniestro(deps: {
             data: {
               numeroSiniestro: caso.numeroSiniestro,
               numeroPoliza: caso.numeroPoliza,
+              montoReclamado: caso.montoReclamado ?? null,
+              moneda: caso.moneda,
               inicioVigencia: caso.inicioVigencia ?? null,
               sucursal: caso.sucursal,
               causa: caso.causa ?? null,

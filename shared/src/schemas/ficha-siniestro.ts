@@ -28,6 +28,10 @@ export type FichaSiniestro = {
   id: number
   numeroSiniestro: string
   numeroPoliza: string
+  montoReclamado?: string | null
+  montoAcordado?: string | null
+  moneda?: string
+  resultadoCierre?: string | null
   inicioVigencia: string | null
   sucursal: string | null
   aseguradora: { id: number; nombre: string }

@@ -12,6 +12,8 @@ const schema = z.object({
   MAIL_FROM: textoOpcional,
   RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().min(1).max(15).default(5),
   PORT: z.coerce.number().int().positive().default(3000),
+  INFORMES_PRUEBA_HABILITADOS: z.stringbool().default(false),
+  INFORMES_AUTOMATICOS: z.stringbool().default(true),
   APP_URL: z.url().default('http://localhost:5173'),
   // Cookie de sesión solo por HTTPS. Sin definir: true en producción, false en desarrollo.
   // Mientras el sitio se use por http (p. ej. http://IP-del-VPS:8080) tiene que ser false:

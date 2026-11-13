@@ -1,8 +1,9 @@
 import type { ComponentType } from 'react'
 import { createBrowserRouter, type LoaderFunction, type RouteObject } from 'react-router'
 import type { PanelSection } from '@/components/layout/panel-navigation'
+import { InformesPage } from '@/features/informes/pages/informes-page'
+import { cargarInformes } from '@/features/informes/loader'
 import { SeccionNoDisponible } from '@/components/layout/seccion-no-disponible'
-import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
 import { cargarAjustadores } from '@/features/ajustadores/loader'
 import { AjustadoresPage } from '@/features/ajustadores/pages/ajustadores-page'
 import { cargarAseguradoras } from '@/features/aseguradoras/loader'
@@ -68,7 +69,7 @@ const secciones: Record<PanelSection, ComponentType> = {
   aseguradoras: AseguradorasPage,
   ajustadores: AjustadoresPage,
   usuarios: UsuariosPage,
-  informes: () => <SeccionPendiente section="informes" />,
+  informes: InformesPage,
   perfil: PerfilPage,
   notificaciones: NotificacionesPage,
 }
@@ -82,6 +83,7 @@ const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
   usuarios: cargarUsuarios,
   perfil: cargarPerfil,
   plantillas: cargarPlantillas,
+  informes: cargarInformes,
 }
 
 export const router = createBrowserRouter([

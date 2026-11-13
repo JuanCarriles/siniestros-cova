@@ -28,6 +28,8 @@ const seleccion = {
   revision: true,
   numeroSiniestro: true,
   numeroPoliza: true,
+  montoReclamado: true,
+  moneda: true,
   inicioVigencia: true,
   sucursal: true,
   idAseguradora: true,
@@ -50,6 +52,8 @@ const datosDe = (s: Caso): DatosEdicionCaso => ({
   poliza: {
     numeroSiniestro: s.numeroSiniestro,
     numeroPoliza: s.numeroPoliza,
+    montoReclamado: s.montoReclamado?.toString() ?? null,
+    moneda: s.moneda as 'ARS' | 'USD',
     inicioVigencia: s.inicioVigencia,
     idAseguradora: s.idAseguradora,
     sucursal: s.sucursal ?? '',
@@ -213,6 +217,10 @@ export function crearServicioEdicionCaso(deps: Base, reloj = () => new Date()) {
           const datos: DatosEdicionCaso = {
             poliza: {
               ...completos.poliza,
+              montoReclamado:
+                completos.poliza.montoReclamado === undefined
+                  ? anteriores.poliza.montoReclamado
+                  : completos.poliza.montoReclamado,
               inicioVigencia: completos.poliza.inicioVigencia ?? null,
             },
             asignacion: {
@@ -298,6 +306,8 @@ export function crearServicioEdicionCaso(deps: Base, reloj = () => new Date()) {
           for (const [clave, etiqueta] of Object.entries({
             numeroSiniestro: 'Número de siniestro',
             numeroPoliza: 'Número de póliza',
+            montoReclamado: 'Monto reclamado',
+            moneda: 'Moneda',
             inicioVigencia: 'Inicio de vigencia',
             sucursal: 'Sucursal',
           }))
