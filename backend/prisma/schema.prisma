@@ -199,6 +199,8 @@ model Notificacion {
   usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  // Índice único parcial Notificacion_chat_pendiente_unico en la migración 20261111190000.
+  // Solo MENSAJE_NUEVO visible y sin leer: una fila por (idUsuario, idSiniestro).
   @@index([idUsuario, eliminado, leida, fechaCreacion])
   @@index([idSiniestro])
 }

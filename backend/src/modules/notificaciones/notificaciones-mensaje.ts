@@ -1,6 +1,5 @@
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
-import { nombreCompleto } from '../../utils/formato.ts'
 import { notificarEventoCaso } from './eventos-notificaciones.ts'
 
 /** Aviso de mensajes nuevos del chat (CU-10 1.h.1 y 1.h.1.1).
@@ -19,7 +18,7 @@ export async function notificarMensajeNuevo(
       idSiniestro: true,
       idUsuario: true,
       fechaEnvio: true,
-      usuario: { select: { nombres: true, apellidos: true, eliminado: true, tipoUsuario: true } },
+      usuario: { select: { eliminado: true, tipoUsuario: true } },
     },
   })
   if (!mensaje || mensaje.usuario.eliminado)
@@ -39,7 +38,7 @@ export async function notificarMensajeNuevo(
     idUsuarioAsignado: caso.idUsuario,
     idAutor: mensaje.idUsuario,
     tipo: 'MENSAJE_NUEVO',
-    mensaje: `${nombreCompleto(mensaje.usuario)} envió mensajes nuevos en el siniestro ${caso.numeroSiniestro}.`,
+    numeroSiniestro: caso.numeroSiniestro,
     fecha: mensaje.fechaEnvio,
     excluir: [...presentes],
   })

@@ -1,19 +1,19 @@
-import type { Prisma, TipoNotificacion } from '../../generated/prisma/client.ts'
+import type { Prisma } from '../../generated/prisma/client.ts'
+import { mensajesSinLeerPor, textoMensajesSinLeer } from '../chat/sin-leer.ts'
 
 type EventoCaso = {
   idSiniestro: number
   idUsuarioAsignado: number
   idAutor: number
-  tipo: Extract<TipoNotificacion, 'CAMBIO_ESTADO' | 'NOVEDAD_CARGADA' | 'MENSAJE_NUEVO'>
-  mensaje: string
   fecha: Date
-  /** Además del autor, quienes no reciben el aviso: en el chat, los que tienen la conversación abierta (E7-02) */
   excluir?: number[]
-}
+} & (
+  | { tipo: 'CAMBIO_ESTADO' | 'NOVEDAD_CARGADA'; mensaje: string }
+  | { tipo: 'MENSAJE_NUEVO'; numeroSiniestro: string }
+)
 
-/** Se ejecuta en la misma transacción que el evento, después de bloquear el siniestro.
- * Solo involucrados activos; un administrador asignado aparece una sola vez y el autor no recibe su aviso.
- * No envía correo. Los mensajes agrupan los pendientes por destinatario y siniestro (CU-10 1.h.1.1).
+/** Dentro de la transacción del evento, después de bloquear el siniestro.
+ * El chat conserva un solo aviso pendiente por destinatario y recalcula sus mensajes sin leer.
  */
 export async function notificarEventoCaso(tx: Prisma.TransactionClient, evento: EventoCaso) {
   const destinatarios = await tx.usuario.findMany({
@@ -26,37 +26,50 @@ export async function notificarEventoCaso(tx: Prisma.TransactionClient, evento: 
       ],
     },
     select: { id: true },
+    orderBy: { id: 'asc' },
   })
-  const avisos = destinatarios.map((destinatario) => ({
-    idUsuario: destinatario.id,
-    idSiniestro: evento.idSiniestro,
-    tipoNotificacion: evento.tipo,
-    mensaje: evento.mensaje,
-    fechaCreacion: evento.fecha,
-    leida: false,
-    revisada: false,
-  }))
   if (evento.tipo !== 'MENSAJE_NUEVO') {
-    if (avisos.length) await tx.notificacion.createMany({ data: avisos })
+    if (destinatarios.length)
+      await tx.notificacion.createMany({
+        data: destinatarios.map((d) => ({
+          idUsuario: d.id,
+          idSiniestro: evento.idSiniestro,
+          tipoNotificacion: evento.tipo,
+          mensaje: evento.mensaje,
+          fechaCreacion: evento.fecha,
+          leida: false,
+          revisada: false,
+        })),
+      })
     return
   }
-  for (const data of avisos) {
+  for (const destinatario of destinatarios) {
+    const cantidad = await tx.mensajeChat.count({
+      where: { idSiniestro: evento.idSiniestro, ...mensajesSinLeerPor(destinatario.id) },
+    })
+    const data = {
+      idUsuario: destinatario.id,
+      idSiniestro: evento.idSiniestro,
+      tipoNotificacion: evento.tipo,
+      mensaje: textoMensajesSinLeer(cantidad, evento.numeroSiniestro),
+      fechaCreacion: evento.fecha,
+      leida: false,
+      revisada: false,
+    }
     const pendiente = await tx.notificacion.findFirst({
       where: {
-        idUsuario: data.idUsuario,
+        idUsuario: destinatario.id,
         idSiniestro: evento.idSiniestro,
         tipoNotificacion: 'MENSAJE_NUEVO',
         eliminado: false,
         leida: false,
       },
-      orderBy: { id: 'desc' },
       select: { id: true, fechaCreacion: true },
     })
     if (pendiente) {
-      // Un mensaje que obtuvo el bloqueo después puede haber sido creado antes.
-      // La fecha del aviso agrupado siempre conserva el mensaje más reciente.
-      await tx.notificacion.update({
-        where: { id: pendiente.id },
+      const { count } = await tx.notificacion.updateMany({
+        // La campana pudo leer el aviso mientras lo buscábamos: no resucitar ese grupo.
+        where: { id: pendiente.id, eliminado: false, leida: false },
         data: {
           ...data,
           fechaCreacion: new Date(
@@ -64,7 +77,7 @@ export async function notificarEventoCaso(tx: Prisma.TransactionClient, evento: 
           ),
         },
       })
-      continue
+      if (count) continue
     }
     await tx.notificacion.create({ data })
   }

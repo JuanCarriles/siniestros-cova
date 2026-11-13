@@ -34,7 +34,6 @@ El correo de activación se agregará cuando exista esa historia; se quitó la i
 
 Prueba manual: dos cuentas, una administrativa y otra asignada al caso. Crear un caso verifica asignación; reasignarlo verifica aviso interno para ambos y correo solo para el nuevo. Cambiar estado o cargar una novedad debe avisar en la bandeja al asignado y administración activa, excluyendo autor, sin mail. La campana consulta su resumen al volver a la pestaña, al marcar avisos o en su consulta periódica. La conversación del chat y sus lecturas se entregan en tiempo real mediante la integración de desarrollo.
 
-
 ## Correcciones de revisión E8-02
 
 - Incorporadas las correcciones de E8-01 (af4f997): escrituras con ReadCommitted, consultas coherentes, lista disponible si falla el marcado y mejoras de accesibilidad. No se configura RepeatableRead para los marcados.
@@ -44,7 +43,8 @@ Prueba manual: dos cuentas, una administrativa y otra asignada al caso. Crear un
 - Abrir la campana marca los avisos mostrados como leídos. Si luego llega otro mensaje, genera un nuevo aviso cuando ya no hay uno sin leer; es la agrupación indicada por CU-10 1.h.1.1, no un duplicado accidental.
 - Orden de integración: E8-01, E8-02 y luego feat/chat-tiempo-real, feat/chat-mensajes y feat/chat-leidos. El trabajo del chat ya llegó mediante origin/desarrollo; sus ramas individuales no se modificaron.
 
-
 ## Verificación de la integración con desarrollo
 
 Se conserva la limpieza de E8-02 y la bandeja E8-01 corregida. El único ajuste de compatibilidad en las pruebas propias es completar el nombre y rol del autor del mensaje, ahora exigidos por el esquema del chat. La migración 20261109120000_chat_mensajes_autor pertenece a desarrollo; las pruebas la aplican exclusivamente en bases temporales, sin migrar la base del usuario ni ejecutar seeds.
+
+El agrupado, contador de mensajes pendientes y consolidación al marcar sin leer se completan en E8-03. Ver [AGRUPADO_NOTIFICACIONES_CHAT.md](AGRUPADO_NOTIFICACIONES_CHAT.md).
