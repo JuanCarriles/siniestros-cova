@@ -371,6 +371,56 @@ test(
           },
         )
         await t.test(
+          'marcar sin leer revalida el acceso después de esperar el bloqueo del caso',
+          async () => {
+            const c = await caso()
+            await enviar('admin', c.id)
+            const [aviso] = await visibles(gestor.id, c.id, { leida: false })
+            assert.ok(aviso)
+            await notificaciones.leer(gestor, aviso.id)
+            const conexion = new pg.Client({ connectionString: process.env.DATABASE_URL })
+            await conexion.connect()
+            let resultado
+            try {
+              await conexion.query('BEGIN')
+              await conexion.query('SELECT id FROM "Siniestro" WHERE id=$1 FOR NO KEY UPDATE', [
+                c.id,
+              ])
+              resultado = notificaciones.leer(gestor, aviso.id, false).then(
+                () => 'permitido',
+                (error) => error.status,
+              )
+              let esperando = false
+              for (let i = 0; i < 100 && !esperando; i++) {
+                esperando = (
+                  await conexion.query(
+                    'SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND cardinality(pg_blocking_pids(pid))>0) AS esperando',
+                  )
+                ).rows[0].esperando
+                if (!esperando) await new Promise((resolve) => setTimeout(resolve, 20))
+              }
+              assert.equal(esperando, true, 'la operación debe haber esperado el bloqueo realmente')
+              await conexion.query('UPDATE "Siniestro" SET "idUsuario"=$1 WHERE id=$2', [
+                otro.id,
+                c.id,
+              ])
+              await conexion.query('COMMIT')
+              assert.equal(
+                await resultado,
+                404,
+                'una reasignación impide marcar el aviso con permisos anteriores',
+              )
+              const actual = await db.notificacion.findUniqueOrThrow({ where: { id: aviso.id } })
+              assert.equal(actual.leida, true)
+              assert.equal(actual.eliminado, false)
+            } finally {
+              await conexion.query('ROLLBACK')
+              await resultado
+              await conexion.end()
+            }
+          },
+        )
+        await t.test(
           'migración: consolida duplicados previos sin borrar mensajes ni lecturas',
           async () => {
             const sql = new pg.Client({ connectionString: process.env.DATABASE_URL })
