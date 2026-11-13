@@ -11,7 +11,9 @@ import { plantillasRouter } from './modules/plantillas/plantillas.module.ts'
 import { healthRouter } from './modules/health/health.routes.ts'
 import { dashboardRouter } from './modules/dashboard/dashboard.module.ts'
 import { siniestrosRouter } from './modules/siniestros/siniestros.module.ts'
+import { chatRouter } from './modules/chat/chat.module.ts'
 import { notificacionesRouter } from './modules/notificaciones/notificaciones.module.ts'
+import { informesRouter } from './modules/informes/informes.module.ts'
 
 export const app = express()
 
@@ -31,10 +33,13 @@ api.use('/aseguradoras', aseguradorasRouter)
 api.use('/ajustadores', ajustadoresRouter)
 api.use('/usuarios', usuariosRouter)
 api.use('/perfil', perfilRouter)
+// E7-02: antes que el router de siniestros, que también atiende /:id/...
+api.use('/siniestros/:id/chat', chatRouter)
 api.use('/siniestros', siniestrosRouter)
 api.use('/dashboard', dashboardRouter)
 api.use('/notificaciones', notificacionesRouter)
 api.use('/plantillas', plantillasRouter)
+api.use('/informes', informesRouter)
 
 // Los routers de cada módulo se montan acá. Las rutas protegidas usan requerirSesion y requerirRol
 // (ver modules/auth/auth.module.ts).

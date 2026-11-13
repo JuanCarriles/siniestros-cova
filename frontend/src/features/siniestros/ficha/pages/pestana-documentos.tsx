@@ -1,13 +1,17 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { DocumentoFicha } from '@cova/shared/schemas/ficha-siniestro'
+import { ReactivarDocumentoDialog } from '../components/reactivar-documento-dialog'
+import { EstadoRegistro } from '@/components/abm/estado-registro'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { BajaDocumentoDialog } from '../components/baja-documento-dialog'
-import { useRevalidator } from 'react-router'
+import { useRevalidator, useSearchParams, useNavigation } from 'react-router'
 import { Aviso } from '@/components/aviso'
 import { CargaDocumentos } from '../components/carga-documentos'
 import { ImagenDocumento } from '../components/imagen-documento'
 import { rutaArchivoDocumento } from '../documentos/rutas'
 import { Button } from '@/components/ui/button'
-import { FileStack, Download, ArchiveX, X } from 'lucide-react'
+import { FileStack, Download, ArchiveX, ArchiveRestore, X } from 'lucide-react'
 import { roleLabels } from '@/components/layout/panel-navigation'
 import { formatoTamanoArchivo } from '@/features/plantillas/formato-archivo'
 import { PestanaFicha, PestanaVacia } from '../components/pestana-ficha'
@@ -21,11 +25,35 @@ export function PestanaDocumentos() {
   const ficha = useFicha()
   const revalidator = useRevalidator()
   const [aDarDeBaja, setADarDeBaja] = useState<DocumentoFicha | null>(null)
+  const [aReactivar, setAReactivar] = useState<DocumentoFicha | null>(null)
+  const [params, setParams] = useSearchParams()
+  const navegacion = useNavigation()
+  const filtroId = useId()
+  const mostrarBajas = params.get('bajas') === 'true'
   const [exito, setExito] = useState('')
   const editable = !ficha.fechaBaja && !ficha.estado.esCierre
-  const motivoRestriccion = documentos.find((d) => !d.baja.permitida)?.baja.motivo
+  const motivoRestriccion = documentos.find((d) => !d.eliminado && !d.baja.permitida)?.baja.motivo
   return (
     <PestanaFicha titulo="Documentos" cantidad={documentos.length}>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-surface-subtle p-4">
+        <Label htmlFor={filtroId} className="flex min-h-12 cursor-pointer items-center gap-3">
+          <Checkbox
+            id={filtroId}
+            checked={mostrarBajas}
+            disabled={navegacion.state === 'loading'}
+            onChange={(e) => {
+              const siguiente = new URLSearchParams(params)
+              if (e.target.checked) siguiente.set('bajas', 'true')
+              else siguiente.delete('bajas')
+              setParams(siguiente)
+            }}
+          />
+          Mostrar documentos dados de baja
+        </Label>
+        <p className="text-muted-foreground">
+          Los documentos dados de baja se conservan para su consulta.
+        </p>
+      </div>
       {exito && (
         <Aviso tipo="exito" enfocar className="mb-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -37,7 +65,7 @@ export function PestanaDocumentos() {
                 setExito('')
                 document.getElementById('titulo-pestana')?.focus()
               }}
-              aria-label="Cerrar aviso de baja del documento"
+              aria-label="Cerrar aviso del documento"
             >
               <X aria-hidden="true" />
               Cerrar aviso
@@ -58,6 +86,21 @@ export function PestanaDocumentos() {
             setExito(
               'Documento dado de baja. El motivo, la fecha y el autor quedaron en el historial.',
             )
+            void revalidator.revalidate()
+          }}
+        />
+      )}
+      {aReactivar && (
+        <ReactivarDocumentoDialog
+          documento={aReactivar}
+          idSiniestro={ficha.id}
+          onCerrar={() => setAReactivar(null)}
+          onDesactualizado={() => {
+            void revalidator.revalidate()
+          }}
+          onHecho={() => {
+            setAReactivar(null)
+            setExito('Documento reactivado. La operación quedó registrada en el historial.')
             void revalidator.revalidate()
           }}
         />
@@ -83,7 +126,11 @@ export function PestanaDocumentos() {
         </Aviso>
       )}
       {documentos.length === 0 ? (
-        <PestanaVacia icono={FileStack}>Este siniestro todavía no tiene documentos.</PestanaVacia>
+        <PestanaVacia icono={FileStack}>
+          {mostrarBajas
+            ? 'Este siniestro todavía no tiene documentos.'
+            : 'No hay documentos activos. Activá «Mostrar documentos dados de baja» para consultar los retirados.'}
+        </PestanaVacia>
       ) : (
         <ul
           className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
@@ -94,7 +141,12 @@ export function PestanaDocumentos() {
               key={d.id}
               className="flex flex-col items-start gap-3 rounded-lg border-2 border-line-strong bg-card p-4"
             >
-              <ImagenDocumento key={d.id} documento={d} idSiniestro={ficha.id} />
+              <EstadoRegistro eliminado={d.eliminado} fechaBaja={d.fechaBaja} genero="masculino" />
+              <ImagenDocumento
+                key={`${d.id}-${d.eliminado}`}
+                documento={d}
+                idSiniestro={ficha.id}
+              />
               <span className="grid w-full min-w-0 gap-1">
                 <span className="text-lg font-semibold break-words">{d.nombreOriginal}</span>
                 <span className="text-muted-foreground">
@@ -110,7 +162,7 @@ export function PestanaDocumentos() {
               </span>
               <Button asChild variant="outline" className="mt-auto w-full">
                 <a
-                  href={rutaArchivoDocumento(ficha.id, d.id, 'original')}
+                  href={rutaArchivoDocumento(ficha.id, d.id, 'original', d.eliminado)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -118,6 +170,38 @@ export function PestanaDocumentos() {
                   Descargar archivo
                 </a>
               </Button>
+              {d.eliminado && (
+                <div className="grid w-full gap-2 rounded-lg border bg-surface-subtle p-3">
+                  <p className="break-words">
+                    <strong>Motivo de baja:</strong> {d.motivoBaja ?? 'Sin motivo registrado'}
+                  </p>
+                  <p>
+                    <strong>Realizada por:</strong> {d.autorBaja?.nombre ?? 'Sin autor registrado'}
+                  </p>
+                  {d.fechaBaja && (
+                    <time dateTime={d.fechaBaja} className="dato">
+                      {fechaHoraDe(d.fechaBaja)}
+                    </time>
+                  )}
+                </div>
+              )}
+              {d.reactivacion.permitida && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setExito('')
+                    setAReactivar(d)
+                  }}
+                  aria-label={`Reactivar ${d.nombreOriginal}`}
+                >
+                  <ArchiveRestore aria-hidden="true" />
+                  Reactivar documento
+                </Button>
+              )}
+              {d.eliminado && !d.reactivacion.permitida && (
+                <p className="text-muted-foreground">{d.reactivacion.motivo}</p>
+              )}
               {d.baja.permitida && (
                 <Button
                   variant="ghost"

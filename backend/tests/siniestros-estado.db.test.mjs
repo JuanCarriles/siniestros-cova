@@ -109,7 +109,11 @@ async function conBaseDeEstados(comprobar) {
       },
     })
     const cambiar = (actor, casoId, desde, hacia) =>
-      servicio.cambiar(actor, casoId, { idEstadoAnterior: desde.id, idEstadoSiniestro: hacia.id })
+      servicio.cambiar(actor, casoId, {
+        idEstadoAnterior: desde.id,
+        idEstadoSiniestro: hacia.id,
+        ...(hacia.esCierre ? { cierre: { resultadoCierre: 'RECHAZO' } } : {}),
+      })
 
     await comprobar({
       prisma,
@@ -284,6 +288,7 @@ test(
           falla.cambiar(admin, siniestro.id, {
             idEstadoAnterior: nuevo.id,
             idEstadoSiniestro: cierre.id,
+            cierre: { resultadoCierre: 'RECHAZO' },
           }),
           /Fallo simulado/,
         )
@@ -375,22 +380,35 @@ test(
         // Mantener aisladas las comprobaciones de la bandeja original de este test.
         await prisma.notificacion.deleteMany({ where: { idSiniestro: casoGestor.id } })
 
-        const bandeja = bandejaNotificacionesSchema.parse(await avisos.listar(gestor, 1))
+        const bandeja = bandejaNotificacionesSchema.parse(
+          await avisos.listar(gestor, { pagina: 1, lectura: 'todas', revision: 'todas' }),
+        )
         assert.ok(bandeja.items.length > 0)
         assert.ok(bandeja.items.every((n) => n.siniestro.id === siniestro.id))
-        assert.equal((await avisos.listar(ajeno, 1)).total, 0)
+        assert.equal(
+          (await avisos.listar(ajeno, { pagina: 1, lectura: 'todas', revision: 'todas' })).total,
+          0,
+        )
         const propia = bandeja.items[0]
         await assert.rejects(avisos.leer(ajeno, propia.id), { status: 404 })
         await avisos.leer(gestor, propia.id)
         await avisos.leer(gestor, propia.id)
-        assert.equal((await avisos.listar(gestor, 1)).sinLeer, bandeja.sinLeer - 1)
+        assert.equal(
+          (await avisos.listar(gestor, { pagina: 1, lectura: 'todas', revision: 'todas' })).sinLeer,
+          bandeja.sinLeer - 1,
+        )
         await prisma.siniestro.update({
           where: { id: siniestro.id },
           data: { eliminado: true, fechaBaja: ahora },
         })
-        assert.equal((await avisos.listar(gestor, 1)).total, 0)
+        assert.equal(
+          (await avisos.listar(gestor, { pagina: 1, lectura: 'todas', revision: 'todas' })).total,
+          0,
+        )
         assert.ok(
-          (await avisos.listar(otroAdmin, 1)).items.some((n) => n.siniestro.id === siniestro.id),
+          (
+            await avisos.listar(otroAdmin, { pagina: 1, lectura: 'todas', revision: 'todas' })
+          ).items.some((n) => n.siniestro.id === siniestro.id),
         )
         await assert.rejects(avisos.leer(gestor, propia.id), { status: 404 })
         await prisma.siniestro.update({
@@ -398,7 +416,7 @@ test(
           data: { eliminado: false, fechaBaja: null, idUsuario: ajeno.id },
         })
         assert.equal(
-          (await avisos.listar(gestor, 1)).total,
+          (await avisos.listar(gestor, { pagina: 1, lectura: 'todas', revision: 'todas' })).total,
           0,
           'un gestor reasignado no puede seguir consultando avisos del caso',
         )
@@ -413,8 +431,12 @@ test(
             fechaCreacion: ahora,
           })),
         })
-        const pagina1 = await avisos.listar(ajeno, 1),
-          pagina2 = await avisos.listar(ajeno, 99)
+        const pagina1 = await avisos.listar(ajeno, {
+            pagina: 1,
+            lectura: 'todas',
+            revision: 'todas',
+          }),
+          pagina2 = await avisos.listar(ajeno, { pagina: 99, lectura: 'todas', revision: 'todas' })
         assert.equal(pagina1.items.length, 20)
         assert.equal(pagina2.items.length, 5)
         assert.equal(pagina2.pagina, 2)
@@ -481,6 +503,7 @@ test(
         const cuerpo = (desde, hacia) => ({
           idEstadoAnterior: desde.id,
           idEstadoSiniestro: hacia.id,
+          ...(hacia.esCierre ? { cierre: { resultadoCierre: 'RECHAZO' } } : {}),
         })
         const propioHTTP = await caso()
         const previoHTTP = await prisma.siniestro.findUniqueOrThrow({

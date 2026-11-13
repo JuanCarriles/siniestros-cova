@@ -13,6 +13,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { ARCHIVO_MAX_BYTES, rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
 import { z } from 'zod'
+import { conEntornoR2, exigirEntornoR2, carpetaR2Schema, claveInformeR2Schema } from './rutas-r2.ts'
 import { leerConfiguracionR2 } from '../config/r2.ts'
 import type { ConfiguracionR2 } from '../config/r2.ts'
 import { HttpError } from '../utils/httpError.ts'
@@ -46,10 +47,8 @@ const tiposMime = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 } as const
 
-// altas/{idUsuario}: documentos subidos durante el alta, antes de que exista el siniestro (CU-09 34)
-const carpetaSchema = z
-  .string()
-  .regex(/^(plantillas|pruebas|siniestros\/[1-9]\d*|altas\/[1-9]\d*)$/)
+// Claves anteriores siguen siendo legibles; solo se escribe en el entorno configurado.
+const clavePrivadaSchema = z.union([claveArchivoSchema, claveInformeR2Schema])
 
 function errorR2(mensaje: string, error: unknown): HttpError {
   const fallo = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } } | null
@@ -117,10 +116,50 @@ export function crearAlmacenamientoR2(
       responseChecksumValidation: 'WHEN_REQUIRED',
     })
 
+  const carpetaDestino = (carpeta: string) =>
+    carpetaR2Schema.parse(conEntornoR2(carpeta, config.R2_ENTORNO))
+  const claveLeida = (clave: string) =>
+    exigirEntornoR2(clavePrivadaSchema.parse(clave), config.R2_ENTORNO)
   return {
+    entorno: config.R2_ENTORNO,
+    // Informes generados por el servidor: únicamente PDF, en un prefijo independiente.
+    async subirInforme(clave: string, contenido: Buffer) {
+      const key = claveInformeR2Schema.parse(conEntornoR2(clave, config.R2_ENTORNO))
+      if (contenido.length > 10 * 1024 * 1024 || contenido.subarray(0, 5).toString() !== '%PDF-')
+        throw new HttpError(413, 'El informe PDF no es válido o supera los 10 MB.')
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: config.R2_BUCKET,
+          Key: key,
+          Body: contenido,
+          ContentType: 'application/pdf',
+          ContentDisposition: disposicionDescarga('informe-mensual.pdf'),
+          CacheControl: 'private, no-store',
+        }),
+      )
+    },
+    async leerInforme(clave: string) {
+      const key = exigirEntornoR2(claveInformeR2Schema.parse(clave), config.R2_ENTORNO)
+      const objeto = await s3.send(new GetObjectCommand({ Bucket: config.R2_BUCKET, Key: key }), {
+        abortSignal: AbortSignal.timeout(30000),
+      })
+      if (!objeto.Body) throw new HttpError(404, 'El PDF no está disponible.')
+      const chunks: Buffer[] = []
+      let bytes = 0
+      for await (const chunk of objeto.Body as AsyncIterable<Uint8Array>) {
+        bytes += chunk.length
+        if (bytes > 10 * 1024 * 1024) {
+          if ('destroy' in objeto.Body && typeof objeto.Body.destroy === 'function')
+            objeto.Body.destroy()
+          throw new HttpError(413, 'El informe supera el tamaño permitido.')
+        }
+        chunks.push(Buffer.from(chunk))
+      }
+      return Buffer.concat(chunks)
+    },
     async subir(entrada: ArchivoEntrada, carpeta: string, metadata?: Record<string, string>) {
       const archivo = archivoSchema.parse(entrada)
-      const prefijo = carpetaSchema.parse(carpeta)
+      const prefijo = carpetaDestino(carpeta)
       const { tipoExtension, mimeType } = await validarArchivo(archivo)
       if (archivo.contenido.byteLength > config.UPLOAD_MAX_MB * 1024 * 1024)
         throw new HttpError(
@@ -165,9 +204,9 @@ export function crearAlmacenamientoR2(
 
     // Solo derivados creados por sharp; WebP no se habilita como formato de entrada del usuario.
     async subirDerivada(clave: string, contenido: Uint8Array, metadata?: Record<string, string>) {
-      const key = claveArchivoSchema.parse(clave)
+      const key = claveArchivoSchema.parse(conEntornoR2(clave, config.R2_ENTORNO))
       if (
-        !/^(siniestros|altas)\/[1-9]\d*\/[a-f0-9-]+\.(?:(jpe?g|png)\.(vista|miniatura)\.webp|webp(?:\.miniatura\.webp)?)$/i.test(
+        !/^(dev|produccion)\/(?:altas\/[1-9]\d*|siniestros\/[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+(?:\/siniestro-[1-9]\d*)?)?)\/[a-f0-9-]+\.(?:(jpe?g|png)\.(vista|miniatura)\.webp|webp(?:\.miniatura\.webp)?)$/i.test(
           key,
         ) ||
         !contenido.byteLength ||
@@ -195,7 +234,7 @@ export function crearAlmacenamientoR2(
     // Una firma se genera localmente: no demuestra que el objeto exista en R2.
     // Comprobar solo después de autorizar y resolver la clave desde la base.
     async comprobarExistencia(clave: string) {
-      const key = claveArchivoSchema.parse(clave)
+      const key = claveLeida(clave)
       try {
         const objeto = await s3.send(new HeadObjectCommand({ Bucket: config.R2_BUCKET, Key: key }))
         return objeto.Metadata
@@ -220,7 +259,7 @@ export function crearAlmacenamientoR2(
 
     /** Lectura privada para PDF.js: GET único y consumo progresivo con límite de bytes. */
     async leerParaVista(clave: string) {
-      const key = claveArchivoSchema.parse(clave)
+      const key = claveLeida(clave)
       const abortar = new AbortController()
       try {
         const objeto = await s3.send(new GetObjectCommand({ Bucket: config.R2_BUCKET, Key: key }), {
@@ -276,7 +315,7 @@ export function crearAlmacenamientoR2(
 
     // Sólo llamar después de autorizar al usuario y obtener la clave de la base.
     async firmarDescarga(clave: string, nombreOriginal: string, mimeType: string) {
-      const key = claveArchivoSchema.parse(clave)
+      const key = claveLeida(clave)
       const formato = Object.entries(tiposMime).find(([, mime]) => mime === mimeType)?.[0]
       if (!formato)
         throw new HttpError(
@@ -312,9 +351,9 @@ export function crearAlmacenamientoR2(
     // Copia un objeto a otra carpeta con el mismo nombre (UUID.ext); el original queda. Sirve para mover: copiar,
     // registrar la clave nueva y recién entonces borrar el original. Devuelve la clave nueva.
     async copiar(clave: string, carpeta: string) {
-      const origen = claveArchivoSchema.parse(clave)
-      const destino = claveArchivoSchema.parse(
-        `${carpetaSchema.parse(carpeta)}/${origen.split('/').pop()}`,
+      const origen = claveLeida(clave)
+      const destino = clavePrivadaSchema.parse(
+        `${carpetaDestino(carpeta)}/${origen.split('/').pop()}`,
       )
       try {
         await s3.send(
@@ -332,7 +371,7 @@ export function crearAlmacenamientoR2(
 
     // Borrado físico de plantillas autorizadas, compensación de altas y pruebas; no usar para bajas lógicas.
     async eliminar(clave: string) {
-      const key = claveArchivoSchema.parse(clave)
+      const key = claveLeida(clave)
       try {
         await s3.send(new DeleteObjectCommand({ Bucket: config.R2_BUCKET, Key: key }))
       } catch (error) {

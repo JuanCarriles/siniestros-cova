@@ -1,8 +1,9 @@
 import type { ComponentType } from 'react'
 import { createBrowserRouter, type LoaderFunction, type RouteObject } from 'react-router'
 import type { PanelSection } from '@/components/layout/panel-navigation'
+import { InformesPage } from '@/features/informes/pages/informes-page'
+import { cargarInformes } from '@/features/informes/loader'
 import { SeccionNoDisponible } from '@/components/layout/seccion-no-disponible'
-import { SeccionPendiente } from '@/components/layout/seccion-pendiente'
 import { cargarAjustadores } from '@/features/ajustadores/loader'
 import { AjustadoresPage } from '@/features/ajustadores/pages/ajustadores-page'
 import { cargarAseguradoras } from '@/features/aseguradoras/loader'
@@ -21,6 +22,7 @@ import { PestanaVehiculos } from '@/features/siniestros/ficha/pages/pestana-vehi
 import { ErrorPestana } from '@/features/siniestros/ficha/components/pestana-ficha'
 import { SiniestrosPage } from '@/features/siniestros/pages/siniestros-page'
 import { AseguradorasPage } from '@/features/aseguradoras/pages/aseguradoras-page'
+import { NotificacionesPage } from '@/features/notificaciones/notificaciones-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { RecuperarContrasenaPage } from '@/features/auth/pages/recuperar-contrasena-page'
 import {
@@ -67,8 +69,9 @@ const secciones: Record<PanelSection, ComponentType> = {
   aseguradoras: AseguradorasPage,
   ajustadores: AjustadoresPage,
   usuarios: UsuariosPage,
-  informes: () => <SeccionPendiente section="informes" />,
+  informes: InformesPage,
   perfil: PerfilPage,
+  notificaciones: NotificacionesPage,
 }
 
 // Loader propio de las secciones que traen datos. Valida sesión y rol antes de pedirlos.
@@ -80,6 +83,7 @@ const loaders: Partial<Record<PanelSection, LoaderFunction>> = {
   usuarios: cargarUsuarios,
   perfil: cargarPerfil,
   plantillas: cargarPlantillas,
+  informes: cargarInformes,
 }
 
 export const router = createBrowserRouter([
@@ -146,7 +150,7 @@ export const router = createBrowserRouter([
                         loader: cargarPestana('documentos'),
                         Component: PestanaDocumentos,
                       },
-                      { path: 'chat', Component: PestanaChat },
+                      { path: 'chat', loader: cargarPestana('chat'), Component: PestanaChat },
                       {
                         path: 'historial',
                         loader: cargarPestana('historial'),

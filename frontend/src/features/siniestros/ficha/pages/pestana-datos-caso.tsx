@@ -1,3 +1,4 @@
+import { RESULTADOS_CIERRE } from '@cova/shared/schemas/informes'
 import { useRef, useState } from 'react'
 import { useRevalidator } from 'react-router'
 import { FileText, Flag, MapPin, Pencil, UsersRound, UserRoundCheck } from 'lucide-react'
@@ -83,9 +84,9 @@ export function PestanaDatosCaso() {
       )}
       {falloCorreo && (
         <Aviso tipo="info" className="mb-5">
-          La reasignación quedó guardada y se enviaron los avisos internos, pero no se pudieron
-          enviar todos los mails. No hace falta repetir la operación; consultá la configuración de
-          correo con la administración.
+          La reasignación quedó guardada y se enviaron los avisos internos, pero no se pudo enviar
+          el mail al nuevo responsable. No hace falta repetir la operación; consultá la
+          configuración de correo con la administración.
         </Aviso>
       )}
       {reasignando && (
@@ -115,6 +116,22 @@ export function PestanaDatosCaso() {
             <Dato etiqueta="Número de póliza">
               <span className="dato">{ficha.numeroPoliza}</span>
             </Dato>
+            <Dato etiqueta="Monto reclamado">
+              {ficha.montoReclamado != null
+                ? `${ficha.moneda} ${ficha.montoReclamado}`
+                : 'Sin información'}
+            </Dato>
+            {ficha.resultadoCierre && (
+              <Dato etiqueta="Resultado del cierre">
+                {RESULTADOS_CIERRE[ficha.resultadoCierre as keyof typeof RESULTADOS_CIERRE] ??
+                  ficha.resultadoCierre}
+              </Dato>
+            )}
+            {ficha.montoAcordado != null && (
+              <Dato etiqueta="Monto acordado">
+                {ficha.moneda} {ficha.montoAcordado}
+              </Dato>
+            )}
             <Dato etiqueta="Inicio de vigencia">{ficha.inicioVigencia}</Dato>
             <Dato etiqueta="Aseguradora">{ficha.aseguradora.nombre}</Dato>
             <Dato etiqueta="Sucursal de emisión">{ficha.sucursal}</Dato>

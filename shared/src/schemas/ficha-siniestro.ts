@@ -28,6 +28,10 @@ export type FichaSiniestro = {
   id: number
   numeroSiniestro: string
   numeroPoliza: string
+  montoReclamado?: string | null
+  montoAcordado?: string | null
+  moneda?: string
+  resultadoCierre?: string | null
   inicioVigencia: string | null
   sucursal: string | null
   aseguradora: { id: number; nombre: string }
@@ -52,6 +56,8 @@ export type FichaSiniestro = {
     peritos: number
     novedades: number
     documentos: number
+    /** Mensajes del chat de otros que el usuario todavía no leyó (E7-03) */
+    chatSinLeer: number
   }
 }
 
@@ -152,6 +158,11 @@ export type NovedadFicha = {
 
 /** GET /api/siniestros/:id/documentos (CU-10 1.g), del más nuevo al más viejo */
 export type DocumentoFicha = {
+  eliminado: boolean
+  fechaBaja: string | null
+  motivoBaja: string | null
+  autorBaja: { nombre: string; tipoUsuario: TipoUsuario } | null
+  reactivacion: PermisoBajaDocumento
   baja: PermisoBajaDocumento
   /** Sin claves privadas ni URLs persistidas: se accede por endpoints autorizados. */
   imagen: {

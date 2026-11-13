@@ -169,6 +169,7 @@ test('alta paso 1: normaliza lo cargado y rechaza lo que falta antes del servici
     {
       numeroSiniestro: '2026-04871',
       numeroPoliza: '44-9820117',
+      moneda: 'ARS',
       inicioVigencia: null,
       idAseguradora: 2,
       sucursal: 'Casa central',

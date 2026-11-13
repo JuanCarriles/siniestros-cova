@@ -1,7 +1,8 @@
 import { z } from 'zod'
+import { leerEntornoR2, type EntornoR2 } from '../lib/rutas-r2.ts'
 
 // Se validan al arrancar: si falta o está mal una variable, el servidor no levanta.
-// R2 se valida de forma diferida en config/r2.ts cuando se usa el almacenamiento.
+// El entorno de R2 se exige al arrancar; las credenciales siguen validándose al usar config/r2.ts.
 const textoOpcional = z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional())
 
 const schema = z.object({
@@ -12,6 +13,8 @@ const schema = z.object({
   MAIL_FROM: textoOpcional,
   RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().min(1).max(15).default(5),
   PORT: z.coerce.number().int().positive().default(3000),
+  INFORMES_PRUEBA_HABILITADOS: z.stringbool().default(false),
+  INFORMES_AUTOMATICOS: z.stringbool().default(true),
   APP_URL: z.url().default('http://localhost:5173'),
   // Cookie de sesión solo por HTTPS. Sin definir: true en producción, false en desarrollo.
   // Mientras el sitio se use por http (p. ej. http://IP-del-VPS:8080) tiene que ser false:
@@ -31,8 +34,20 @@ if (!parsed.success) {
   process.exit(1)
 }
 
+// Docker local también usa NODE_ENV=production: nunca inferir el prefijo del bucket.
+let entornoR2: EntornoR2
+try {
+  entornoR2 = leerEntornoR2(process.env)
+} catch (error) {
+  console.error(
+    error instanceof Error ? error.message : 'Configuración R2 inválida: revisá R2_ENTORNO.',
+  )
+  process.exit(1)
+}
+
 export const env = {
   ...parsed.data,
+  R2_ENTORNO: entornoR2,
   COOKIE_SECURE: parsed.data.COOKIE_SECURE ?? parsed.data.NODE_ENV === 'production',
 }
 export const isProd = env.NODE_ENV === 'production'

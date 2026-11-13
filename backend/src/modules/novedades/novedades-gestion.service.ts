@@ -1,10 +1,10 @@
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import type { NovedadData } from '@cova/shared/schemas/novedades'
 import type { ParteCreada } from '@cova/shared/schemas/partes-siniestro'
-import { TipoNotificacion } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
+import { notificarEventoCaso } from '../notificaciones/eventos-notificaciones.ts'
 import {
   prepararEdicion,
   registrarMovimiento,
@@ -65,29 +65,14 @@ export function crearServicioNovedadesGestion({ transaccion }: { transaccion: Tr
             ...eventoHistorial.novedad(autor, ahora),
           },
         })
-        const destinatarios = await tx.usuario.findMany({
-          where: {
-            eliminado: false,
-            id: { not: usuario.id },
-            OR: [
-              { id: siniestro.idUsuario },
-              { tipoUsuario: { in: ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'] } },
-            ],
-          },
-          select: { id: true },
+        await notificarEventoCaso(tx, {
+          idSiniestro,
+          idUsuarioAsignado: siniestro.idUsuario,
+          idAutor: usuario.id,
+          tipo: 'NOVEDAD_CARGADA',
+          mensaje: `${nombreCompleto(autor)} cargó una novedad en el siniestro ${siniestro.numeroSiniestro}`,
+          fecha: ahora,
         })
-        if (destinatarios.length)
-          await tx.notificacion.createMany({
-            data: destinatarios.map((d) => ({
-              idUsuario: d.id,
-              idSiniestro,
-              tipoNotificacion: TipoNotificacion.NOVEDAD_CARGADA,
-              mensaje: `${nombreCompleto(autor)} cargó una novedad en el siniestro ${siniestro.numeroSiniestro}`,
-              fechaCreacion: ahora,
-              leida: false,
-              revisada: false,
-            })),
-          })
         return { id }
       })
     },

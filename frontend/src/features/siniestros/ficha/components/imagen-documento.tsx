@@ -46,7 +46,12 @@ export function ImagenDocumento({
             </span>
           ) : (
             <img
-              src={rutaArchivoDocumento(idSiniestro, documento.id, 'miniatura')}
+              src={rutaArchivoDocumento(
+                idSiniestro,
+                documento.id,
+                'miniatura',
+                documento.eliminado,
+              )}
               alt={`Miniatura de ${documento.nombreOriginal}`}
               width={300}
               height={Math.max(1, Math.round((300 * imagen.alto) / imagen.ancho))}
@@ -67,6 +72,7 @@ export function ImagenDocumento({
         <DialogHeader>
           <DialogTitle className="break-words">{documento.nombreOriginal}</DialogTitle>
           <DialogDescription>
+            {documento.eliminado && 'Documento dado de baja. '}
             {esPdf
               ? 'Leé el PDF aquí, sin guardarlo en tu equipo. Podés cambiar de página y ampliar.'
               : 'Imagen guardada en el expediente. Ajustá el tamaño o usá el zoom para leer los detalles.'}
@@ -75,7 +81,12 @@ export function ImagenDocumento({
         {esPdf ? (
           <Suspense fallback={<p role="status">Preparando visor…</p>}>
             <VistaPdfDocumento
-              ruta={`/api/siniestros/${idSiniestro}/documentos/${documento.id}/contenido`}
+              ruta={rutaArchivoDocumento(
+                idSiniestro,
+                documento.id,
+                'contenido',
+                documento.eliminado,
+              )}
             />
           </Suspense>
         ) : (
@@ -83,7 +94,7 @@ export function ImagenDocumento({
         )}
         <Button asChild>
           <a
-            href={rutaArchivoDocumento(idSiniestro, documento.id, 'original')}
+            href={rutaArchivoDocumento(idSiniestro, documento.id, 'original', documento.eliminado)}
             target="_blank"
             rel="noopener noreferrer"
           >

@@ -1,9 +1,49 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { before, after } from 'node:test'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import pg from 'pg'
 import { crearSiniestroSchema } from '@cova/shared/schemas/siniestros-alta'
 import { getPrisma, disconnectPrisma } from '../src/lib/prisma.ts'
 import { crearServicioCrearSiniestro } from '../src/modules/siniestros/siniestros-alta-crear.service.ts'
 import { HttpError } from '../src/utils/httpError.ts'
+
+// Las pruebas de alta también usan una base local temporal: nunca escriben en la base habitual.
+const original = process.env.DATABASE_URL
+let control,
+  creada = false
+const nombreBase = `cova_test_alta_crear_${Date.now()}_${process.pid}`
+before(async () => {
+  assert.notEqual(process.env.NODE_ENV, 'production')
+  assert.ok(original)
+  const url = new URL(original)
+  assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+  control = new pg.Client({ connectionString: original, connectionTimeoutMillis: 4000 })
+  await control.connect()
+  await control.query(`CREATE DATABASE "${nombreBase}"`)
+  creada = true
+  url.pathname = '/' + nombreBase
+  process.env.DATABASE_URL = url.href
+  await promisify(execFile)(
+    process.execPath,
+    ['../node_modules/prisma/build/index.js', 'migrate', 'deploy', '--config', 'prisma.config.ts'],
+    { env: process.env },
+  )
+  const db = getPrisma()
+  await db.pais.create({
+    data: { nombre: 'Argentina', provincias: { create: { nombre: 'Santa Fe' } } },
+  })
+  await db.tipoDocumento.create({ data: { nombre: 'DNI' } })
+  await db.estadoSiniestro.create({
+    data: { nombre: 'En tratamiento', descripcion: 'Caso abierto' },
+  })
+})
+after(async () => {
+  await disconnectPrisma()
+  process.env.DATABASE_URL = original
+  if (creada) await control.query(`DROP DATABASE "${nombreBase}" WITH (FORCE)`)
+  await control?.end()
+})
 
 // CU-09 paso 36 (E4-10): crear el siniestro con todo lo cargado en el alta, en una sola transacción.
 test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno y mail', async () => {
@@ -248,7 +288,10 @@ test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno 
 
           assert.equal(s.peritos[0].cerrado, false, 'sin fecha de cierre: pendiente')
           // Pasó a la carpeta del siniestro y el original de altas/ se borró
-          assert.equal(s.documentos[0].urlArchivoSinDominio, `siniestros/${creado.id}/doc.pdf`)
+          assert.equal(
+            s.documentos[0].urlArchivoSinDominio,
+            `dev/siniestros/${numero}/POL-1/doc.pdf`,
+          )
           assert.deepEqual(r2.borradas, [`altas/${admin.id}/doc.pdf`])
           // Historial (E5-09): el alta y cada parte, en el orden de la línea de tiempo, todo a nombre de quien lo
           // cargó y con la hora de la transacción
@@ -359,7 +402,7 @@ test('PostgreSQL: crear siniestro desde el alta, con asignación, aviso interno 
             { status: 503 },
           )
           assert.equal(r2.borradas.length, 1)
-          assert.match(r2.borradas[0], /^siniestros\/\d+\/doc\.pdf$/)
+          assert.match(r2.borradas[0], /^dev\/siniestros\/[^/]+\/POL-1\/doc\.pdf$/)
 
           throw rollback
         },

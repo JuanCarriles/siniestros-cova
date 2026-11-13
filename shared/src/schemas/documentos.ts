@@ -25,6 +25,15 @@ export const compresionDocumentoSchema = z.enum(['identity', 'gzip']).default('i
 export const documentoSubidoSchema = z.strictObject({ id: z.int().positive() })
 export type DocumentoSubido = z.output<typeof documentoSubidoSchema>
 
+export const consultaDocumentosSchema = z.strictObject({
+  bajas: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((valor) => valor === 'true'),
+})
+export type ConsultaDocumentos = z.output<typeof consultaDocumentosSchema>
+export const reactivarDocumentoSchema = z.strictObject({})
+
 export const bajaDocumentoSchema = z.strictObject({
   motivo: z
     .string()
@@ -62,6 +71,26 @@ export function permisoBajaDocumento(
       permitida: false,
       motivo:
         'Solo podés dar de baja documentos que cargaste vos durante las primeras 48 horas. Solicitá la baja a un administrador.',
+    }
+  return { permitida: true, motivo: null }
+}
+
+/** La reactivación es administrativa; no reinicia las 48 horas de la carga original. */
+export function permisoReactivarDocumento(
+  actor: { tipoUsuario: string },
+  documento: { eliminado: boolean },
+  caso: { eliminado: boolean; cerrado: boolean },
+): PermisoBajaDocumento {
+  if (!documento.eliminado) return { permitida: false, motivo: 'El documento ya está activo.' }
+  if (actor.tipoUsuario !== 'ADMINISTRADOR' && actor.tipoUsuario !== 'SUPER_ADMINISTRADOR')
+    return {
+      permitida: false,
+      motivo: 'Solo un administrador o superadministrador puede reactivar documentos.',
+    }
+  if (caso.eliminado || caso.cerrado)
+    return {
+      permitida: false,
+      motivo: 'El siniestro está cerrado o dado de baja: sus documentos son de solo lectura.',
     }
   return { permitida: true, motivo: null }
 }

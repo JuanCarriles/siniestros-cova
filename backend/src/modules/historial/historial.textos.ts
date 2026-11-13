@@ -91,6 +91,12 @@ export const eventoHistorial = {
       `${nombreCompleto(autor)} dio de baja el documento "${nombreArchivo}" el ${formatearFecha(fecha)}. Motivo: ${motivo}`,
     ),
 
+  documentoReactivado: (autor: Persona, nombreArchivo: string, fecha: Date) =>
+    evento(
+      TipoEventoHistorial.DOCUMENTO,
+      `${nombreCompleto(autor)} reactivó el documento "${nombreArchivo}" el ${formatearFecha(fecha)}`,
+    ),
+
   documentoEliminado: (autor: Persona, nombreArchivo: string, fecha: Date) =>
     evento(
       TipoEventoHistorial.DOCUMENTO,

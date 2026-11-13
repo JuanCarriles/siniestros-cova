@@ -12,6 +12,7 @@ import { HttpError } from '../../utils/httpError.ts'
 import { aDireccion, dia, hora, nombreDe, selectDireccion } from './ficha.ts'
 import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 import { sinMovimiento } from './demora.ts'
+import { mensajesSinLeerPor } from '../chat/sin-leer.ts'
 
 type BaseSiniestros = Pick<
   Prisma.TransactionClient,
@@ -268,6 +269,10 @@ export function crearServicioSiniestros(
           id: true,
           numeroSiniestro: true,
           numeroPoliza: true,
+          montoReclamado: true,
+          montoAcordado: true,
+          moneda: true,
+          resultadoCierre: true,
           inicioVigencia: true,
           sucursal: true,
           fechaAsignacion: true,
@@ -295,6 +300,7 @@ export function crearServicioSiniestros(
               peritos: activo,
               novedades: activo,
               documentos: activo,
+              mensajes: { where: mensajesSinLeerPor(usuario.id) },
             },
           },
         },
@@ -304,6 +310,10 @@ export function crearServicioSiniestros(
         id: fila.id,
         numeroSiniestro: fila.numeroSiniestro,
         numeroPoliza: fila.numeroPoliza,
+        montoReclamado: fila.montoReclamado?.toString() ?? null,
+        montoAcordado: fila.montoAcordado?.toString() ?? null,
+        moneda: fila.moneda,
+        resultadoCierre: fila.resultadoCierre,
         inicioVigencia: fila.inicioVigencia,
         sucursal: fila.sucursal,
         aseguradora: fila.aseguradora,
@@ -329,6 +339,7 @@ export function crearServicioSiniestros(
           peritos: fila._count.peritos,
           novedades: fila._count.novedades,
           documentos: fila._count.documentos,
+          chatSinLeer: fila._count.mensajes,
         },
       }
     },

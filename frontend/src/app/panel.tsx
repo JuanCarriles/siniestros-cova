@@ -7,7 +7,11 @@ export function Panel() {
   const { usuario } = useLoaderData<typeof cargarPanel>()
   return (
     <PanelLayout
-      usuario={{ nombre: `${usuario.nombres} ${usuario.apellidos}`, tipo: usuario.tipoUsuario }}
+      usuario={{
+        id: usuario.id,
+        nombre: `${usuario.nombres} ${usuario.apellidos}`,
+        tipo: usuario.tipoUsuario,
+      }}
       basePath=""
     />
   )

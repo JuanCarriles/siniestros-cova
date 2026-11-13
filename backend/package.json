@@ -19,6 +19,11 @@
     "test:recuperacion": "node --experimental-strip-types --test tests/recuperacion.test.mjs",
     "test:siniestros:edicion": "node --experimental-strip-types --test tests/siniestros-edicion.test.mjs",
     "test:siniestros:edicion:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-edicion.db.test.mjs",
+    "test:chat": "node --experimental-strip-types --test tests/chat-tiempo-real.test.mjs",
+    "test:chat:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-tiempo-real.db.test.mjs",
+    "test:chat:mensajes:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-mensajes.db.test.mjs",
+    "test:chat:agrupado:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-agrupado.db.test.mjs",
+    "test:chat:leidos:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/chat-leidos.db.test.mjs",
     "test:siniestros:estado": "node --experimental-strip-types --test tests/siniestros-estado.test.mjs",
     "test:siniestros:estado:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-estado.db.test.mjs",
     "test:dashboard": "node --experimental-strip-types --test tests/dashboard.test.mjs tests/dashboard-administrador.test.mjs",
@@ -37,7 +42,9 @@
     "test:siniestros:reasignacion:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-reasignacion.db.test.mjs",
     "test:siniestros": "node --experimental-strip-types --test tests/siniestros.test.mjs",
     "test:siniestros:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros.db.test.mjs tests/siniestros-alta.db.test.mjs tests/siniestros-alta-crear.db.test.mjs tests/siniestros-ficha.db.test.mjs tests/siniestros-partes.db.test.mjs tests/siniestros-partes-concurrencia.db.test.mjs tests/siniestros-abogados-peritos.db.test.mjs tests/siniestros-novedades.db.test.mjs tests/siniestros-demoras.db.test.mjs",
-    "test:migraciones:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/migraciones.db.test.mjs",
+    "test:migraciones:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/migraciones.db.test.mjs tests/triggers-estadistica.db.test.mjs",
+    "test:eventos:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/eventos-notificaciones.db.test.mjs",
+    "test:notificaciones:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/notificaciones.db.test.mjs",
     "test:r2": "node --experimental-strip-types --test tests/r2.test.mjs",
     "r2:smoke": "tsx --env-file=.env src/scripts/probar-r2.ts",
     "r2:demo": "tsx --env-file=.env src/dev/r2-demo/server.ts",
@@ -56,7 +63,14 @@
     "test:plantillas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/plantillas.db.test.mjs",
     "test:siniestros:bajas": "node --experimental-strip-types --test tests/siniestros-bajas.test.mjs",
     "test:siniestros:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/siniestros-bajas.db.test.mjs",
-    "test:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/bajas-siniestros.db.test.mjs"
+    "test:bajas:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/bajas-siniestros.db.test.mjs",
+    "test:informes": "node --experimental-strip-types --test tests/informes.test.mjs tests/informes-r2.test.mjs",
+    "test:informes:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/informes.db.test.mjs tests/informes-migracion.db.test.mjs tests/informes-correcciones.db.test.mjs",
+    "r2:reorganizar": "tsx --env-file=.env src/scripts/reorganizar-r2.ts",
+    "test:rutas-r2": "node --experimental-strip-types --test tests/rutas-r2.test.mjs",
+    "test:rutas-r2:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/rutas-r2.db.test.mjs",
+    "test:actividad:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/actividad-dashboard.db.test.mjs",
+    "test:documentos:reactivacion:db": "node --experimental-strip-types --env-file-if-exists=.env --test tests/documentos-reactivacion.db.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1151.0",
@@ -70,7 +84,9 @@
     "file-type": "^22.2.0",
     "helmet": "^8.3.0",
     "multer": "^2.5.0",
+    "pdfkit": "^0.20.2",
     "sharp": "^0.35.5",
+    "socket.io": "^4.8.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -78,7 +94,9 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.3.0",
     "@types/node": "^22.20.5",
+    "@types/pdfkit": "^0.17.7",
     "prisma": "7.10.0",
+    "socket.io-client": "^4.8.4",
     "tsdown": "^0.21.10",
     "tsx": "^4.23.15",
     "typescript": "~6.0.2"

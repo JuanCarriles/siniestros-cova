@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { asegurarCarpetaSiniestroR2 } from './carpeta-siniestro.ts'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import { idCargaDocumentoSchema } from '@cova/shared/schemas/documentos'
 import { TipoNotificacion, type Prisma } from '../../generated/prisma/client.ts'
@@ -71,10 +72,14 @@ export function crearServicioDocumentosGestion(
         return existente(tx)
       })
       if (previo) return previo
+      const carpeta = await deps.transaccion(async (tx) => {
+        await comprobar(tx, usuario, id)
+        return asegurarCarpetaSiniestroR2(tx, id)
+      })
       const { objeto, imagen, claves } = await subirDocumentoProcesado(
         deps.almacenamiento(),
         archivo,
-        `siniestros/${id}`,
+        carpeta,
       )
       let conservar = false
       try {

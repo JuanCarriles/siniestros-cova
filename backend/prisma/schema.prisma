@@ -171,7 +171,7 @@ model DocumentoPlantilla {
   encabezado     String
   descripcion    String    @default("")
   tamanoBytes    BigInt?
-  /// Clave relativa de R2 (plantillas/uuid.ext), nunca una URL completa.
+  /// Clave relativa de R2 (entorno/plantillas/uuid.ext), nunca una URL completa.
   urlArchivo     String
   tipoExtension  String
   fechaCarga     DateTime  @default(now()) @db.Timestamptz(3)
@@ -199,6 +199,8 @@ model Notificacion {
   usuario   Usuario   @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro Siniestro @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  // Índice único parcial Notificacion_chat_pendiente_unico en la migración 20261111190000.
+  // Solo MENSAJE_NUEVO visible y sin leer: una fila por (idUsuario, idSiniestro).
   @@index([idUsuario, eliminado, leida, fechaCreacion])
   @@index([idSiniestro])
 }
@@ -224,14 +226,22 @@ model HistorialSiniestro {
   @@index([idUsuario])
 }
 
+/// Mensajes del chat del siniestro (CU-10 1.h, E7-02). No se editan ni se borran desde el sistema: solo se van
+/// con el borrado físico del siniestro (RF-27). eliminado y fechaBaja quedan sin uso.
 model MensajeChat {
-  id               Int       @id @default(autoincrement())
-  fechaEnvio       DateTime  @default(now()) @db.Timestamptz(3)
+  id               Int          @id @default(autoincrement())
+  fechaEnvio       DateTime     @default(now()) @db.Timestamptz(3)
   contenidoMensaje String
+  /// Nombre y apellido de quien lo envió, tal como era en ese momento
+  autor            String
+  /// Su tipo de usuario en ese momento
+  tipoUsuarioAutor TipoUsuario?
+  /// Identificador de cada envío del formulario: si se reintenta después de perder la respuesta, no se duplica
+  claveEnvio       String?      @unique
   idUsuario        Int
   idSiniestro      Int
-  eliminado        Boolean   @default(false)
-  fechaBaja        DateTime? @db.Timestamptz(3)
+  eliminado        Boolean      @default(false)
+  fechaBaja        DateTime?    @db.Timestamptz(3)
 
   usuario   Usuario              @relation(fields: [idUsuario], references: [id], onDelete: Restrict, onUpdate: Restrict)
   siniestro Siniestro            @relation(fields: [idSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -271,7 +281,7 @@ model DocumentoSiniestro {
   altoImagen            Int?
   tamanoOptimizadoBytes BigInt?
   nombreOriginal        String
-  /// Clave relativa de R2 (siniestros/id/uuid.ext), nunca una URL firmada.
+  /// Clave relativa de R2 (entorno/siniestros/numero/poliza/uuid.ext), nunca una URL firmada.
   urlArchivoSinDominio  String
   tipoExtension         String
   mimeType              String
@@ -484,32 +494,119 @@ model EstadoSiniestro {
   siniestros Siniestro[]
 }
 
-model Siniestro {
-  id                    Int       @id @default(autoincrement())
-  /// Control de cambios simultáneos de los datos del caso; no cuenta como movimiento.
-  revision              Int       @default(0)
+enum ResultadoCierre {
+  ACUERDO_PAGO
+  RECHAZO
+  DESISTIMIENTO
+  DERIVACION_JUICIO
+}
+
+// Documento oficial único por período; los de prueba llevan su propia clave. R2 solo contiene el PDF.
+model InformeMensual {
+  id                 String                @id @default(uuid()) @db.Uuid
+  clavePeriodo       String                @unique
+  periodo            String                @db.VarChar(7)
+  prueba             Boolean               @default(false)
+  estado             String                @default("PENDIENTE")
+  fechaCreacion      DateTime              @default(now()) @db.Timestamptz(3)
+  fechaActualizacion DateTime              @updatedAt @db.Timestamptz(3)
+  datos              Json?
+  clavePdf           String?
+  tamanoBytes        Int?
+  correoEnviado      DateTime?             @db.Timestamptz(3)
+  destinatario       String?
+  intentosFallidos   Int                   @default(0)
+  proximoIntento     DateTime?             @db.Timestamptz(3)
+  envioHasta         DateTime?             @db.Timestamptz(3)
+  envios             InformeMensualEnvio[]
+  error              String?
+  idSolicitante      Int?
+
+  @@index([periodo, fechaCreacion])
+}
+
+// Actividad de solo lectura del dashboard: conserva instantáneas aunque se elimine el expediente.
+model ActividadSiniestro {
+  id                    Int          @id @default(autoincrement())
+  /// Referencia histórica, sin FK: sobrevive al borrado del historial particular.
+  idHistorial           Int?         @unique
+  idSiniestroReferencia Int
   numeroSiniestro       String
+  tipoEvento            String
+  descripcion           String
+  fechaEvento           DateTime     @default(now()) @db.Timestamptz(3)
+  idAutor               Int?
+  autorNombre           String
+  autorTipoUsuario      TipoUsuario?
+  /// Solo para abrir la ficha mientras exista. El borrado la deja en null, conserva la instantánea.
+  idSiniestro           Int?
+  siniestro             Siniestro?   @relation(fields: [idSiniestro], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@index([fechaEvento, id])
+  @@index([idSiniestroReferencia])
+  @@index([idSiniestro])
+}
+
+model InformeMensualEnvio {
+  id        String         @id @default(uuid()) @db.Uuid
+  idInforme String         @db.Uuid
+  /// Referencia histórica: la entrega se conserva aunque el usuario deje de estar activo.
+  idUsuario Int?
+  email     String
+  enviadoEn DateTime       @db.Timestamptz(3)
+  informe   InformeMensual @relation(fields: [idInforme], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@unique([idInforme, email])
+}
+
+// Registro estadístico mínimo e independiente del expediente: sobrevive al borrado físico.
+// Los triggers lo escriben en la misma transacción de cada operación. No contiene documentos ni mensajes.
+model RegistroEstadisticoSiniestro {
+  id            BigInt   @id @default(autoincrement())
+  idSiniestro   Int
+  fechaRegistro DateTime @default(now()) @db.Timestamptz(3)
+  fechaEvento   DateTime @db.Timestamptz(3)
+  evento        String
+  idAutor       Int?
+  datos         Json
+
+  @@index([idSiniestro, fechaRegistro, id])
+  @@index([fechaEvento, evento])
+}
+
+model Siniestro {
+  /// Carpeta lógica reservada para documentos; el adaptador antepone dev/ o produccion/.
+  /// Se conserva al modificar los números para no perder ni dispersar archivos.
+  carpetaR2             String?          @unique
+  id                    Int              @id @default(autoincrement())
+  /// Control de cambios simultáneos de los datos del caso; no cuenta como movimiento.
+  revision              Int              @default(0)
+  numeroSiniestro       String
+  montoReclamado        Decimal?         @db.Decimal(16, 2)
+  montoAcordado         Decimal?         @db.Decimal(16, 2)
+  moneda                String           @default("ARS") @db.VarChar(3)
+  resultadoCierre       ResultadoCierre?
   numeroPoliza          String
-  fechaAsignacion       DateTime  @db.Timestamptz(3)
+  fechaAsignacion       DateTime         @db.Timestamptz(3)
   menorEdadInvolucrado  Boolean
   idEstadoSiniestro     Int
   idAseguradora         Int
   idUsuario             Int
-  fechaOcurrencia       DateTime? @db.Date
-  horaOcurrencia        DateTime? @db.Time
+  fechaOcurrencia       DateTime?        @db.Date
+  horaOcurrencia        DateTime?        @db.Time
   inicioVigencia        String?
   sucursal              String?
   causa                 String?
-  fechaCierre           DateTime? @db.Timestamptz(3)
+  fechaCierre           DateTime?        @db.Timestamptz(3)
   /// Cuándo se movió el caso por última vez (RF-19, E5-10): cambio de estado, novedad, documento o cierre de pericia.
   /// La demora (72 horas) y el semáforo se calculan al consultar, desde acá; no se guardan.
-  fechaUltimoMovimiento DateTime? @db.Timestamptz(3)
+  fechaUltimoMovimiento DateTime?        @db.Timestamptz(3)
   idAjustador           Int?
   idDireccion           Int?
-  eliminado             Boolean   @default(false)
-  fechaBaja             DateTime? @db.Timestamptz(3)
+  eliminado             Boolean          @default(false)
+  fechaBaja             DateTime?        @db.Timestamptz(3)
   /// Impide nuevas operaciones mientras se eliminan los archivos externos; permite reintentar fallos.
-  eliminacionEnCurso    Boolean   @default(false)
+  eliminacionEnCurso    Boolean          @default(false)
 
   estadoSiniestro      EstadoSiniestro      @relation(fields: [idEstadoSiniestro], references: [id], onDelete: Restrict, onUpdate: Restrict)
   aseguradora          Aseguradora          @relation(fields: [idAseguradora], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -518,6 +615,7 @@ model Siniestro {
   direccion            Direccion?           @relation(fields: [idDireccion], references: [id], onDelete: Restrict, onUpdate: Restrict)
   notificaciones       Notificacion[]
   eventosHistorial     HistorialSiniestro[]
+  actividadDashboard   ActividadSiniestro[]
   mensajes             MensajeChat[]
   documentos           DocumentoSiniestro[]
   vehiculos            Vehiculo[]

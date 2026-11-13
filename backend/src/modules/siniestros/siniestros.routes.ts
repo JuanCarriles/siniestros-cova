@@ -1,7 +1,13 @@
 import { pipeline } from 'node:stream/promises'
 import { Router, type RequestHandler } from 'express'
 import { rechazoArchivo } from '@cova/shared/schemas/archivos'
-import { idCargaDocumentoSchema, compresionDocumentoSchema } from '@cova/shared/schemas/documentos'
+import {
+  idCargaDocumentoSchema,
+  compresionDocumentoSchema,
+  consultaDocumentosSchema,
+  reactivarDocumentoSchema,
+  type ConsultaDocumentos,
+} from '@cova/shared/schemas/documentos'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import { idSchema } from '@cova/shared/schemas/comunes'
 import {
@@ -28,6 +34,7 @@ import {
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import { nombreOriginalUtf8, recibirArchivo } from '../../middlewares/recibir-archivo.ts'
 import { HttpError } from '../../utils/httpError.ts'
+import type { crearServicioReactivacionDocumento } from '../documentos/documentos-reactivacion.service.ts'
 import type { crearServicioBajaDocumento } from '../documentos/documentos-baja.service.ts'
 import type { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
 import type { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
@@ -46,10 +53,15 @@ import type { crearServicioEdicionCaso } from './siniestros-edicion.service.ts'
 import type { crearServicioReasignacion } from './siniestros-reasignacion.service.ts'
 import { reasignarSiniestroSchema } from '@cova/shared/schemas/reasignacion-siniestro'
 import type { crearServicioNovedadesGestion } from '../novedades/novedades-gestion.service.ts'
+import { tiempoReal } from '../chat/tiempo-real.ts'
 
 /** Lectura de cada pestaña de la ficha (CU-10). Cada historia suma sus acciones en su propio servicio. */
 type PestanaFicha = {
-  listar: (usuario: SesionUsuario, idSiniestro: number) => Promise<unknown>
+  listar: (
+    usuario: SesionUsuario,
+    idSiniestro: number,
+    consulta?: ConsultaDocumentos,
+  ) => Promise<unknown>
 }
 export const PESTANAS_FICHA = [
   'vehiculos',
@@ -92,6 +104,7 @@ export const PESTANAS_FICHA = [
 // DELETE /api/siniestros/alta/documentos  { clave } lo quita
 // POST   /api/siniestros/alta             crea el siniestro con todo lo cargado y avisa al asignado
 export function crearSiniestrosRouter(deps: {
+  documentosReactivacion: ReturnType<typeof crearServicioReactivacionDocumento>
   documentosBaja: ReturnType<typeof crearServicioBajaDocumento>
   documentosArchivos: ReturnType<typeof crearServicioArchivosDocumento>
   documentosCarga: ReturnType<typeof crearServicioDocumentosGestion>
@@ -197,12 +210,26 @@ export function crearSiniestrosRouter(deps: {
     )
     res.status(204).end()
   })
+  router.patch(
+    '/:id/documentos/:idDocumento/reactivacion',
+    soloAdministracion,
+    async (req, res) => {
+      reactivarDocumentoSchema.parse(req.body ?? {})
+      await deps.documentosReactivacion.reactivar(
+        usuarioDeSesion(req),
+        idSchema.parse(req.params.id),
+        idSchema.parse(req.params.idDocumento),
+      )
+      res.status(204).end()
+    },
+  )
   router.get('/:id/documentos/:idDocumento/contenido', async (req, res) => {
     const resultado = await deps.documentosArchivos.obtener(
       usuarioDeSesion(req),
       idSchema.parse(req.params.id),
       idSchema.parse(req.params.idDocumento),
       'contenido',
+      consultaDocumentosSchema.parse({ bajas: req.query.bajas }),
     )
     if (!('contenido' in resultado)) throw new HttpError(500, 'No se pudo abrir el documento.')
     res.set('Cache-Control', 'private, no-store')
@@ -226,6 +253,7 @@ export function crearSiniestrosRouter(deps: {
         idSchema.parse(req.params.id),
         idSchema.parse(req.params.idDocumento),
         tipo,
+        consultaDocumentosSchema.parse({ bajas: req.query.bajas }),
       )
       if (!('url' in firma)) throw new HttpError(500, 'No se pudo generar la descarga.')
       res.redirect(302, firma.url)
@@ -257,7 +285,9 @@ export function crearSiniestrosRouter(deps: {
     requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'),
     async (req, res) => {
       confirmarBajaSiniestroSchema.parse(req.body ?? {})
-      await operaciones.darDeBaja(usuarioDeSesion(req), idSchema.parse(req.params.id))
+      const id = idSchema.parse(req.params.id)
+      await operaciones.darDeBaja(usuarioDeSesion(req), id)
+      await tiempoReal.revisarSala(id)
       res.status(204).end()
     },
   )
@@ -267,11 +297,9 @@ export function crearSiniestrosRouter(deps: {
     res.status(204).end()
   })
   router.delete('/:id', requerirRol('ADMINISTRADOR', 'SUPER_ADMINISTRADOR'), async (req, res) => {
-    await operaciones.eliminar(
-      usuarioDeSesion(req),
-      idSchema.parse(req.params.id),
-      confirmarSiniestroSchema.parse(req.body),
-    )
+    const id = idSchema.parse(req.params.id)
+    await operaciones.eliminar(usuarioDeSesion(req), id, confirmarSiniestroSchema.parse(req.body))
+    await tiempoReal.revisarSala(id)
     res.status(204).end()
   })
   router.get('/:id/reasignacion', soloAdministracion, async (req, res) => {
@@ -280,13 +308,15 @@ export function crearSiniestrosRouter(deps: {
   })
   router.patch('/:id/reasignacion', soloAdministracion, async (req, res) => {
     res.set('Cache-Control', 'no-store')
-    res.json(
-      await reasignacion.reasignar(
-        usuarioDeSesion(req),
-        idSchema.parse(req.params.id),
-        reasignarSiniestroSchema.parse(req.body),
-      ),
+    const id = idSchema.parse(req.params.id)
+    const resultado = await reasignacion.reasignar(
+      usuarioDeSesion(req),
+      id,
+      reasignarSiniestroSchema.parse(req.body),
     )
+    // E7-01: el responsable anterior sale ya de la sala del chat
+    await tiempoReal.revisarSala(id)
+    res.json(resultado)
   })
   router.get('/:id', async (req, res) => {
     res.json(await servicio.obtener(usuarioDeSesion(req), idSchema.parse(req.params.id)))
@@ -298,7 +328,17 @@ export function crearSiniestrosRouter(deps: {
 
   for (const pestana of PESTANAS_FICHA) {
     router.get(`/:id/${pestana}`, async (req, res) => {
-      if (pestana === 'documentos') res.set('Cache-Control', 'private, no-store')
+      if (pestana === 'documentos') {
+        res.set('Cache-Control', 'private, no-store')
+        res.json(
+          await ficha.documentos.listar(
+            usuarioDeSesion(req),
+            idSchema.parse(req.params.id),
+            consultaDocumentosSchema.parse(req.query),
+          ),
+        )
+        return
+      }
       res.json(await ficha[pestana].listar(usuarioDeSesion(req), idSchema.parse(req.params.id)))
     })
   }

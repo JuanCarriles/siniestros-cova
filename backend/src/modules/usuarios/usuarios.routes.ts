@@ -5,6 +5,7 @@ import { idSchema } from '@cova/shared/schemas/comunes'
 import { requerirRol, usuarioDeSesion } from '../../middlewares/autenticar.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import type { crearServicioUsuarios } from './usuarios.service.ts'
+import { tiempoReal } from '../chat/tiempo-real.ts'
 
 export function crearUsuariosRouter({
   servicio,
@@ -38,16 +39,20 @@ export function crearUsuariosRouter({
       .json(await servicio.crear(usuarioDeSesion(req), usuarioAltaSchema.parse(req.body)))
   })
   router.patch('/:id', async (req, res) => {
-    res.json(
-      await servicio.modificar(
-        usuarioDeSesion(req),
-        idSchema.parse(req.params.id),
-        usuarioModificacionSchema.parse(req.body),
-      ),
+    const id = idSchema.parse(req.params.id)
+    const resultado = await servicio.modificar(
+      usuarioDeSesion(req),
+      id,
+      usuarioModificacionSchema.parse(req.body),
     )
+    // E7-01: un cambio de rol puede quitarle salas del chat que tiene abiertas
+    await tiempoReal.revisarUsuario(id)
+    res.json(resultado)
   })
   router.patch('/:id/baja', async (req, res) => {
-    await servicio.darDeBaja(usuarioDeSesion(req), idSchema.parse(req.params.id))
+    const id = idSchema.parse(req.params.id)
+    await servicio.darDeBaja(usuarioDeSesion(req), id)
+    await tiempoReal.revisarUsuario(id)
     res.status(204).end()
   })
   router.patch('/:id/reactivacion', async (req, res) => {

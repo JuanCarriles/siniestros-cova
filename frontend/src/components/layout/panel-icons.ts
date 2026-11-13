@@ -1,4 +1,5 @@
 import {
+  Bell,
   Building2,
   ChartNoAxesCombined,
   FileStack,
@@ -19,4 +20,5 @@ export const sectionIcons = {
   usuarios: UsersRound,
   informes: ChartNoAxesCombined,
   perfil: UserRound,
+  notificaciones: Bell,
 } satisfies Record<PanelSection, typeof FolderOpen>

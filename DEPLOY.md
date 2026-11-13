@@ -144,9 +144,12 @@ En el panel de Cloudflare, **R2**:
 Así, si el token de la app se filtra, no alcanza para borrar los backups. El ID de la cuenta (`R2_ACCOUNT_ID`) está en la
 página principal de R2.
 
+**Organización por entorno:** configurar `R2_ENTORNO=produccion` en el VPS y `dev` en la PC. Las nuevas rutas y el procedimiento de reorganización están en [docs/ORGANIZACION_R2.md](docs/ORGANIZACION_R2.md). Agregar expiración de 30 días a `dev/altas/` y `produccion/altas/`, manteniendo `altas/` para borradores anteriores.
+
 **Regla de limpieza de `altas/`** (en `siniestros-cova` y también en `siniestro-cova-dev`). Durante el alta de un
-siniestro los documentos se suben a `altas/{usuario}/`, porque el siniestro todavía no existe; al crearlo pasan a
-`siniestros/{id}/`. Lo que queda en `altas/` es de altas abandonadas (se cerró el navegador y nunca se retomaron) o un
+siniestro los documentos se suben a `{entorno}/altas/{usuario}/`, porque el siniestro todavía no existe; al crearlo pasan a
+`{entorno}/siniestros/{numeroSiniestro}/{numeroPoliza}/`. Los borradores anteriores pueden seguir en `altas/`.
+Lo que queda en esas carpetas temporales es de altas abandonadas (se cerró el navegador y nunca se retomaron) o un
 original que no se pudo borrar después de moverlo. En el bucket → **Settings** → **Object lifecycle rules** →
 **Add rule**:
 
@@ -158,7 +161,7 @@ original que no se pudo borrar después de moverlo. En el bucket → **Settings*
 | Después de | 30 días desde que se subieron        |
 
 El prefijo es importante: una regla sobre todo el bucket borraría los documentos de los siniestros. Un siniestro nunca
-depende de `altas/`: al crearlo, sus documentos se copian a `siniestros/{id}/` dentro de la misma operación, y si alguno
+depende de `altas/`: al crearlo, sus documentos se copian a `{entorno}/siniestros/{numeroSiniestro}/{numeroPoliza}/` dentro de la misma operación, y si alguno
 falta o R2 falla, no se crea. Un alta que se retome después de 30 días avisa qué documentos ya no están para volver a
 cargarlos.
 
@@ -220,6 +223,7 @@ R2_ACCOUNT_ID=<id de la cuenta>
 R2_ACCESS_KEY_ID=<token del backend>
 R2_SECRET_ACCESS_KEY=<token del backend>
 R2_BUCKET=siniestros-cova
+R2_ENTORNO=produccion
 RESEND_API_KEY=<clave de la API de Resend>
 ```
 
@@ -357,6 +361,8 @@ Todos aceptan `--help`. Funcionan aunque el servicio `backup` no esté corriendo
 El detalle (ramas, PRs, cuidados con las migraciones) está en
 [`docs/flujo-de-trabajo.md`](docs/flujo-de-trabajo.md#3-deploy-en-producción). En resumen, después de mergear a `main`:
 
+**Antes de ejecutar el `up`:** si actualizás a la versión con carpetas R2 (PR #90), cargá `R2_ENTORNO=produccion` en `backend/.env` y seguí la [lista específica de esta entrega](#actualización-con-carpetas-r2-reactivación-y-actividad-persistente-pr-90). En Docker local usá `dev`.
+
 ```
 sh scripts/backup-ahora.sh
 ```
@@ -371,6 +377,29 @@ docker compose ps
 
 Si la versión nueva agrega variables de entorno, cargalas en el `.env` que corresponda **antes** del `up` (y en el
 gestor de contraseñas).
+
+---
+
+### Actualización con carpetas R2, reactivación y actividad persistente (PR #90)
+
+Esta entrega reúne tres partes: organización de documentos por entorno y expediente; consulta/reactivación de documentos dados de baja; y actividad del dashboard que sobrevive al borrado del caso. La descripción de la PR debe enumerarlas y enlazar este procedimiento. Para próximas entregas, separar cada tema en su propia rama facilita revisar y revertir cambios.
+
+Aplicar este orden después del backup y antes de dar el despliegue por terminado:
+
+1. **Antes del `up`**, cargar `R2_ENTORNO=produccion` en `backend/.env` del VPS y guardar la copia actualizada en el gestor. En Docker local usar `R2_ENTORNO=dev`, aunque `NODE_ENV=production`. La API rechazará el arranque si falta el valor explícito.
+2. Desplegar con `docker compose up -d --build --wait`. El servicio `migrate` aplica las migraciones pendientes de la cadena: E8-03 (`20261111190000_aviso_chat_pendiente_unico`), informe mensual (`20261112120000_informe_mensual`), carpetas (`20261112180000_carpetas_r2`), actividad (`20261112200000_actividad_dashboard_persistente`) y entregas/reintentos del informe corregido (`20261113200000_informes_entregas_reintentos`). No reescribir migraciones ya aplicadas. Revisar `docker compose logs migrate` y `docker compose ps`.
+3. Reorganizar los archivos referenciados en la base del VPS: primero simular y revisar el resultado; después aplicar, solo si los valores de entorno, base y bucket son los correctos:
+
+   ```bash
+   docker compose exec backend node dist/reorganizar-r2.mjs --entorno=produccion
+   docker compose exec backend node dist/reorganizar-r2.mjs --entorno=produccion --aplicar
+   ```
+
+   El script copia, comprueba y actualiza referencias; no elimina originales. Probar descargas y miniaturas de documentos anteriores, los dados de baja y los informes. Ver el detalle en [ORGANIZACION_R2.md](docs/ORGANIZACION_R2.md).
+4. En Cloudflare, agregar manualmente vencimiento a **30 días** sobre los prefijos `dev/altas/` y `produccion/altas/` en los buckets correspondientes. Mantener la regla sobre `altas/` mientras existan borradores anteriores. No aplicar a todo el bucket ni a siniestros, plantillas o informes.
+5. Registrar fecha, responsable y resultado de la reorganización en la PR o bitácora de despliegue. Los objetos originales sin prefijo siguen ocupando espacio (temporalmente habrá ambas copias). Retirarlos en una **ventana posterior** acordada, solamente después de comprobar todas las bases/entornos que puedan referenciarlos, las descargas y sus backups. Preparar un inventario de claves exactas y una revisión por otra persona antes de borrar. No retirar prefijos enteros ni originales desde una sola base sin esa comprobación.
+
+El inventario de disparadores SQL y la comprobación del esquema estadístico están en [TRIGGERS.md](docs/TRIGGERS.md). Los pasos de Cloudflare y la retirada posterior son manuales: no los ejecuta la migración ni el script de reorganización.
 
 ---
 

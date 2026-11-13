@@ -6,7 +6,7 @@ import { crearServicioNotificaciones } from './notificaciones.service.ts'
 export const notificacionesRouter = crearNotificacionesRouter({
   requerirSesion,
   servicio: crearServicioNotificaciones({
-    transaccion: (trabajo) =>
-      getPrisma().$transaction(trabajo, { isolationLevel: 'RepeatableRead' }),
+    // ReadCommitted por defecto para escrituras; solo las consultas piden una foto coherente.
+    transaccion: (trabajo, opciones) => getPrisma().$transaction(trabajo, opciones),
   }),
 })

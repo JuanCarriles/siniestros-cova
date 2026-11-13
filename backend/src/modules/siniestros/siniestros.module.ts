@@ -7,6 +7,7 @@ import { crearAlmacenamientoR2, type AlmacenamientoR2 } from '../../lib/r2.ts'
 import { getPrisma } from '../../lib/prisma.ts'
 import { requerirSesion } from '../auth/auth.module.ts'
 import { crearServicioArchivosDocumento } from '../documentos/documentos-archivos.service.ts'
+import { crearServicioReactivacionDocumento } from '../documentos/documentos-reactivacion.service.ts'
 import { crearServicioBajaDocumento } from '../documentos/documentos-baja.service.ts'
 import { crearServicioDocumentosFicha } from '../documentos/documentos-ficha.service.ts'
 import { crearServicioDocumentosGestion } from '../documentos/documentos-gestion.service.ts'
@@ -97,6 +98,10 @@ const transaccionPartes: Transaccion = (trabajo) =>
   getPrisma().$transaction(trabajo, { timeout: 15_000 })
 
 export const siniestrosRouter = crearSiniestrosRouter({
+  documentosReactivacion: crearServicioReactivacionDocumento({
+    transaccion: transaccionPartes,
+    almacenamiento: r2,
+  }),
   documentosBaja: crearServicioBajaDocumento(transaccionPartes),
   documentosArchivos: crearServicioArchivosDocumento(db, r2),
   documentosCarga: crearServicioDocumentosGestion({

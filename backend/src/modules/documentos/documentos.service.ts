@@ -1,10 +1,15 @@
+import { conEntornoR2 } from '../../lib/rutas-r2.ts'
+import { asegurarCarpetaSiniestroR2 } from './carpeta-siniestro.ts'
 import { documentoSiniestroSchema } from '@cova/shared/schemas/documentos'
 import { idSchema } from '@cova/shared/schemas/comunes'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import type { AlmacenamientoR2, ArchivoEntrada } from '../../lib/r2.ts'
 import { HttpError } from '../../utils/httpError.ts'
 
-type BaseDocumentos = Pick<Prisma.TransactionClient, 'usuario' | 'siniestro' | 'documentoSiniestro'>
+type BaseDocumentos = Pick<
+  Prisma.TransactionClient,
+  'usuario' | 'siniestro' | 'documentoSiniestro' | '$queryRaw'
+>
 type Destino = { tipo: 'siniestro'; idSiniestro: number }
 type Acceso = {
   idUsuario: number
@@ -44,8 +49,11 @@ export function crearServicioDocumentos(deps: {
         idSiniestro: idSchema.parse(entrada.destino.idSiniestro),
       }
       await comprobarAcceso({ idUsuario, accion: 'subir', destino })
-      const carpeta = `siniestros/${destino.idSiniestro}`
-      const archivo = await almacenamiento.subir(entrada.archivo, carpeta)
+      const carpeta = await asegurarCarpetaSiniestroR2(prisma, destino.idSiniestro)
+      const archivo = await almacenamiento.subir(
+        entrada.archivo,
+        conEntornoR2(carpeta, almacenamiento.entorno),
+      )
       try {
         await comprobarAcceso({ idUsuario, accion: 'subir', destino })
         const data = documentoSiniestroSchema.parse({

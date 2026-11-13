@@ -127,7 +127,7 @@ test('demo: subida binaria, registro persistente sin URLs, firma, verificación 
   const subida = await f.subir('mi foto.png')
   assert.equal(subida.status, 201)
   const { archivo } = subida.datos
-  assert.match(archivo.clave, /^pruebas\/.+\.png$/)
+  assert.match(archivo.clave, /^dev\/pruebas\/.+\.png$/)
   const contenidoDisco = await readFile(f.ruta, 'utf8')
   assert.ok(
     !contenidoDisco.includes('https://') &&

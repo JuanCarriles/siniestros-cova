@@ -3,10 +3,14 @@ import { app } from './app.ts'
 import { env } from './config/env.ts'
 import { disconnectPrisma } from './lib/prisma.ts'
 import { programarTarea } from './lib/tarea-periodica.ts'
+import { montarTiempoReal } from './modules/chat/chat.module.ts'
 import { tareaDemoras } from './modules/siniestros/demoras.module.ts'
+import { servicioInformes } from './modules/informes/informes.module.ts'
 
 // Servidor HTTP propio (y no app.listen) para poder montar Socket.IO sobre el mismo puerto.
 const server = createServer(app)
+// E7-01: chat en tiempo real, en /socket.io
+const cerrarTiempoReal = montarTiempoReal(server)
 
 server.listen(env.PORT, () => {
   console.log(`API escuchando en http://localhost:${env.PORT} (${env.NODE_ENV})`)
@@ -25,10 +29,19 @@ const detenerDemoras = env.DEMORAS_CADA_MINUTOS
     )
   : () => {}
 
+const detenerInformes = env.INFORMES_AUTOMATICOS
+  ? programarTarea('informes mensuales', () => servicioInformes.revisarPendientes(), {
+      cadaMs: 15 * 60_000,
+      primeraEnMs: 30_000,
+    })
+  : () => {}
+
 // Docker manda SIGTERM al detener el contenedor: se cierran las conexiones (HTTP y base) antes de salir.
 function shutdown(signal: string) {
   console.log(`${signal} recibido, cerrando servidor…`)
   detenerDemoras()
+  detenerInformes()
+  cerrarTiempoReal()
   server.close(() => {
     void disconnectPrisma().finally(() => process.exit(0))
   })

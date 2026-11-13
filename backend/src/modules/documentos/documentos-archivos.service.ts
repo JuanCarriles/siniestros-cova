@@ -1,3 +1,5 @@
+import { perteneceClaveSiniestroR2 } from '../../lib/rutas-r2.ts'
+import type { ConsultaDocumentos } from '@cova/shared/schemas/documentos'
 import type { SesionUsuario } from '@cova/shared/schemas/auth'
 import type { Prisma } from '../../generated/prisma/client.ts'
 import { nombreDescargaArchivo, type AlmacenamientoR2 } from '../../lib/r2.ts'
@@ -14,6 +16,7 @@ export function crearServicioArchivosDocumento(
       idSiniestro: number,
       idDocumento: number,
       tipo: 'miniatura' | 'vista' | 'original' | 'contenido',
+      consulta: ConsultaDocumentos = { bajas: false },
     ) {
       const actor = await prisma.usuario.findFirst({
         where: { id: usuario.id, eliminado: false },
@@ -26,7 +29,7 @@ export function crearServicioArchivosDocumento(
         idSiniestro,
       )
       const documento = await prisma.documentoSiniestro.findFirst({
-        where: { id: idDocumento, idSiniestro, eliminado: false },
+        where: { id: idDocumento, idSiniestro, ...(consulta.bajas ? {} : { eliminado: false }) },
       })
       if (!documento) throw new HttpError(404, 'El documento no está disponible.')
       const clave =
@@ -37,7 +40,11 @@ export function crearServicioArchivosDocumento(
             : (documento.claveImagenOptimizada ?? documento.urlArchivoSinDominio)
       if (!clave)
         throw new HttpError(404, 'Esta imagen no tiene una vista reducida. Descargá el original.')
-      if (!clave.startsWith(`siniestros/${idSiniestro}/`))
+      const caso = await prisma.siniestro.findUniqueOrThrow({
+        where: { id: idSiniestro },
+        select: { id: true, carpetaR2: true },
+      })
+      if (!perteneceClaveSiniestroR2(clave, caso, almacenamiento().entorno))
         throw new HttpError(409, 'La ubicación del documento no corresponde a este siniestro.')
       if (tipo === 'contenido') {
         if (documento.tipoExtension.toLowerCase() !== 'pdf')

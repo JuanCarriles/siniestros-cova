@@ -175,27 +175,36 @@ test(
           (n) => !n.leida && !n.revisada && n.tipoNotificacion === 'REASIGNACION_SINIESTRO',
         ),
       )
-      assert.deepEqual(mails.map((m) => m.email).sort(), [anterior.email, nuevo.email].sort())
+      assert.deepEqual(
+        mails.map((m) => m.email),
+        [nuevo.email],
+      )
       assert.equal(
-        mails.find((m) => m.email === anterior.email).enlace,
-        'https://cova.example.invalid/siniestros',
+        mails.some((m) => m.email === anterior.email),
+        false,
       )
       assert.equal(
         mails.find((m) => m.email === nuevo.email).enlace,
         `https://cova.example.invalid/siniestros/${s.id}`,
       )
-      const previo = bandejaNotificacionesSchema.parse(await avisos.listar(anterior, 1))
+      const previo = bandejaNotificacionesSchema.parse(
+        await avisos.listar(anterior, { pagina: 1, lectura: 'todas', revision: 'todas' }),
+      )
       assert.equal(previo.items[0].puedeAbrirSiniestro, false)
       await avisos.leer(anterior, previo.items[0].id)
       await assert.rejects(avisos.leer(otro, previo.items[0].id), { status: 404 })
-      assert.equal((await avisos.listar(nuevo, 1)).items[0].puedeAbrirSiniestro, true)
+      assert.equal(
+        (await avisos.listar(nuevo, { pagina: 1, lectura: 'todas', revision: 'todas' })).items[0]
+          .puedeAbrirSiniestro,
+        true,
+      )
       await assert.rejects(crearServicioSiniestros(prisma).obtener(anterior, s.id), { status: 403 })
       assert.equal(
         (await crearServicioSiniestros(prisma).obtener(nuevo, s.id)).asignado.id,
         nuevo.id,
       )
       await assert.rejects(servicio.reasignar(admin, s.id, pedido), { status: 409 })
-      assert.equal(mails.length, 2)
+      assert.equal(mails.length, 1)
 
       const casoInactivo = await caso({ idUsuario: inactivo.id })
       const antesMails = mails.length

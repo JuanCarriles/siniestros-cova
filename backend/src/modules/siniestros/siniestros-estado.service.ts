@@ -8,6 +8,7 @@ import type { Prisma } from '../../generated/prisma/client.ts'
 import { HttpError } from '../../utils/httpError.ts'
 import { nombreCompleto } from '../../utils/formato.ts'
 import { eventoHistorial } from '../historial/historial.textos.ts'
+import { notificarEventoCaso } from '../notificaciones/eventos-notificaciones.ts'
 import { exigirAccesoSiniestro } from './siniestros-acceso.ts'
 
 type Base = { transaccion<T>(trabajo: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> }
@@ -108,6 +109,13 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
             409,
             'No se puede dejar activo un siniestro con un usuario o ajustador dado de baja. Reactivá o reasigná sus responsables primero.',
           )
+        if (nuevo.esCierre && !cambio.cierre)
+          throw new HttpError(
+            400,
+            'Para cerrar el caso, indicá el resultado y el monto acordado cuando corresponda.',
+          )
+        if (!nuevo.esCierre && cambio.cierre)
+          throw new HttpError(400, 'Los datos de cierre solo se admiten en un estado de cierre.')
         const ahora = reloj()
         await tx.siniestro.update({
           where: { id },
@@ -115,6 +123,8 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
             idEstadoSiniestro: nuevo.id,
             fechaUltimoMovimiento: ahora,
             fechaCierre: nuevo.esCierre ? ahora : null,
+            resultadoCierre: nuevo.esCierre ? cambio.cierre!.resultadoCierre : null,
+            montoAcordado: nuevo.esCierre ? (cambio.cierre!.montoAcordado ?? null) : null,
           },
         })
         await tx.historialSiniestro.create({
@@ -125,30 +135,14 @@ export function crearServicioEstadoSiniestro(base: Base, reloj = () => new Date(
             ...eventoHistorial.cambioEstado(caso.estadoSiniestro.nombre, nuevo.nombre, ahora),
           },
         })
-        // Usuarios internos involucrados: responsable actual y administración activa, sin avisarse a sí mismo.
-        const destinatarios = await tx.usuario.findMany({
-          where: {
-            eliminado: false,
-            id: { not: actor.id },
-            OR: [
-              { id: caso.idUsuario },
-              { tipoUsuario: { in: ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'] } },
-            ],
-          },
-          select: { id: true },
+        await notificarEventoCaso(tx, {
+          idSiniestro: id,
+          idUsuarioAsignado: caso.idUsuario,
+          idAutor: actor.id,
+          tipo: 'CAMBIO_ESTADO',
+          mensaje: `${nombreCompleto(actor)} cambió el siniestro ${caso.numeroSiniestro} de “${caso.estadoSiniestro.nombre}” a “${nuevo.nombre}”.`,
+          fecha: ahora,
         })
-        if (destinatarios.length)
-          await tx.notificacion.createMany({
-            data: destinatarios.map((destinatario) => ({
-              idUsuario: destinatario.id,
-              idSiniestro: id,
-              tipoNotificacion: 'CAMBIO_ESTADO' as const,
-              mensaje: `${nombreCompleto(actor)} cambió el siniestro ${caso.numeroSiniestro} de “${caso.estadoSiniestro.nombre}” a “${nuevo.nombre}”.`,
-              fechaCreacion: ahora,
-              leida: false,
-              revisada: false,
-            })),
-          })
       })
     },
   }

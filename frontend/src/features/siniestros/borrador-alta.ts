@@ -19,6 +19,8 @@ export type DatosCasoFormulario = DatosCasoInput & { pais: string }
 export const datosCasoVacios: DatosCasoFormulario = {
   numeroSiniestro: '',
   numeroPoliza: '',
+  montoReclamado: '',
+  moneda: 'ARS',
   inicioVigencia: '',
   idAseguradora: '',
   sucursal: '',
