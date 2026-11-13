@@ -1,11 +1,11 @@
 import { Readable } from 'node:stream'
-import { randomUUID } from 'node:crypto'
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   HeadBucketCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -13,7 +13,13 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { ARCHIVO_MAX_BYTES, rechazoArchivo } from '@cova/shared/schemas/archivos'
 import { claveArchivoSchema } from '@cova/shared/schemas/comunes'
 import { z } from 'zod'
-import { conEntornoR2, exigirEntornoR2, carpetaR2Schema, claveInformeR2Schema } from './rutas-r2.ts'
+import {
+  conEntornoR2,
+  exigirEntornoR2,
+  carpetaR2Schema,
+  claveInformeR2Schema,
+  nombreLegibleR2,
+} from './rutas-r2.ts'
 import { leerConfiguracionR2 } from '../config/r2.ts'
 import type { ConfiguracionR2 } from '../config/r2.ts'
 import { HttpError } from '../utils/httpError.ts'
@@ -174,7 +180,10 @@ export function crearAlmacenamientoR2(
           rechazoArchivo('El contenido real no está habilitado en este servidor.'),
         )
       const contenido = archivo.contenido
-      const clave = claveArchivoSchema.parse(`${prefijo}/${randomUUID()}.${tipoExtension}`)
+      // Nombre legible al mirar el bucket (nombre original limpio + código); el real queda en la base
+      const clave = claveArchivoSchema.parse(
+        `${prefijo}/${nombreLegibleR2(archivo.nombreOriginal, tipoExtension)}`,
+      )
       try {
         await s3.send(
           new PutObjectCommand({
@@ -206,7 +215,8 @@ export function crearAlmacenamientoR2(
     async subirDerivada(clave: string, contenido: Uint8Array, metadata?: Record<string, string>) {
       const key = claveArchivoSchema.parse(conEntornoR2(clave, config.R2_ENTORNO))
       if (
-        !/^(dev|produccion)\/(?:altas\/[1-9]\d*|siniestros\/[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+(?:\/siniestro-[1-9]\d*)?)?)\/[a-f0-9-]+\.(?:(jpe?g|png)\.(vista|miniatura)\.webp|webp(?:\.miniatura\.webp)?)$/i.test(
+        // El archivo principal se llama con un UUID (anteriores) o con nombre legible + código (nombreLegibleR2)
+        !/^(dev|produccion)\/(?:altas\/[1-9]\d*|siniestros\/[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+(?:\/siniestro-[1-9]\d*)?)?)\/[a-z0-9-]+\.(?:(jpe?g|png)\.(vista|miniatura)\.webp|webp(?:\.miniatura\.webp)?)$/i.test(
           key,
         ) ||
         !contenido.byteLength ||
@@ -350,10 +360,11 @@ export function crearAlmacenamientoR2(
 
     // Copia un objeto a otra carpeta con el mismo nombre (UUID.ext); el original queda. Sirve para mover: copiar,
     // registrar la clave nueva y recién entonces borrar el original. Devuelve la clave nueva.
-    async copiar(clave: string, carpeta: string) {
+    /** Copia el objeto a la carpeta, con el mismo nombre o con `nombre` (la reorganización le pone uno legible) */
+    async copiar(clave: string, carpeta: string, nombre?: string) {
       const origen = claveLeida(clave)
       const destino = clavePrivadaSchema.parse(
-        `${carpetaDestino(carpeta)}/${origen.split('/').pop()}`,
+        `${carpetaDestino(carpeta)}/${nombre ?? origen.split('/').pop()}`,
       )
       try {
         await s3.send(
@@ -377,6 +388,25 @@ export function crearAlmacenamientoR2(
       } catch (error) {
         throw errorR2('No se pudo eliminar el objeto de R2', error)
       }
+    },
+
+    /** Solo lectura: todos los objetos del bucket (clave y tamaño). Para el informe de sobrantes. */
+    async listar() {
+      const objetos: { clave: string; bytes: number }[] = []
+      let continuacion: string | undefined
+      try {
+        do {
+          const pagina = await s3.send(
+            new ListObjectsV2Command({ Bucket: config.R2_BUCKET, ContinuationToken: continuacion }),
+          )
+          for (const o of pagina.Contents ?? [])
+            if (o.Key) objetos.push({ clave: o.Key, bytes: o.Size ?? 0 })
+          continuacion = pagina.IsTruncated ? pagina.NextContinuationToken : undefined
+        } while (continuacion)
+      } catch (error) {
+        throw errorR2('No se pudo listar el contenido del bucket de R2', error)
+      }
+      return objetos
     },
 
     cerrar() {

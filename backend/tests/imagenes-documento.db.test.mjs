@@ -252,11 +252,14 @@ test(
       assert.equal((await enviar(imagen, 'confirmada.jpg', idPerdido)).status, 200)
       assert.equal(objetos.size, antes + 2)
       actor = admin
+      // Borradores del alta del administrador: los nuevos van en {entorno}/altas/; los anteriores, en altas/
+      const borradores = () =>
+        [...objetos.keys()].filter((k) => new RegExp(`^(?:dev/)?altas/${admin.id}/`).test(k)).length
       const temporal = await alta.subirDocumento(admin, {
         nombreOriginal: 'alta.jpg',
         contenido: imagen,
       })
-      assert.equal([...objetos.keys()].filter((k) => k.startsWith(`altas/${admin.id}/`)).length, 2)
+      assert.equal(borradores(), 2, 'la imagen y su miniatura')
       const datos = crearSiniestroSchema.parse({
         datosCaso: {
           numeroSiniestro: 'ALTA-IMG',
@@ -291,7 +294,7 @@ test(
       assert.equal(da.tipoExtension, 'webp')
       assert.equal(da.mimeType, 'image/webp')
       assert.equal(da.tamanoBytes, BigInt(objetos.get(da.urlArchivoSinDominio).contenido.length))
-      assert.equal([...objetos.keys()].filter((k) => k.startsWith(`altas/${admin.id}/`)).length, 0)
+      assert.equal(borradores(), 0)
       // También copia altas v1 que ya existían antes de la corrección, sin perder su original ni las vistas.
       const claveAnterior = `altas/${admin.id}/${randomUUID()}.jpg`
       const datosAnteriores = {
@@ -329,13 +332,20 @@ test(
       assert.deepEqual(objetos.get(legado.urlArchivoSinDominio).contenido, imagen)
       assert.ok(objetos.has(legado.claveImagenOptimizada))
       assert.ok(objetos.has(legado.claveMiniatura))
-      assert.equal([...objetos.keys()].filter((k) => k.startsWith(`altas/${admin.id}/`)).length, 0)
+      assert.equal(borradores(), 0)
       const descartable = await alta.subirDocumento(admin, {
         nombreOriginal: 'descartar.jpg',
         contenido: imagen,
       })
       await alta.quitarDocumento(admin, descartable.clave)
-      assert.equal([...objetos.keys()].filter((k) => k.startsWith(`altas/${admin.id}/`)).length, 0)
+      assert.equal(borradores(), 0)
+      // Las claves reales de los documentos del expediente (en su carpeta, con sus derivados)
+      const clavesDeS = (
+        await prisma.documentoSiniestro.findMany({ where: { idSiniestro: s.id } })
+      ).flatMap((d) =>
+        [d.urlArchivoSinDominio, d.claveImagenOptimizada, d.claveMiniatura].filter(Boolean),
+      )
+      assert.ok(clavesDeS.length > 0 && clavesDeS.every((k) => objetos.has(k)))
       await prisma.siniestro.update({
         where: { id: s.id },
         data: { eliminado: true, fechaBaja: new Date(), idEstadoSiniestro: cierre.id },
@@ -344,7 +354,11 @@ test(
         base: { transaccion },
         almacenamiento: () => r2,
       }).eliminar(admin, s.id, { numeroSiniestro: s.numeroSiniestro })
-      assert.equal([...objetos.keys()].filter((k) => k.startsWith(`siniestros/${s.id}/`)).length, 0)
+      assert.deepEqual(
+        clavesDeS.filter((k) => objetos.has(k)),
+        [],
+        'el borrado definitivo elimina todos los archivos del expediente',
+      )
       assert.ok(objetos.has(da.claveMiniatura), 'no borra las imágenes de otro expediente')
     } finally {
       if (server) await new Promise((resolve) => server.close(resolve))

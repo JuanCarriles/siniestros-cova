@@ -10,6 +10,11 @@ import {
   carpetaNumerosR2,
   segmentoNumeroR2,
   perteneceClaveSiniestroR2,
+  carpetaConIdR2,
+  esCarpetaSiniestroAnteriorR2,
+  nombreLegibleR2,
+  claveInformeR2,
+  claveInformeR2Schema,
 } from '../src/lib/rutas-r2.ts'
 
 test('entornos: Docker local puede usar dev aunque NODE_ENV sea production; no acepta valores arbitrarios', () => {
@@ -69,7 +74,13 @@ test('arranque: producción exige entorno explícito antes de levantar la API, s
 })
 
 test('números visibles y escape reversible: no mezcla slash, guiones, underscore, ceros ni caracteres especiales', () => {
-  assert.equal(carpetaNumerosR2({ numeroSiniestro: '1', numeroPoliza: '1' }), 'siniestros/1/1')
+  // Una sola carpeta por siniestro: {nºsiniestro}-{nºpóliza}
+  assert.equal(carpetaNumerosR2({ numeroSiniestro: '1', numeroPoliza: '1' }), 'siniestros/1-1')
+  assert.equal(
+    carpetaNumerosR2({ numeroSiniestro: '2026-04871', numeroPoliza: '01-AU/558812' }),
+    'siniestros/2026-04871-01-AU_2F558812',
+    'una barra del número no crea una subcarpeta',
+  )
   const valores = ['', '_', '.', '..', 'A/B', 'A-B', 'A_2FB', '01', '1', 'Póliza 1', 'A\\B']
   const segmentos = valores.map(segmentoNumeroR2)
   assert.equal(new Set(segmentos).size, valores.length)
@@ -160,3 +171,55 @@ for (const entorno of ['dev', 'produccion'])
       r2.cerrar()
     }
   })
+
+test('carpetas: el segundo siniestro con la misma carpeta lleva su id; se reconoce el formato anterior', () => {
+  assert.equal(carpetaConIdR2('siniestros/1-1', 57), 'siniestros/1-1-id57')
+  assert.equal(esCarpetaSiniestroAnteriorR2('siniestros/1/1'), true)
+  assert.equal(esCarpetaSiniestroAnteriorR2('siniestros/1/1/siniestro-8'), true)
+  assert.equal(esCarpetaSiniestroAnteriorR2('siniestros/1-1'), false)
+  assert.equal(esCarpetaSiniestroAnteriorR2('siniestros/1-1-id57'), false)
+})
+
+test('nombres legibles: nombre original limpio + código, sin tildes, espacios ni símbolos', () => {
+  assert.equal(
+    nombreLegibleR2('DNI frente (1).jpg', 'jpg', '3f9a2c41'),
+    'dni-frente-1-3f9a2c41.jpg',
+  )
+  assert.equal(
+    nombreLegibleR2('Peña Ñandú – acta.PDF', 'pdf', 'ab12cd34'),
+    'pena-nandu-acta-ab12cd34.pdf',
+  )
+  assert.equal(
+    nombreLegibleR2('...', 'pdf', 'ab12cd34'),
+    'archivo-ab12cd34.pdf',
+    'sin nada legible',
+  )
+  const largo = nombreLegibleR2(`${'x'.repeat(90)}.png`, 'png', 'ab12cd34')
+  assert.equal(largo, `${'x'.repeat(60)}-ab12cd34.png`, 'hasta 60 caracteres')
+  assert.match(
+    nombreLegibleR2('Foto.jpeg', 'jpg'),
+    /^foto-[0-9a-f]{8}\.jpg$/,
+    'un código nuevo por subida',
+  )
+  assert.notEqual(nombreLegibleR2('a.pdf', 'pdf'), nombreLegibleR2('a.pdf', 'pdf'))
+})
+
+test('informes: informes/{AAAA}/{AAAA-MM}-{código}.pdf; se siguen leyendo los anteriores', () => {
+  assert.equal(claveInformeR2('2026-10', false, 'ab12cd34'), 'informes/2026/2026-10-ab12cd34.pdf')
+  assert.equal(
+    claveInformeR2('2026-10', true, 'ab12cd34'),
+    'informes/pruebas/2026/2026-10-ab12cd34.pdf',
+  )
+  for (const clave of [
+    'produccion/informes/2026/2026-10-ab12cd34.pdf',
+    'dev/informes/pruebas/2026/2026-10-ab12cd34.pdf',
+    'informes mensuales/2026/10/11111111-1111-4111-8111-111111111111.pdf',
+    'produccion/informes mensuales/pruebas/2026/10/11111111-1111-4111-8111-111111111111.pdf',
+  ])
+    assert.equal(claveInformeR2Schema.safeParse(clave).success, true, clave)
+  for (const clave of [
+    'informes/2026/2026-10-ab12cd34.pdf',
+    'produccion/informes/2026/2026-13-x.pdf',
+  ])
+    assert.equal(claveInformeR2Schema.safeParse(clave).success, false, clave)
+})
