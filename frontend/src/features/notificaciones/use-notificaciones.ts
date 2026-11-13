@@ -5,8 +5,12 @@ import {
   type BandejaNotificaciones,
   type NotificacionBandeja,
 } from '@cova/shared/schemas/bandeja-notificaciones'
+import { combinarAvisosVisibles } from './avisos-visibles'
 import { ApiError } from '@/lib/api'
-import { actualizarNotificaciones } from './actualizar-notificaciones'
+import {
+  actualizarNotificaciones,
+  suscribirNotificacionesServidor,
+} from './actualizar-notificaciones'
 import { consultarNotificaciones, leerNotificaciones } from './api'
 import { cargarBandeja, type LecturaAutomatica } from './operaciones-bandeja'
 
@@ -24,11 +28,13 @@ export function useNotificaciones(
   } | null>(null)
   const [error, setError] = useState<{ clave: string; mensaje: string } | null>(null)
   const entradaPendiente = useRef(true)
+  const panelMostrado = useRef(false)
   const query = queryNotificaciones(consulta)
   const clave = `${query}|${revision}`
   useEffect(() => {
     if (!activa) return
     const controlador = new AbortController()
+    const conservarPanel = panelMostrado.current
     void cargarBandeja(query, lectura, entradaPendiente.current, controlador.signal, {
       consultar: consultarNotificaciones,
       leer: leerNotificaciones,
@@ -36,7 +42,16 @@ export function useNotificaciones(
       .then(({ datos, avisoLectura, entradaLeida, marcoLectura }) => {
         if (controlador.signal.aborted) return
         if (entradaLeida) entradaPendiente.current = false
-        setResultado({ clave, query, datos, avisoLectura })
+        setResultado((actual) => ({
+          clave,
+          query,
+          datos:
+            lectura === 'visibles' && conservarPanel && actual?.query === query
+              ? { ...datos, items: combinarAvisosVisibles(actual.datos.items, datos.items) }
+              : datos,
+          avisoLectura,
+        }))
+        panelMostrado.current = true
         setError(null)
         if (marcoLectura) actualizarNotificaciones()
       })
@@ -53,6 +68,24 @@ export function useNotificaciones(
     return () => controlador.abort()
   }, [query, clave, activa, lectura])
   const actualizar = useCallback(() => setRevision((r) => r + 1), [])
+  useEffect(() => {
+    if (!activa) return
+    let temporizador: ReturnType<typeof setTimeout> | undefined
+    const desuscribir = suscribirNotificacionesServidor((nueva) => {
+      if (document.hidden || (lectura === 'visibles' && !nueva)) return
+      clearTimeout(temporizador)
+      temporizador = setTimeout(actualizar, 80)
+    })
+    const alVolver = () => {
+      if (!document.hidden) actualizar()
+    }
+    document.addEventListener('visibilitychange', alVolver)
+    return () => {
+      desuscribir()
+      clearTimeout(temporizador)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
+  }, [activa, lectura, actualizar])
   const confirmarEntradaLeida = useCallback(() => {
     entradaPendiente.current = false
   }, [])
@@ -64,6 +97,12 @@ export function useNotificaciones(
     // Conservar el DOM durante el refresco mantiene el botón y la posición del usuario.
     actualizando: activa && resultado?.clave !== clave && error?.clave !== clave,
     actualizar,
+    reiniciarPanel: () => {
+      panelMostrado.current = false
+      setResultado(null)
+      setError(null)
+      actualizar()
+    },
     confirmarEntradaLeida,
     aplicar: (id: number, cambios: Partial<Pick<NotificacionBandeja, 'leida' | 'revisada'>>) =>
       setResultado((actual) =>

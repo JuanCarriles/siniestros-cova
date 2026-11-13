@@ -46,6 +46,11 @@ test(
           JOIN pg_proc p ON p.oid=t.tgfoid WHERE NOT t.tgisinternal AND n.nspname='public'`
             const esperado = [
               [
+                'Notificacion',
+                'notificacion_cambio_tiempo_real',
+                'cova_avisar_cambio_notificacion',
+              ],
+              [
                 'HistorialSiniestro',
                 'historial_autor_al_registrar',
                 'historial_autor_al_registrar',
