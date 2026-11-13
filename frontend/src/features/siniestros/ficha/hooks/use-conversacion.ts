@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { MensajeChat } from '@cova/shared/schemas/chat'
 import { ApiError } from '@/lib/api'
-import { escuchar, useSalaSiniestro } from '@/lib/tiempo-real'
+import { escuchar, onReconectado, useSalaSiniestro } from '@/lib/tiempo-real'
 import { actualizarNotificaciones } from '@/features/notificaciones/actualizar-notificaciones'
 import { enviarMensajeChat, marcarChatLeido, obtenerChat } from '../api/ficha.api'
-import { aplicarLecturas, idsPorLeer, unirMensajes } from '../chat'
+import { aplicarLecturas, esFallaDeConexion, idsPorLeer, unirMensajes } from '../chat'
 import { crearMarcadoLeido } from '../marcado-leido'
 
 /** Un envío propio que todavía no confirmó el servidor */
@@ -13,6 +13,10 @@ export type MensajePendiente = {
   texto: string
   estado: 'enviando' | 'error'
   error?: string
+  /** El último mensaje de la conversación cuando se escribió: se muestra justo después (lineaDeTiempo) */
+  despuesDe: number | null
+  /** Falló por la conexión (o el servidor): se reenvía solo cuando vuelve. Un rechazo no. */
+  reintentable: boolean
 }
 
 /** La pestaña del navegador está a la vista */
@@ -36,6 +40,9 @@ function useVisible() {
  * E7-03: al entrar, y cada vez que llega algo de otro mientras se mira la conversación (pestaña visible), marca lo
  * pendiente como leído; el servidor retira el aviso de la bandeja e informa la lectura a los demás. Cuándo pedirlo
  * (un pedido por vez, otra pasada si llegó algo mientras tanto, reintentos) lo decide crearMarcadoLeido.
+ *
+ * Un envío que falla por la conexión queda en su lugar de la conversación (no al final) y se reenvía solo cuando
+ * vuelve la conexión, con la misma clave: el servidor no lo guarda dos veces. También se puede reintentar a mano.
  */
 export function useConversacion(idSiniestro: number, idUsuario: number, inicial: MensajeChat[]) {
   const [mensajes, setMensajes] = useState(inicial)
@@ -44,6 +51,13 @@ export function useConversacion(idSiniestro: number, idUsuario: number, inicial:
   const [ultimoAjeno, setUltimoAjeno] = useState<MensajeChat | null>(null)
   const { conexion, sala } = useSalaSiniestro(idSiniestro, { mirando: true })
   const clavesPropias = useRef(new Set<string>())
+  // Para leer el estado actual desde los avisos de reconexión y al crear un envío, sin volver a suscribirse
+  const ultimoId = useRef<number | null>(inicial.at(-1)?.id ?? null)
+  const pendientesActuales = useRef<MensajePendiente[]>([])
+  useEffect(() => {
+    ultimoId.current = mensajes.at(-1)?.id ?? null
+    pendientesActuales.current = pendientes
+  }, [mensajes, pendientes])
 
   const agregar = useCallback((nuevos: MensajeChat[]) => {
     setMensajes((actuales) => unirMensajes(actuales, nuevos))
@@ -117,23 +131,32 @@ export function useConversacion(idSiniestro: number, idUsuario: number, inicial:
   const enviar = useCallback(
     async (texto: string, claveEnvio: string) => {
       clavesPropias.current.add(claveEnvio)
-      setPendientes((p) => [
-        ...p.filter((x) => x.claveEnvio !== claveEnvio),
-        { claveEnvio, texto, estado: 'enviando' },
-      ])
+      const despuesDe = ultimoId.current
+      // Un reintento conserva el lugar del mensaje en la conversación; uno nuevo va después del último
+      setPendientes((p) =>
+        p.some((x) => x.claveEnvio === claveEnvio)
+          ? p.map((x) =>
+              x.claveEnvio === claveEnvio ? { ...x, estado: 'enviando', error: undefined } : x,
+            )
+          : [...p, { claveEnvio, texto, estado: 'enviando', despuesDe, reintentable: false }],
+      )
       try {
         agregar([await enviarMensajeChat(idSiniestro, { texto, claveEnvio })])
       } catch (err) {
+        const status = err instanceof ApiError ? err.status : undefined
+        const reintentable = esFallaDeConexion(status)
         setPendientes((p) =>
           p.map((x) =>
             x.claveEnvio === claveEnvio
               ? {
                   ...x,
                   estado: 'error',
-                  error:
-                    err instanceof ApiError
+                  reintentable,
+                  error: reintentable
+                    ? 'Sin conexión. Se va a reenviar solo cuando vuelva la conexión.'
+                    : err instanceof ApiError
                       ? err.message
-                      : 'No se pudo enviar el mensaje. Revisá tu conexión y reintentá.',
+                      : 'No se pudo enviar el mensaje.',
                 }
               : x,
           ),
@@ -142,6 +165,22 @@ export function useConversacion(idSiniestro: number, idUsuario: number, inicial:
       }
     },
     [idSiniestro, agregar],
+  )
+
+  // Al volver la conexión, se reenvían solos los que fallaron por la conexión (en el orden en que se escribieron)
+  useEffect(
+    () =>
+      onReconectado(() => {
+        const fallidos = pendientesActuales.current.filter(
+          (p) => p.estado === 'error' && p.reintentable,
+        )
+        // De a uno: el servidor los guarda en el mismo orden en que se escribieron. Si uno vuelve a fallar, los
+        // demás esperan a la próxima reconexión.
+        void (async () => {
+          for (const p of fallidos) await enviar(p.texto, p.claveEnvio)
+        })().catch(() => {})
+      }),
+    [enviar],
   )
 
   const descartar = useCallback((claveEnvio: string) => {

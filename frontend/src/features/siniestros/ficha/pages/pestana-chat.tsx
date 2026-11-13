@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowDown, Check, CheckCheck, MessagesSquare, RotateCcw, Send, X } from 'lucide-react'
@@ -16,6 +16,8 @@ import { roleLabels } from '@/components/layout/panel-navigation'
 import { TextareaField } from '@/components/textarea-field'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { coloresParticipantes, lineaDeTiempo } from '../chat'
+import { BotonSonidoChat } from '../components/boton-sonido-chat'
 import { EstadoConexionChat } from '../components/estado-conexion-chat'
 import { PestanaFicha, PestanaVacia } from '../components/pestana-ficha'
 import { useConversacion, type MensajePendiente } from '../hooks/use-conversacion'
@@ -25,6 +27,19 @@ import { useFicha, usePestana } from '../hooks/use-ficha'
 const AVISAR_DESDE = 200
 /** Si se está leyendo a menos de esto del final, un mensaje nuevo baja la vista solo */
 const CERCA_DEL_FINAL_PX = 120
+
+/**
+ * Un color por participante (coloresParticipantes): barra izquierda, nombre y fondo suave. Clases fijas para que
+ * Tailwind las genere. El nombre sigue escrito: el color ayuda a reconocer a cada uno, no es lo único que lo dice.
+ */
+const ESTILO_PARTICIPANTE = [
+  { caja: 'border-l-persona-1 bg-persona-1-bg', nombre: 'text-persona-1' },
+  { caja: 'border-l-persona-2 bg-persona-2-bg', nombre: 'text-persona-2' },
+  { caja: 'border-l-persona-3 bg-persona-3-bg', nombre: 'text-persona-3' },
+  { caja: 'border-l-persona-4 bg-persona-4-bg', nombre: 'text-persona-4' },
+  { caja: 'border-l-persona-5 bg-persona-5-bg', nombre: 'text-persona-5' },
+  { caja: 'border-l-persona-6 bg-persona-6-bg', nombre: 'text-persona-6' },
+] as const
 
 const hora = new Intl.DateTimeFormat('es-AR', {
   hour: '2-digit',
@@ -63,7 +78,9 @@ function etiquetaDia(iso: string) {
 // administración, del mensaje más viejo (arriba) al más nuevo (abajo, junto al cuadro para escribir). Cada mensaje
 // muestra su autor, su rol y su fecha y hora; los propios van a la derecha, con fondo y borde distintos y la
 // palabra "Vos". Llegan en tiempo real; si se corta la conexión se avisa y, al volver, se cargan los que faltaban.
-// Los mensajes no se editan ni se borran. Un siniestro cerrado o dado de baja solo se lee.
+// Un mensaje propio que no se pudo enviar queda en su lugar de la conversación (lo que llega después aparece
+// debajo) y se reenvía solo al volver la conexión. Los mensajes no se editan ni se borran. Un siniestro cerrado o
+// dado de baja solo se lee.
 export function PestanaChat() {
   const { usuario } = usePanel()
   const ficha = useFicha()
@@ -77,16 +94,35 @@ export function PestanaChat() {
 
   // --- Desplazamiento: arranca abajo; un mensaje nuevo baja la vista si se estaba leyendo el final o si es propio
   const lista = useRef<HTMLDivElement>(null)
+  const contenido = useRef<HTMLOListElement>(null)
   const cercaDelFinal = useRef(true)
   const [sinVer, setSinVer] = useState(0)
-  const cantidad = mensajes.length + pendientes.length
+  const elementos = lineaDeTiempo(mensajes, pendientes)
+  const colores = coloresParticipantes(mensajes, usuario.id)
+  const cantidad = elementos.length
   const anterior = useRef(cantidad)
-  const ultimo = mensajes.at(-1)
-  const ultimoEsPropio = pendientes.length > 0 || ultimo?.autor.id === usuario.id
+  // Un separador antes del primer mensaje de cada día (los pendientes no cuentan: son de ahora)
+  const nuevoDia: boolean[] = []
+  let diaAnterior: string | null = null
+  for (const e of elementos) {
+    if (e.tipo !== 'mensaje') {
+      nuevoDia.push(false)
+      continue
+    }
+    const dia = claveDia(e.mensaje.fechaEnvio)
+    nuevoDia.push(dia !== diaAnterior)
+    diaAnterior = dia
+  }
+  const ultimo = elementos.at(-1)
+  // Lo último de la conversación es algo que acabo de escribir: la vista baja siempre
+  const ultimoEsPropio =
+    ultimo?.tipo === 'pendiente' ||
+    (ultimo?.tipo === 'mensaje' && ultimo.mensaje.autor.id === usuario.id)
 
   const irAlFinal = (suave = false) => {
     const el = lista.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: suave ? 'smooth' : 'auto' })
+    cercaDelFinal.current = true
     setSinVer(0)
   }
   useLayoutEffect(() => {
@@ -98,10 +134,29 @@ export function PestanaChat() {
     // irAlFinal solo usa refs y el setter
   }, [cantidad, ultimoEsPropio])
 
+  // Un mensaje también crece sin que cambie la cantidad: al confirmarse el envío aparece "Enviado…" y después
+  // "Leído por…". Si se estaba al final (o se acaba de enviar), la vista lo acompaña y queda pegada abajo.
+  const vacia = elementos.length === 0
+  useEffect(() => {
+    const el = contenido.current
+    if (vacia || !el || typeof ResizeObserver === 'undefined') return
+    const observador = new ResizeObserver(() => {
+      const caja = lista.current
+      if (caja && cercaDelFinal.current) caja.scrollTop = caja.scrollHeight
+    })
+    observador.observe(el)
+    return () => observador.disconnect()
+  }, [vacia])
+
   return (
     <PestanaFicha titulo={usuario.tipo === 'GESTOR' ? 'Chat' : 'Chat con el gestor'}>
       <div className="grid gap-4">
-        <EstadoConexionChat conexion={conexion} sala={sala} />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <EstadoConexionChat conexion={conexion} sala={sala} />
+          </div>
+          <BotonSonidoChat />
+        </div>
 
         {/* Lo que llega de otros, para el lector de pantalla (los propios ya se confirman en su mensaje) */}
         <p className="sr-only" role="status" aria-live="polite">
@@ -123,7 +178,7 @@ export function PestanaChat() {
             }}
             className="max-h-[60dvh] min-h-48 overflow-y-auto overscroll-contain rounded-lg border-2 border-line bg-surface-subtle px-3 py-4 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-5"
           >
-            {mensajes.length === 0 && pendientes.length === 0 ? (
+            {elementos.length === 0 ? (
               <PestanaVacia icono={MessagesSquare}>
                 {soloLectura
                   ? 'En este siniestro no hubo conversación.'
@@ -131,25 +186,33 @@ export function PestanaChat() {
                     (usuario.tipo === 'GESTOR' ? 'la administración.' : 'el gestor asignado.')}
               </PestanaVacia>
             ) : (
-              <ol className="grid gap-3">
-                {mensajes.map((m, i) => (
-                  <li key={m.id} className="grid gap-3">
-                    {(i === 0 ||
-                      claveDia(mensajes[i - 1].fechaEnvio) !== claveDia(m.fechaEnvio)) && (
-                      <SeparadorDia iso={m.fechaEnvio} />
-                    )}
-                    <Mensaje mensaje={m} propio={m.autor.id === usuario.id} />
-                  </li>
-                ))}
-                {pendientes.map((p) => (
-                  <li key={p.claveEnvio}>
-                    <Pendiente
-                      pendiente={p}
-                      onReintentar={() => void enviar(p.texto, p.claveEnvio).catch(() => {})}
-                      onDescartar={() => descartar(p.claveEnvio)}
-                    />
-                  </li>
-                ))}
+              <ol ref={contenido} className="grid gap-3">
+                {elementos.map((e, i) => {
+                  if (e.tipo === 'pendiente') {
+                    const p = e.pendiente
+                    return (
+                      <li key={p.claveEnvio}>
+                        <Pendiente
+                          pendiente={p}
+                          conectado={conexion === 'conectada'}
+                          onReintentar={() => void enviar(p.texto, p.claveEnvio).catch(() => {})}
+                          onDescartar={() => descartar(p.claveEnvio)}
+                        />
+                      </li>
+                    )
+                  }
+                  const m = e.mensaje
+                  return (
+                    <li key={m.id} className="grid gap-3">
+                      {nuevoDia[i] && <SeparadorDia iso={m.fechaEnvio} />}
+                      <Mensaje
+                        mensaje={m}
+                        propio={m.autor.id === usuario.id}
+                        color={colores.get(m.autor.id) ?? 0}
+                      />
+                    </li>
+                  )
+                })}
               </ol>
             )}
           </div>
@@ -188,7 +251,17 @@ function SeparadorDia({ iso }: { iso: string }) {
   )
 }
 
-function Mensaje({ mensaje: m, propio }: { mensaje: MensajeChat; propio: boolean }) {
+function Mensaje({
+  mensaje: m,
+  propio,
+  color,
+}: {
+  mensaje: MensajeChat
+  propio: boolean
+  /** El color del autor (coloresParticipantes); los propios usan el naranja de siempre */
+  color: number
+}) {
+  const estilo = ESTILO_PARTICIPANTE[color % ESTILO_PARTICIPANTE.length]
   return (
     <article
       aria-label={`${propio ? 'Tu mensaje' : `Mensaje de ${m.autor.nombre}`}, ${etiquetaDia(m.fechaEnvio).toLowerCase()} a las ${hora.format(new Date(m.fechaEnvio))}`}
@@ -196,11 +269,13 @@ function Mensaje({ mensaje: m, propio }: { mensaje: MensajeChat; propio: boolean
         'grid max-w-[min(100%,46rem)] gap-1.5 rounded-lg border-2 px-4 py-3',
         propio
           ? 'ml-auto border-r-8 border-owner-border border-r-brand-accent bg-owner-bg'
-          : 'mr-auto border-l-8 border-line border-l-ink-2 bg-card',
+          : cn('mr-auto border-l-8 border-line', estilo.caja),
       )}
     >
       <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <strong className="text-base">{propio ? 'Vos' : m.autor.nombre}</strong>
+        <strong className={cn('text-base', !propio && estilo.nombre)}>
+          {propio ? 'Vos' : m.autor.nombre}
+        </strong>
         <span className="rounded bg-neutral-bg px-1.5 text-sm font-semibold text-neutral-ink">
           {m.autor.tipoUsuario ? roleLabels[m.autor.tipoUsuario] : 'Rol no registrado'}
         </span>
@@ -236,14 +311,18 @@ function EstadoLectura({ lecturas }: { lecturas: LecturaChat[] }) {
 
 function Pendiente({
   pendiente: p,
+  conectado,
   onReintentar,
   onDescartar,
 }: {
   pendiente: MensajePendiente
+  /** Con la conexión de vuelta, un fallo de conexión ya no se va a reenviar solo: se ofrece reintentar */
+  conectado: boolean
   onReintentar: () => void
   onDescartar: () => void
 }) {
   const error = p.estado === 'error'
+  const esperaConexion = error && p.reintentable && !conectado
   return (
     <article
       aria-label={error ? 'Tu mensaje no se envió' : 'Tu mensaje, enviándose'}
@@ -256,7 +335,7 @@ function Pendiente({
       {error ? (
         <div className="grid gap-2">
           <p role="alert" className="font-semibold text-danger-ink">
-            No se envió. {p.error}
+            No se envió. {esperaConexion || !p.reintentable ? p.error : 'Probá reintentarlo.'}
           </p>
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={onDescartar}>
