@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { ResumenNotificaciones } from '@cova/shared/schemas/bandeja-notificaciones'
 import { consultarResumenNotificaciones } from './api'
-import { suscribirActualizacionNotificaciones } from './actualizar-notificaciones'
+import { escuchar, onConectado } from '@/lib/tiempo-real'
+import {
+  actualizarNotificacionesServidor,
+  suscribirNotificacionesServidor,
+  suscribirActualizacionNotificaciones,
+} from './actualizar-notificaciones'
 
 /** La campana consulta solo los conteos. Volver a la pestaña genera un único pedido, no focus + visibilitychange. */
 export function useResumenNotificaciones() {
@@ -24,11 +29,17 @@ export function useResumenNotificaciones() {
     actualizar()
     const intervalo = window.setInterval(actualizar, 60000)
     const desuscribir = suscribirActualizacionNotificaciones(actualizar)
+    const delServidor = suscribirNotificacionesServidor(actualizar)
+    const quitarEvento = escuchar('notificaciones:actualizadas', actualizarNotificacionesServidor)
+    const quitarConexion = onConectado(() => actualizarNotificacionesServidor({ nueva: true }))
     document.addEventListener('visibilitychange', actualizar)
     return () => {
       controlador?.abort()
       clearInterval(intervalo)
       desuscribir()
+      delServidor()
+      quitarEvento()
+      quitarConexion()
       document.removeEventListener('visibilitychange', actualizar)
     }
   }, [])

@@ -12,12 +12,13 @@ import { rutaLoginSesionVencida } from './api'
 // Conexión en tiempo real (E7-01). Una sola por pestaña del navegador, compartida por todas las pantallas que la
 // necesiten, al mismo origen que la API: la cookie de sesión viaja sola y nunca se lee desde JavaScript.
 //
-// Se conecta con la primera sala y se corta un rato después de salir de la última. Si se cae (red, reinicio del
+// Se conecta con el primer oyente o sala. La campana mantiene la conexión personal sin abrir chats.
+// Se corta un rato después de salir de la última sala y retirar el último oyente. Si se cae (red, reinicio del
 // servidor), Socket.IO reintenta solo, con espera creciente; al volver, se reincorpora a las salas abiertas y cada
 // pantalla recupera lo que se perdió (ver onReconectado).
 
 export type EstadoConexion =
-  /** Sin salas abiertas: no hace falta conexión */
+  /** Sin salas ni oyentes montados: no hace falta conexión */
   | 'inactiva'
   | 'conectando'
   | 'conectada'
@@ -44,11 +45,21 @@ let socket: SocketCova | null = null
 let estado: EstadoConexion = 'inactiva'
 let conectoAlgunaVez = false
 let corte: ReturnType<typeof setTimeout> | undefined
+let oyentesActivos = 0
 const oyentesEstado = new Set<() => void>()
 const salas = new Map<number, Sala>()
 const oyentesSala = new Map<number, Set<() => void>>()
 const UNIENDO: EstadoSala = { tipo: 'uniendo' }
 const alReconectar = new Set<() => void>()
+const alConectar = new Set<() => void>()
+const enUso = () => salas.size > 0 || oyentesActivos > 0
+function programarCorte() {
+  clearTimeout(corte)
+  if (enUso()) return
+  corte = setTimeout(() => {
+    if (!enUso()) socket?.disconnect()
+  }, CORTAR_SIN_SALAS_MS)
+}
 
 function cambiarEstado(nuevo: EstadoConexion) {
   if (nuevo === estado) return
@@ -110,6 +121,7 @@ function conectar(): SocketCova {
     conectoAlgunaVez = true
     cambiarEstado('conectada')
     for (const id of salas.keys()) unirse(id)
+    alConectar.forEach((o) => o())
     if (reconexion) alReconectar.forEach((o) => o())
   })
   nuevo.on('disconnect', () => {
@@ -132,7 +144,7 @@ function conectar(): SocketCova {
 // Al volver, reintentar de inmediato.
 if (typeof window !== 'undefined') {
   window.addEventListener('offline', () => {
-    if (salas.size && estado !== 'inactiva') cambiarEstado('reconectando')
+    if (enUso() && estado !== 'inactiva') cambiarEstado('reconectando')
   })
   // E7-02: quien tiene el chat abierto pero en una pestaña oculta no lo está mirando: tiene que recibir el aviso
   document.addEventListener('visibilitychange', () => {
@@ -140,7 +152,7 @@ if (typeof window !== 'undefined') {
     for (const [id, sala] of salas) if (sala.mirando) informarAtencion(id)
   })
   window.addEventListener('online', () => {
-    if (salas.size && socket && !socket.connected) {
+    if (enUso() && socket && !socket.connected) {
       socket.disconnect()
       socket.connect()
     }
@@ -171,12 +183,7 @@ export function abrirSala(id: number, { mirando = false }: { mirando?: boolean }
     if (actual.abiertas > 0) return
     salas.delete(id)
     socket?.emit('sala:salir', id)
-    if (salas.size === 0) {
-      clearTimeout(corte)
-      corte = setTimeout(() => {
-        if (salas.size === 0) socket?.disconnect()
-      }, CORTAR_SIN_SALAS_MS)
-    }
+    programarCorte()
   }
 }
 
@@ -185,11 +192,29 @@ export function escuchar<E extends keyof EventosServidor>(
   evento: E,
   oyente: EventosServidor[E],
 ): () => void {
+  clearTimeout(corte)
+  oyentesActivos++
   const s = conectar()
+  let activo = true
   // Los tipos de Socket.IO no aceptan un genérico acá; el contrato lo garantiza EventosServidor.
   s.on(evento, oyente as never)
   return () => {
+    if (!activo) return
+    activo = false
     s.off(evento, oyente as never)
+    if (socket === s) {
+      oyentesActivos--
+      programarCorte()
+    }
+  }
+}
+
+/** Incluye la primera conexión: recupera avisos entre la consulta inicial y el handshake. */
+export function onConectado(oyente: () => void): () => void {
+  alConectar.add(oyente)
+  if (socket?.connected) oyente()
+  return () => {
+    alConectar.delete(oyente)
   }
 }
 
@@ -205,6 +230,7 @@ export function onReconectado(oyente: () => void): () => void {
 export function cerrarTiempoReal() {
   clearTimeout(corte)
   salas.clear()
+  oyentesActivos = 0
   socket?.removeAllListeners()
   socket?.disconnect()
   socket = null

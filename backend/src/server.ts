@@ -5,12 +5,19 @@ import { disconnectPrisma } from './lib/prisma.ts'
 import { programarTarea } from './lib/tarea-periodica.ts'
 import { montarTiempoReal } from './modules/chat/chat.module.ts'
 import { tareaDemoras } from './modules/siniestros/demoras.module.ts'
+import { tiempoReal } from './modules/chat/tiempo-real.ts'
+import { escucharCambiosNotificaciones } from './modules/notificaciones/notificaciones-receptor.ts'
 import { servicioInformes } from './modules/informes/informes.module.ts'
 
 // Servidor HTTP propio (y no app.listen) para poder montar Socket.IO sobre el mismo puerto.
 const server = createServer(app)
 // E7-01: chat en tiempo real, en /socket.io
 const cerrarTiempoReal = montarTiempoReal(server)
+const notificacionesEnVivo = escucharCambiosNotificaciones({
+  conexion: () => process.env.DATABASE_URL,
+  avisar: (id, nueva) => tiempoReal.avisarNotificaciones(id, nueva),
+  resincronizar: () => tiempoReal.resincronizarNotificaciones(),
+})
 
 server.listen(env.PORT, () => {
   console.log(`API escuchando en http://localhost:${env.PORT} (${env.NODE_ENV})`)
@@ -41,6 +48,7 @@ function shutdown(signal: string) {
   console.log(`${signal} recibido, cerrando servidor…`)
   detenerDemoras()
   detenerInformes()
+  void notificacionesEnVivo.cerrar()
   cerrarTiempoReal()
   server.close(() => {
     void disconnectPrisma().finally(() => process.exit(0))
