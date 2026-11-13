@@ -130,6 +130,14 @@ existía) toman el nombre y el rol actuales de su usuario.
   teclado (no hay Shift) Enter baja de línea y se envía con el botón.
 - Al enviar, el mensaje aparece como "Enviando…" y el cuadro queda libre para el siguiente. Si falla, queda
   "No se envió", con el motivo y los botones Reintentar (usa la misma clave, así que no duplica) y Descartar.
+- **Un color por participante** (sin contar al usuario, que sigue en naranja a la derecha): barra izquierda,
+  nombre y fondo suave, con seis colores (`--color-persona-1` … `6`, contraste verificado en `contrast.test.mjs`).
+  El nombre sigue escrito: el color ayuda, no es lo único que identifica. En una conversación no se repiten
+  mientras haya hasta seis personas; cada uno parte del color que le toca por su id (suele ser el mismo en todos los
+  siniestros) y, si está ocupado, toma el siguiente libre (`coloresParticipantes` en `chat.ts`).
+- La vista queda pegada al final mientras se está leyendo el final: también cuando un mensaje crece sin que
+  cambie la cantidad (al confirmarse el envío aparece "Enviado…" y después "Leído por…"). Se sigue con un
+  `ResizeObserver` sobre la lista.
 - Un mensaje sin confirmar queda **en su lugar de la conversación**: justo después del mensaje que era el último
   cuando se escribió (`lineaDeTiempo` en `chat.ts`; no depende del reloj del equipo). Lo que llega después, por
   ejemplo de otros mientras no había conexión, aparece debajo y a la vista. Al confirmarse, toma la hora del
@@ -224,6 +232,8 @@ existía) toman el nombre y el rol actuales de su usuario.
   - la cantidad sin leer de cada uno (endpoint y ficha), y que unirse a la sala no cuenta como mirar.
 - `chat.test.mjs` (frontend): lecturas sin repetir y sin el autor, y que se juntan los lectores de dos copias del
   mismo mensaje (socket y recarga).
+- `chat-colores.test.mjs` (frontend): un color por participante, sin repetir hasta seis y sin cambiar al llegar
+  alguien nuevo.
 - `chat-sin-conexion.test.mjs` (frontend): el lugar de los mensajes sin confirmar, qué fallas se reenvían solas y
   que una ráfaga de mensajes suene una sola vez.
 - `marcado-leido.test.mjs` (frontend, relojes simulados): marcar al entrar, otra pasada si llega algo durante el

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowDown, Check, CheckCheck, MessagesSquare, RotateCcw, Send, X } from 'lucide-react'
@@ -16,7 +16,7 @@ import { roleLabels } from '@/components/layout/panel-navigation'
 import { TextareaField } from '@/components/textarea-field'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { lineaDeTiempo } from '../chat'
+import { coloresParticipantes, lineaDeTiempo } from '../chat'
 import { BotonSonidoChat } from '../components/boton-sonido-chat'
 import { EstadoConexionChat } from '../components/estado-conexion-chat'
 import { PestanaFicha, PestanaVacia } from '../components/pestana-ficha'
@@ -27,6 +27,19 @@ import { useFicha, usePestana } from '../hooks/use-ficha'
 const AVISAR_DESDE = 200
 /** Si se está leyendo a menos de esto del final, un mensaje nuevo baja la vista solo */
 const CERCA_DEL_FINAL_PX = 120
+
+/**
+ * Un color por participante (coloresParticipantes): barra izquierda, nombre y fondo suave. Clases fijas para que
+ * Tailwind las genere. El nombre sigue escrito: el color ayuda a reconocer a cada uno, no es lo único que lo dice.
+ */
+const ESTILO_PARTICIPANTE = [
+  { caja: 'border-l-persona-1 bg-persona-1-bg', nombre: 'text-persona-1' },
+  { caja: 'border-l-persona-2 bg-persona-2-bg', nombre: 'text-persona-2' },
+  { caja: 'border-l-persona-3 bg-persona-3-bg', nombre: 'text-persona-3' },
+  { caja: 'border-l-persona-4 bg-persona-4-bg', nombre: 'text-persona-4' },
+  { caja: 'border-l-persona-5 bg-persona-5-bg', nombre: 'text-persona-5' },
+  { caja: 'border-l-persona-6 bg-persona-6-bg', nombre: 'text-persona-6' },
+] as const
 
 const hora = new Intl.DateTimeFormat('es-AR', {
   hour: '2-digit',
@@ -81,9 +94,11 @@ export function PestanaChat() {
 
   // --- Desplazamiento: arranca abajo; un mensaje nuevo baja la vista si se estaba leyendo el final o si es propio
   const lista = useRef<HTMLDivElement>(null)
+  const contenido = useRef<HTMLOListElement>(null)
   const cercaDelFinal = useRef(true)
   const [sinVer, setSinVer] = useState(0)
   const elementos = lineaDeTiempo(mensajes, pendientes)
+  const colores = coloresParticipantes(mensajes, usuario.id)
   const cantidad = elementos.length
   const anterior = useRef(cantidad)
   // Un separador antes del primer mensaje de cada día (los pendientes no cuentan: son de ahora)
@@ -107,6 +122,7 @@ export function PestanaChat() {
   const irAlFinal = (suave = false) => {
     const el = lista.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: suave ? 'smooth' : 'auto' })
+    cercaDelFinal.current = true
     setSinVer(0)
   }
   useLayoutEffect(() => {
@@ -117,6 +133,20 @@ export function PestanaChat() {
     else setSinVer((n) => n + nuevos)
     // irAlFinal solo usa refs y el setter
   }, [cantidad, ultimoEsPropio])
+
+  // Un mensaje también crece sin que cambie la cantidad: al confirmarse el envío aparece "Enviado…" y después
+  // "Leído por…". Si se estaba al final (o se acaba de enviar), la vista lo acompaña y queda pegada abajo.
+  const vacia = elementos.length === 0
+  useEffect(() => {
+    const el = contenido.current
+    if (vacia || !el || typeof ResizeObserver === 'undefined') return
+    const observador = new ResizeObserver(() => {
+      const caja = lista.current
+      if (caja && cercaDelFinal.current) caja.scrollTop = caja.scrollHeight
+    })
+    observador.observe(el)
+    return () => observador.disconnect()
+  }, [vacia])
 
   return (
     <PestanaFicha titulo={usuario.tipo === 'GESTOR' ? 'Chat' : 'Chat con el gestor'}>
@@ -156,7 +186,7 @@ export function PestanaChat() {
                     (usuario.tipo === 'GESTOR' ? 'la administración.' : 'el gestor asignado.')}
               </PestanaVacia>
             ) : (
-              <ol className="grid gap-3">
+              <ol ref={contenido} className="grid gap-3">
                 {elementos.map((e, i) => {
                   if (e.tipo === 'pendiente') {
                     const p = e.pendiente
@@ -175,7 +205,11 @@ export function PestanaChat() {
                   return (
                     <li key={m.id} className="grid gap-3">
                       {nuevoDia[i] && <SeparadorDia iso={m.fechaEnvio} />}
-                      <Mensaje mensaje={m} propio={m.autor.id === usuario.id} />
+                      <Mensaje
+                        mensaje={m}
+                        propio={m.autor.id === usuario.id}
+                        color={colores.get(m.autor.id) ?? 0}
+                      />
                     </li>
                   )
                 })}
@@ -217,7 +251,17 @@ function SeparadorDia({ iso }: { iso: string }) {
   )
 }
 
-function Mensaje({ mensaje: m, propio }: { mensaje: MensajeChat; propio: boolean }) {
+function Mensaje({
+  mensaje: m,
+  propio,
+  color,
+}: {
+  mensaje: MensajeChat
+  propio: boolean
+  /** El color del autor (coloresParticipantes); los propios usan el naranja de siempre */
+  color: number
+}) {
+  const estilo = ESTILO_PARTICIPANTE[color % ESTILO_PARTICIPANTE.length]
   return (
     <article
       aria-label={`${propio ? 'Tu mensaje' : `Mensaje de ${m.autor.nombre}`}, ${etiquetaDia(m.fechaEnvio).toLowerCase()} a las ${hora.format(new Date(m.fechaEnvio))}`}
@@ -225,11 +269,13 @@ function Mensaje({ mensaje: m, propio }: { mensaje: MensajeChat; propio: boolean
         'grid max-w-[min(100%,46rem)] gap-1.5 rounded-lg border-2 px-4 py-3',
         propio
           ? 'ml-auto border-r-8 border-owner-border border-r-brand-accent bg-owner-bg'
-          : 'mr-auto border-l-8 border-line border-l-ink-2 bg-card',
+          : cn('mr-auto border-l-8 border-line', estilo.caja),
       )}
     >
       <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <strong className="text-base">{propio ? 'Vos' : m.autor.nombre}</strong>
+        <strong className={cn('text-base', !propio && estilo.nombre)}>
+          {propio ? 'Vos' : m.autor.nombre}
+        </strong>
         <span className="rounded bg-neutral-bg px-1.5 text-sm font-semibold text-neutral-ink">
           {m.autor.tipoUsuario ? roleLabels[m.autor.tipoUsuario] : 'Rol no registrado'}
         </span>

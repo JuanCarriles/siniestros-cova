@@ -93,6 +93,19 @@
   --color-document-image-ink: #0f766e;
   --color-document-pdf-bg: #fdeceb;
   --color-chat-border: #d0dbea;
+  /* Chat: un color por participante (barra, nombre y fondo suave). Distintos entre sí y del naranja propio. */
+  --color-persona-1: #1d4ed8;
+  --color-persona-1-bg: #eef4ff;
+  --color-persona-2: #166534;
+  --color-persona-2-bg: #ecfaf1;
+  --color-persona-3: #7e22ce;
+  --color-persona-3-bg: #f6f0ff;
+  --color-persona-4: #0f766e;
+  --color-persona-4-bg: #e9f8f6;
+  --color-persona-5: #be185d;
+  --color-persona-5-bg: #fdf0f6;
+  --color-persona-6: #475569;
+  --color-persona-6-bg: #f1f5f9;
   --color-assignment-bg: #f8fafd;
   --color-assignment-border: #c7d4e6;
   --text-reading: 1.125rem;

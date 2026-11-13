@@ -49,6 +49,8 @@ test('texto principal supera 7:1 y texto secundario/estados superan 4.5:1', () =
     ['owner-ink', 'owner-bg'],
     ['injury-ink', 'injury-bg'],
     ['document-image-ink', 'document-image-bg'],
+    // Chat: el nombre de cada participante sobre su fondo
+    ...[1, 2, 3, 4, 5, 6].map((n) => [`persona-${n}`, `persona-${n}-bg`]),
   ])
     assert.ok(contrast(fg, bg) >= 4.5, `${fg}/${bg}: ${contrast(fg, bg).toFixed(2)}:1`)
 })
@@ -75,4 +77,9 @@ test('ningún tamaño de texto de la escala baja de 16 px', async () => {
   const sizes = [...css.matchAll(/--text-(\w+):\s*([\d.]+)rem;/g)]
   assert.ok(sizes.length >= 5)
   for (const [, name, rem] of sizes) assert.ok(Number(rem) >= 1, `text-${name}: ${rem}rem`)
+})
+
+test('chat: la barra de color de cada participante se distingue del fondo de la conversación (3:1)', () => {
+  for (const n of [1, 2, 3, 4, 5, 6])
+    assert.ok(contrast(`persona-${n}`, 'surface-subtle') >= 3, `persona-${n}`)
 })
